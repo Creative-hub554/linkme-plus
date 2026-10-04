@@ -1,0 +1,8 @@
+# Repo-root hygiene. The app lives in PostBase-project/ with its own .gitignore;
+# this keeps root-level build output, env files and logs out of history.
+node_modules/
+dist/
+*.log
+.env
+.env.local
+.dev.vars
