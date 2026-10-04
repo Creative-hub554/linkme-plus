@@ -1,0 +1,328 @@
+--- a/src/test/ci-runner.test.ts
++++ b/src/test/ci-runner.test.ts
+@@ -1878,12 +1878,12 @@
+     expect(result.stdout).toContain('unspoken — "orphan"');
+   });
+ 
+-  it("opts exactly the three tree-editing stages into the pre-pass, before the sweep spawn", () => {
++  it("opts exactly the four vocabulary-first stages into the pre-pass, before the sweep spawn", () => {
+     // Source-level, because the wiring is what the runtime cases above prove once: the flag is
+     // a stage-by-stage choice, and a stage that is not tree-editing has a script with no
+     // `--vocabulary` mode at all — a pre-pass there could only ever pass through, and if it
+     // could not, its negative would be a silence this case turns into a red.
+-    for (const stageName of ["mutation-coverage", "mutation-preflight", "mutation", "mutation-example"]) {
++    for (const stageName of ["mutation-coverage", "mutation-preflight", "mutation", "mutation-example", "mutation-fifth"]) {
+       const begin = ciSource.indexOf(`runJsonGate({\n        name: "${stageName}",`);
+       expect(begin, `no runJsonGate declaration found for ${stageName}`).toBeGreaterThan(-1);
+       const declaration = ciSource.slice(begin, ciSource.indexOf("}),", begin));
+@@ -1891,10 +1891,10 @@
+         "vocabularyFirst: true",
+       );
+     }
+-    // And no fourth gate is: exactly the three tree-editing stages carry the flag, so a flag
+-    // copied onto a non-mutating stage reds here rather than spawning `--vocabulary` against a
+-    // tool that has no such mode.
++    // And no fifth gate is: exactly the four vocabulary-first stages carry the flag, so a
++    // flag copied onto a stage that does not edit the tree or speak the vocabulary reds here
++    // rather than spawning `--vocabulary` against a tool that has no such mode.
+-    expect(ciSource.split("vocabularyFirst: true").length - 1).toBe(4);
++    expect(ciSource.split("vocabularyFirst: true").length - 1).toBe(5);
+     // The pre-pass is sequenced inside runJsonGate before the run spawn: the hole is read and
+     // answered before `--json` is ever forwarded.
+     const funnel = ciSource.slice(ciSource.indexOf("function runJsonGate"));
+@@ -3186,7 +3186,7 @@
+ 
+     expect(result.status).toBe(1);
+     expect(result.stderr).toContain("unknown stage(s): nope");
+-    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     // Nothing was selected, so nothing ran: no banner, no summary line.
+     expect(result.stdout).not.toContain("── ");
+     expect(result.stdout).not.toContain("running ");
+@@ -3199,7 +3199,7 @@
+ 
+     expect(result.status).toBe(0);
+     expect(result.stdout).toContain(
+-      "would run 10 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "would run 11 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+     // It reported; it did not execute.
+     expect(result.stdout).not.toContain("── ");
+@@ -3232,7 +3232,7 @@
+     });
+ 
+     expect(result.status).toBe(0);
+-    expect(result.stdout).toContain("running 6 stage(s): preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stdout).toContain("running 7 stage(s): preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     expect(result.stdout).toContain("── preview preflight ──");
+     // The pinned hashes are re-read before the scripts are weakened.
+     expect(result.stdout).toContain("── gate drift ──");
+@@ -3269,7 +3269,7 @@
+     });
+ 
+     expect(result.status).toBe(0);
+-    expect(result.stdout).toContain("running 7 stage(s): test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stdout).toContain("running 8 stage(s): test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     // The suite really ran (the marker is the proof, not the banner).
+     expect(existsSync(marker)).toBe(true);
+     expect(result.stdout).toContain("── vitest suite ──");
+@@ -3284,7 +3284,7 @@
+ 
+     expect(result.status).toBe(0);
+     expect(result.stdout).toContain(
+-      "would run 10 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "would run 11 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+   });
+ 
+@@ -3292,7 +3292,7 @@
+     const result = runCi(["--from=test", "--dry-run"]);
+ 
+     expect(result.status).toBe(0);
+-    expect(result.stdout).toContain("would run 7 stage(s): test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stdout).toContain("would run 8 stage(s): test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     // It reported; it did not execute.
+     expect(result.stdout).not.toContain("── ");
+   });
+@@ -3303,7 +3303,7 @@
+     expect(result.status).toBe(0);
+     const payload = JSON.parse(result.stdout);
+     expect(payload.dryRun).toBe(true);
+-    expect(payload.stages).toEqual(["lint", "test", "preflight", "drift", "mutation-example", "mutation-coverage", "mutation-preflight", "mutation"]);
++    expect(payload.stages).toEqual(["lint", "test", "preflight", "drift", "mutation-example", "mutation-fifth", "mutation-coverage", "mutation-preflight", "mutation"]);
+   });
+ 
+   it("rejects an unknown --from instead of quietly running the whole job", () => {
+@@ -3311,7 +3311,7 @@
+ 
+     expect(result.status).toBe(1);
+     expect(result.stderr).toContain("--from names unknown stage: nope");
+-    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     // A narrowed resume must not silently widen: nothing ran.
+     expect(result.stdout).not.toContain("running ");
+   });
+@@ -3362,7 +3362,7 @@
+ 
+     expect(result.status).toBe(0);
+     expect(result.stdout).toContain(
+-      "would run 9 stage(s): typecheck, runbook, lint, test, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "would run 10 stage(s): typecheck, runbook, lint, test, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+     expect(result.stdout).toContain("ci: --skip excludes: preflight");
+     expect(result.stdout).not.toContain("── ");
+@@ -3372,17 +3372,18 @@
+     const result = runCi(["--skip=preflight", "--dry-run", "--json"]);
+ 
+     const payload = JSON.parse(result.stdout);
+-    expect(payload.stages).toEqual([
+-      "typecheck",
+-      "runbook",
+-      "lint",
+-      "test",
+-      "drift",
+-      "mutation-example",
+-      "mutation-coverage",
+-      "mutation-preflight",
+-      "mutation",
+-    ]);
++    expect(payload.stages).toEqual([
++      "typecheck",
++      "runbook",
++      "lint",
++      "test",
++      "drift",
++      "mutation-example",
++      "mutation-fifth",
++      "mutation-coverage",
++      "mutation-preflight",
++      "mutation",
++    ]);
+     expect(payload.excluded).toEqual(["preflight"]);
+   });
+ 
+@@ -3390,7 +3391,7 @@
+     const result = runCi(["--from=test", "--skip=mutation", "--dry-run"]);
+ 
+     expect(result.status).toBe(0);
+-    expect(result.stdout).toContain("would run 6 stage(s): test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight");
++    expect(result.stdout).toContain("would run 7 stage(s): test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight");
+     expect(result.stdout).toContain("ci: --skip excludes: mutation");
+   });
+ 
+@@ -3399,7 +3400,7 @@
+ 
+     expect(result.status).toBe(1);
+     expect(result.stderr).toContain("--skip names unknown stage(s): nope");
+-    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation");
++    expect(result.stderr).toContain("have: typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation");
+     expect(result.stdout).not.toContain("would run");
+   });
+ 
+@@ -3918,7 +3919,7 @@
+     const payload = JSON.parse(result.stdout);
+     expect(payload.maxFailures).toBe(2);
+     expect(payload.keepGoing).toBe(false);
+-    expect(payload.stages).toHaveLength(10);
++    expect(payload.stages).toHaveLength(11);
+   });
+ 
+   it("refuses a cap that is not a positive integer", () => {
+@@ -4877,16 +4878,17 @@
+     // Every gate-backed stage declares one, and these are they: the two that do not run a
+     // published tool (`tsc`, `vitest`) whose machinery the lockfile in `GLOBAL_FORCE` pins, and
+     // a stage that stopped declaring its script would otherwise pass this by being absent.
+-    expect(declared.map((stage: { name: string }) => stage.name)).toEqual([
+-      "runbook",
+-      "lint",
+-      "preflight",
+-      "drift",
+-      "mutation-example",
+-      "mutation-coverage",
+-      "mutation-preflight",
+-      "mutation",
+-    ]);
++    expect(declared.map((stage: { name: string }) => stage.name)).toEqual([
++      "runbook",
++      "lint",
++      "preflight",
++      "drift",
++      "mutation-example",
++      "mutation-fifth",
++      "mutation-coverage",
++      "mutation-preflight",
++      "mutation",
++    ]);
+ 
+     const read = (name: string) => {
+       try {
+@@ -6005,18 +6007,19 @@
+ 
+     const payload = JSON.parse(result.stdout);
+     expect(payload.dryRun).toBe(true);
+-    expect(payload.stages).toEqual([
+-      "typecheck",
+-      "runbook",
+-      "lint",
+-      "test",
+-      "preflight",
+-      "drift",
+-      "mutation-example",
+-      "mutation-coverage",
+-      "mutation-preflight",
+-      "mutation",
+-    ]);
++    expect(payload.stages).toEqual([
++      "typecheck",
++      "runbook",
++      "lint",
++      "test",
++      "preflight",
++      "drift",
++      "mutation-example",
++      "mutation-fifth",
++      "mutation-coverage",
++      "mutation-preflight",
++      "mutation",
++    ]);
+     expect(result.status).toBe(0);
+   });
+ 
+@@ -6168,7 +6171,7 @@
+     const libChange = runCi(["--changed-only", "--dry-run"], { CI_CHANGED_FILES: "src/lib/foo.ts" });
+     expect(libChange.stdout).toContain("would run 3 stage(s): typecheck, lint, test");
+     expect(libChange.stdout).toContain(
+-      "not run (nothing they read changed): runbook, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "not run (nothing they read changed): runbook, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+ 
+     const routeChange = runCi(["--changed-only", "--dry-run"], {
+@@ -6189,7 +6192,7 @@
+     });
+     expect(gateChange.stdout).toContain("would run 3 stage(s): lint, drift, mutation-coverage");
+     expect(gateChange.stdout).toContain(
+-      "not run (nothing they read changed): typecheck, runbook, test, preflight, mutation-example, mutation",
++      "not run (nothing they read changed): typecheck, runbook, test, preflight, mutation-example, mutation-fifth, mutation",
+     );
+ 
+     // The pin covers the rest of the gate machinery too, so a change to any of those
+@@ -6211,7 +6214,7 @@
+     });
+     expect(sweepChange.stdout).toContain("would run 3 stage(s): lint, drift, mutation-preflight");
+     expect(sweepChange.stdout).toContain(
+-      "not run (nothing they read changed): typecheck, runbook, test, preflight, mutation-example, mutation-coverage, mutation",
++      "not run (nothing they read changed): typecheck, runbook, test, preflight, mutation-example, mutation-fifth, mutation-coverage, mutation",
+     );
+   });
+ 
+@@ -6219,7 +6222,7 @@
+     const result = runCi(["--changed-only", "--dry-run"], { CI_CHANGED_FILES: "package.json" });
+ 
+     expect(result.stdout).toContain(
+-      "would run 10 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "would run 11 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+     expect(result.stdout).toContain("running every stage anyway");
+   });
+@@ -6228,7 +6231,7 @@
+     const result = runCi(["--changed-only", "--dry-run"], { CI_CHANGED_FILES: "" });
+ 
+     expect(result.stdout).toContain(
+-      "would run 10 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation",
++      "would run 11 stage(s): typecheck, runbook, lint, test, preflight, drift, mutation-example, mutation-fifth, mutation-coverage, mutation-preflight, mutation",
+     );
+     expect(result.stdout).toContain("the change set is empty");
+   });
+
+--- a/src/test/gate-drift.test.ts
++++ b/src/test/gate-drift.test.ts
+@@ -551,7 +551,7 @@
+         stage: "lint",
+         kind: "editing",
+         detail:
+-          "the lint stage edits the tree, so it has to be one of the last 4 (mutation-example, mutation-coverage, mutation-preflight, mutation)",
++          "the lint stage edits the tree, so it has to be one of the last 4 (mutation-fifth, mutation-coverage, mutation-preflight, mutation)",
+       },
+     ]);
+ 
+@@ -1749,17 +1749,17 @@
+   it("onboards a sweep end to end: words, sweep, table entry, pre-pass, renumber", () => {
+     const root = scratchTree();
+     made.push(root);
+-    const { status, report } = scaffold(root, ["--name=fifth", "--json"]);
++    const { status, report } = scaffold(root, ["--name=fifthcase", "--json"]);
+ 
+     expect(status).toBe(0);
+     expect(report.gate).toBe("pass");
+-    expect(report.name).toBe("mutation-fifth");
++    expect(report.name).toBe("mutation-fifthcase");
+-    expect(report.stages).toBe(11);
++    expect(report.stages).toBe(12);
+     expect(report.edited).toEqual(
+       expect.arrayContaining([".freebuff\\mutation-vocabulary.mjs", ".freebuff\\gate-drift.mjs", ".freebuff\\ci.mjs"]),
+     );
+     // The generated sweep answers both of its modes out of the tree it was written into.
+-    const sweep = spawnSync(process.execPath, [path.join(root, ".freebuff", "mutation-fifth.mjs"), "--json"], {
++    const sweep = spawnSync(process.execPath, [path.join(root, ".freebuff", "mutation-fifthcase.mjs"), "--json"], {
+       encoding: "utf8",
+     });
+     const payload = JSON.parse(sweep.stdout) as { gate: string; checked: number; survivors: unknown[] };
+@@ -1778,15 +1778,15 @@
+     const template = path.join(root, ".freebuff", "mutation-example.mjs");
+     writeFileSync(template, readFileSync(template, "utf8").replace("fourth sweep", "Fourth sweep"), "utf8");
+ 
+-    const { status, report } = scaffold(root, ["--name=fifth", "--json"]);
++    const { status, report } = scaffold(root, ["--name=fifthcase", "--json"]);
+ 
+     expect(status).toBe(1);
+     expect(report.gate).toBe("fail");
+     expect(report.error).toContain("tokens");
+     // The refusal leaves nothing behind: the new sweep is gone, and every edited byte is back.
+-    expect(existsSync(path.join(root, ".freebuff", "mutation-fifth.mjs"))).toBe(false);
++    expect(existsSync(path.join(root, ".freebuff", "mutation-fifthcase.mjs"))).toBe(false);
+     expect(readFileSync(path.join(root, ".freebuff", "mutation-vocabulary.mjs"), "utf8")).not.toContain(
+-      "FIFTH_SURVIVOR_WORDS",
++      "FIFTHCASE_SURVIVOR_WORDS",
+     );
+   });
+ 

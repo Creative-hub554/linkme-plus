@@ -1,0 +1,135 @@
+name: Nightly
+
+# The full verification gate, on a schedule.
+#
+# The push and pull-request jobs in `ci.yml` split the pass into separate jobs,
+# and a local `npm run ci` stops at the first failing stage. Neither runs the
+# whole gate to completion against a clean checkout, so a regression that only a
+# *later* stage would notice — a mutant no test kills, a lint warning, a stale
+# runbook — can sit unnoticed until somebody happens to run the full pass. This
+# job closes that gap: it runs the gate end to end, at night, and publishes the
+# report.
+#
+# On a GitHub runner `CI=true`, so the runner turns `--keep-going` on by itself
+# and reports **every** failing stage at once instead of only the first.
+#
+# `--skip=preflight` drops the one stage that cannot hold here: it gates
+# registering a *local* preview and needs a live dev server on loopback and a
+# `.env.local` on disk, neither of which a hosted runner has. Running it would
+# fail every night for an environment it was never meant to judge. The run names
+# the exclusion in its report (`excluded`) and on its summary line, so the pass
+# is never mistaken for the whole gate.
+on:
+  schedule:
+    # 02:17 UTC — off the hour, where the runner pool is least contended.
+    - cron: "17 2 * * *"
+  # Manual runs, for the morning after a suspicious commit.
+  workflow_dispatch:
+
+# A nightly run is long and fixed; if one is still going on the same ref, let it
+# finish rather than cancel it and start a second. Scoped per ref, like `ci.yml`,
+# so a manual dispatch on a branch cannot queue behind the scheduled default run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  full-gate:
+    name: Full CI gate
+    runs-on: ubuntu-latest
+    # The commit-back step below pushes the coverage row it recorded, so this
+    # job holds `contents: write` — scoped here, while the workflow's own
+    # `contents: read` stays the default for everything else.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Run the whole gate with `--json`. The step's exit code is the gate's, so
+      # the job goes red on a regression; the report is written to disk either
+      # way, which is what the publish step below reads. `npm run --silent` keeps
+      # npm's own banner off stdout — without it the banner would be captured
+      # ahead of the JSON and break the parse — while stdout carries exactly the
+      # one report object and stderr (the runner's progress) goes to the log.
+      - name: Run the full CI gate
+        run: |
+          mkdir -p .ci
+          npm run --silent ci -- --json --skip=preflight > .ci/report.json 2> .ci/ci.log
+
+      # Publish even when the gate failed — a report nobody can read is the one
+      # failure that would make the schedule pointless. The Markdown summary goes
+      # to the run page; the annotations land on the files and lines they name;
+      # the raw report is kept as an artifact so a regression can be diffed
+      # against the previous night's.
+      - name: Publish the report
+        if: always()
+        run: |
+          if [ -s .ci/report.json ]; then
+            node .freebuff/nightly-report.mjs --report .ci/report.json --summary .ci/summary.md --annotations
+            cat .ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Nightly full CI gate — ❌ no report was written" >> "$GITHUB_STEP_SUMMARY"
+            echo "The gate never produced a JSON report — check the run log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The coverage trend, one committed row per run: the stamp the gate's
+      # report carries as `coverageStamp` is folded into the history file, so
+      # the rendered-links guard's readings accrue over time instead of living
+      # one run at a time. A red run records its row too — the stamp is a
+      # reading, not a verdict — and a suite that left none records nothing:
+      # the script exits 0 on that omission, the same omission the run page
+      # and the runbook make. Recorded even when the gate failed, for the same
+      # reason the report above is published `if: always()`.
+      - name: Record the coverage history row
+        if: always()
+        run: |
+          if [ -s .ci/report.json ]; then
+            node .freebuff/coverage-history.mjs --report .ci/report.json --file .freebuff/coverage-history.md
+          else
+            echo "No report was written — no coverage row to record."
+          fi
+
+      # ...and the row lands where the next night can see it: committed and
+      # pushed back to the ref this run checked out, which is why the job
+      # holds `contents: write` above. The commit says `[skip ci]` so the push
+      # cannot wake the push-triggered jobs in `ci.yml` — a bot commit at
+      # night should record a reading, not start a deploy — and stages the pin
+      # manifest beside the history because that is the doctrine every
+      # workflow that commits is held to: whatever commits, commits the
+      # manifest with it (the rule `collect-budget.test.ts` states over the
+      # whole directory). A push a protected branch refuses turns the job red
+      # on purpose: a history that silently stops accruing is the failure this
+      # step exists to prevent.
+      - name: Commit the coverage history
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .freebuff/coverage-history.md .freebuff/gate-hashes.mjs
+          if git diff --cached --quiet; then
+            echo "The coverage history is unchanged — nothing to commit."
+          else
+            git commit -m "chore(coverage): record the nightly rendered-links reading ($(date -u +%F)) [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-ci-report
+          path: |
+            .ci/report.json
+            .ci/summary.md
+            .ci/ci.log
+            .freebuff/coverage-history.md
+          if-no-files-found: ignore
+          retention-days: 30

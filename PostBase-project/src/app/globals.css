@@ -1,0 +1,405 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy-50: #f0f1f5;
+  --color-navy-100: #d9dce6;
+  --color-navy-200: #b3b9cd;
+  --color-navy-300: #8d96b4;
+  --color-navy-400: #67739b;
+  --color-navy-500: #414f82;
+  --color-navy-600: #343f68;
+  --color-navy-700: #272f4e;
+  --color-navy-800: #1a2034;
+  --color-navy-900: #0d101a;
+  --color-brand-blue: #2563eb;
+  --color-brand-blue-light: #3b82f6;
+  --color-brand-blue-dark: #1d4ed8;
+  --color-brand-purple: #7c3aed;
+  --color-brand-purple-light: #8b5cf6;
+  --color-surface-white: #ffffff;
+  --color-surface-light-blue: #f3f7fc;
+  --color-surface-border: #d7e3f2;
+  /*
+   * Permanently dark panels: the footer, the landing hero, the tooltip, the
+   * cover previews and the video thumbnail wells. They are dark in *both*
+   * themes, so they cannot share the `navy` ramp — that ramp is the app's text
+   * colour and the dark theme flips it to light. These are its twin at the same
+   * shades, and nothing overrides them.
+   */
+  --color-ink-100: #d9dce6;
+  --color-ink-600: #343f68;
+  --color-ink-700: #272f4e;
+  --color-ink-800: #1a2034;
+  --font-sans: "Inter", "system-ui", "sans-serif";
+}
+
+/*
+ * The semantic tokens, declared in `@theme inline` so Tailwind generates the
+ * whole utility family for them.
+ *
+ * They used to be twenty hand-written rules (`.text-muted-foreground {
+ * color: hsl(var(--muted-foreground)) }` and siblings) because the tokens live
+ * in `:root` as HSL component triplets and not here, so Tailwind generated
+ * nothing for those names at all. Being hand-written, each covered only the bare
+ * name: every variant and opacity form the app writes — `hover:bg-accent`,
+ * `focus:bg-accent`, `bg-secondary/80`, `bg-destructive/90`,
+ * `hover:text-destructive`, `placeholder:text-muted-foreground`, `focus:ring-ring`,
+ * `data-[state=unchecked]:bg-input` — had no rule and was silently inert. The
+ * switch's off track had no background at all; keyboard focus inside a dropdown
+ * or select drew nothing.
+ *
+ * `inline` rather than a plain `@theme` block: these values reference other
+ * custom properties (`hsl(var(--accent))`), and `inline` substitutes the value
+ * straight into each utility instead of emitting a `--color-accent` variable that
+ * would then point at another variable. Both resolve, but inlining is one hop
+ * shorter and is the form this pattern is meant to be written in.
+ *
+ * The opacity forms (`bg-destructive/90`) compile to
+ * `color-mix(in oklab, hsl(var(--destructive)) 90%, transparent)`, which is why
+ * they work now and could not before.
+ */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+}
+
+/*
+ * Dark mode.
+ *
+ * Every colour in this app reaches the screen through a `var(--color-*)` custom
+ * property. The semantic tokens resolve to `hsl(var(--<name>))`, and Tailwind
+ * emits the palette as `--color-navy-800` etc. and writes utilities as
+ * `color: var(--color-navy-800)` / `background-color: var(--color-navy-800)` —
+ * measured in the build output, not assumed. So the whole theme is a set of
+ * custom properties to override, and this block overrides them for the subtree
+ * that carries `.dark` instead of for `:root`.
+ *
+ * It sits after `:root` and outside every layer, so it beats the
+ * same-specificity `:root` block on order, and beats the palette variables
+ * Tailwind emits in `@layer theme` regardless of specificity. (That is the
+ * same unlayered-beats-any-layer fact that `@layer base` above exists to fix
+ * for borders — it works *for* us here.)
+ *
+ * Two families are overridden on purpose:
+ *
+ *   1. The semantic tokens — the same `--background`/`--foreground`/… triplets
+ *      `:root` sets — so every `bg-card`, `text-muted-foreground`,
+ *      `border-border`, `bg-primary` and `focus:ring-ring` follows.
+ *   2. The app palette that predates them. The app also writes `bg-surface-*`,
+ *      `text-navy-800` and `bg-white` directly, and those classes resolve
+ *      through `--color-surface-*` / `--color-navy-800` / `--color-white`, so
+ *      overriding those names is what makes them follow too.
+ *
+ * `--color-white` is the one name that must NOT be overridden: `text-white` is
+ * the on-colour for a filled button and for text on the permanently dark
+ * panels, so white has to stay white in both themes. Solid white *surfaces*
+ * were re-pointed to `bg-card` instead; translucent whites that are light
+ * glass on a themed page were re-pointed to `bg-card/<n>`, which is why those
+ * use the flippable `color-mix(...)` form rather than the build-time hex a
+ * palette opacity compiles to. See `.freebuff/run.md`.
+ *
+ * The `navy` ramp is the app's *text* ramp (800/700/600 are headings and body
+ * copy) as well as its hover surfaces (50/100), so it flips here; the handful
+ * of genuinely dark panels that used to wear the same shades were re-pointed
+ * to the `ink-*` ramp, which nothing overrides.
+ */
+.dark {
+  --background: 222.2 47% 6%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 40% 11%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 40% 11%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 224.3 76.3% 48%;
+
+  --color-surface-light-blue: #080d17;
+  --color-surface-white: #0f1729;
+  --color-surface-border: #1e293b;
+
+  --color-navy-50: #172038;
+  --color-navy-100: #1e293b;
+  --color-navy-600: #94a3b8;
+  --color-navy-700: #cbd5e1;
+  --color-navy-800: #e2e8f0;
+
+  /* Callouts and status colours, so a red-50 alert is a red-*tinted dark* box
+     rather than a light one with dark text. Only the shades a callout actually
+     wears are listed: `gray-600` is also the icon inside the white "save
+     listing" pill that sits over a product photo, and that pill stays white in
+     both themes, so its gray must stay gray. */
+  --color-slate-50: #0f1729;
+  --color-slate-700: #cbd5e1;
+  --color-red-50: #2a1214;
+  --color-red-100: #3b171a;
+  --color-red-200: #5b2126;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-emerald-50: #04261c;
+  --color-emerald-100: #063a29;
+  --color-emerald-200: #0b5238;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-green-100: #063a29;
+  --color-green-600: #34d399;
+  --color-amber-50: #2a1c06;
+  --color-amber-200: #5a3c0c;
+  --color-amber-700: #fcd34d;
+  --color-yellow-100: #3a2e07;
+  --color-yellow-600: #facc15;
+}
+
+/*
+ * The accent, swapped by a `data-accent` attribute on `<html>`.
+ *
+ * An accent is not a new colour role — it is the same brand ramp under a
+ * different name. Writing the existing names (`--color-brand-blue` and its
+ * light/dark steps, plus `--primary`/`--ring`) is what makes every use of the
+ * brand follow: `bg-brand-blue` buttons, `text-brand-blue` links, the
+ * `:focus-visible` outline, and the ring on a focused control.
+ *
+ * `:root[data-accent=…]` is (0,2,0), so it outranks the (0,1,0) `.dark` block
+ * above wherever the two name the same variable — the accent is the point, so
+ * it wins in either theme. `blue` is restated rather than left to `:root` so
+ * the default is a declared choice like the rest and the guard test can see it.
+ */
+:root[data-accent="blue"] {
+  --primary: 221.2 83.2% 53.3%;
+  --ring: 221.2 83.2% 53.3%;
+  --color-brand-blue: #2563eb;
+  --color-brand-blue-light: #3b82f6;
+  --color-brand-blue-dark: #1d4ed8;
+}
+
+:root[data-accent="violet"] {
+  --primary: 262.1 83.3% 57.8%;
+  --ring: 262.1 83.3% 57.8%;
+  --color-brand-blue: #7c3aed;
+  --color-brand-blue-light: #8b5cf6;
+  --color-brand-blue-dark: #6d28d9;
+}
+
+:root[data-accent="emerald"] {
+  --primary: 160.1 84.1% 39.4%;
+  --ring: 160.1 84.1% 39.4%;
+  --color-brand-blue: #059669;
+  --color-brand-blue-light: #10b981;
+  --color-brand-blue-dark: #047857;
+}
+
+:root[data-accent="rose"] {
+  --primary: 346.8 77.2% 49.8%;
+  --ring: 346.8 77.2% 49.8%;
+  --color-brand-blue: #e11d48;
+  --color-brand-blue-light: #f43f5e;
+  --color-brand-blue-dark: #be123c;
+}
+
+:root[data-accent="amber"] {
+  --primary: 37.7 92.1% 50.2%;
+  --ring: 37.7 92.1% 50.2%;
+  --color-brand-blue: #d97706;
+  --color-brand-blue-light: #f59e0b;
+  --color-brand-blue-dark: #b45309;
+}
+
+/*
+ * The default border colour, in `@layer base` deliberately.
+ *
+ * This was written bare, and bare CSS beats *every* layer regardless of
+ * specificity — while Tailwind v4 puts its utilities in `@layer utilities`. So
+ * this one rule, which exists only to give borders a default, was overriding
+ * every `border-<colour>` class in the application. Before the fix, every
+ * border-coloured element on three pages computed to exactly this slate: 27 of
+ * 27 on `/settings`, 13 of 13 on `/login`, 27 of 27 on `/feed` — including
+ * `border-white/20`, `border-navy-700` and `border-brand-purple/20`, which have
+ * nothing to do with it.
+ *
+ * In `base` it is a default again — it still applies wherever nothing says
+ * otherwise, and a utility can now override it.
+ */
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+}
+
+body {
+  background-color: var(--color-surface-light-blue);
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.animate-in { animation: animate-in 0.2s ease-out; }
+@keyframes animate-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes soft-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -8px, 0); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@keyframes ambient-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+.page-enter { animation: page-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.soft-float { animation: soft-float 6s ease-in-out infinite; }
+.ambient-pulse { animation: ambient-pulse 7s ease-in-out infinite; }
+.motion-delay-100 { animation-delay: 100ms; }
+.motion-delay-200 { animation-delay: 200ms; }
+.motion-delay-300 { animation-delay: 300ms; }
+.motion-delay-400 { animation-delay: 400ms; }
+
+.hover-lift {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, border-color 220ms ease;
+}
+.hover-lift:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(26, 32, 52, 0.09); }
+
+.shimmer-on-hover { position: relative; overflow: hidden; }
+.shimmer-on-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  transform: translateX(-120%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  transition: none;
+  pointer-events: none;
+}
+.shimmer-on-hover:hover::after { animation: shimmer 850ms ease-out; }
+
+@keyframes feed-highlight {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.35); }
+  100% { box-shadow: 0 0 0 14px rgba(37, 99, 235, 0); }
+}
+
+/*
+ * The ring is static and the halo animates, so a deep-linked post is still
+ * unmistakable when animations are disabled for reduced motion.
+ */
+.feed-highlight {
+  border-radius: 0.75rem;
+  outline: 2px solid var(--color-brand-blue);
+  outline-offset: 2px;
+  animation: feed-highlight 900ms ease-out 2;
+}
+
+.pressable { transition: transform 160ms ease, filter 160ms ease; }
+.pressable:hover { filter: brightness(1.02); }
+.pressable:active { transform: scale(0.97); }
+
+@keyframes auth-transition-ring {
+  0% { transform: rotate(0deg) scale(0.85); opacity: 0.35; }
+  50% { transform: rotate(180deg) scale(1.05); opacity: 1; }
+  100% { transform: rotate(360deg) scale(0.85); opacity: 0.35; }
+}
+
+@keyframes auth-transition-progress {
+  from { transform: translateX(-140%); }
+  to { transform: translateX(300%); }
+}
+
+@keyframes auth-transition-glow {
+  0%, 100% { transform: scale(0.9); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 0.95; }
+}
+
+.auth-transition-overlay { animation: page-enter 260ms ease-out both; }
+.auth-transition-ring { animation: auth-transition-ring 1.8s linear infinite; }
+.auth-transition-ring-delay { animation-delay: -0.9s; animation-direction: reverse; }
+.auth-transition-progress { animation: auth-transition-progress 1.1s ease-in-out infinite; }
+.auth-transition-glow { animation: auth-transition-glow 3.5s ease-in-out infinite; }
+.auth-transition-glow-delay { animation-delay: -1.7s; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

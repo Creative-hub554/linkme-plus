@@ -1,0 +1,48 @@
+import { readFileSync } from "node:fs";
+
+const file = process.argv[2];
+const css = readFileSync(file, "utf8");
+
+// Tailwind escapes `:` `/` `[` `]` `=` in class selectors with a backslash.
+const esc = (name) => name.replace(/[:/[\]=.]/g, (ch) => `\\${ch}`);
+
+const needles = [
+  "bg-accent",
+  "text-muted-foreground",
+  "bg-border",
+  "text-primary",
+  "bg-primary",
+  "bg-card",
+  "bg-background",
+  "bg-popover",
+  "border-border",
+  "border-input",
+  "ring-ring",
+  "focus-visible:ring-ring",
+  "hover:bg-accent",
+  "focus:bg-accent",
+  "hover:text-accent-foreground",
+  "focus:text-accent-foreground",
+  "placeholder:text-muted-foreground",
+  "focus:ring-ring",
+  "bg-secondary/80",
+  "bg-destructive/90",
+  "bg-destructive/10",
+  "hover:text-destructive",
+  "data-[state=unchecked]:bg-input",
+  "bg-white/5",
+  "border-white/20",
+];
+
+for (const name of needles) {
+  const selector = `.${esc(name)}`;
+  let i = css.indexOf(selector);
+  if (i < 0) {
+    console.log(`MISS  ${name}`);
+    continue;
+  }
+  // Walk back to the start of this rule (after the previous `}`).
+  const start = css.lastIndexOf("}", i) + 1;
+  const end = css.indexOf("}", i) + 1;
+  console.log(css.slice(start, end));
+}

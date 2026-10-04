@@ -1,0 +1,259 @@
+{
+  "generatedAt": "2026-10-03T04:40:48.529Z",
+  "note": "Gaps the mutation sweep must not open: survivors it may not exceed, and detector rules no limb strike reaches, which may not grow. Regenerate with: node .freebuff/mutation-guards.mjs --write-baseline",
+  "survivors": [],
+  "unstruck": [
+    {
+      "where": "lineAt",
+      "code": "return source.slice(start, end === -1 ? source.length : end);"
+    },
+    {
+      "where": "startsWithExpect",
+      "code": "if (tokens[index]?.text !== \"expect\") return false;"
+    },
+    {
+      "where": "startsWithExpect",
+      "code": "return tokens[index + 1]?.text === \"(\" || tokens[index + 1]?.text === \".\";"
+    },
+    {
+      "where": "settlesWithoutWait",
+      "code": "if (lineAt(source, tokens[index].start).includes(\"settle-on-purpose\")) continue;"
+    },
+    {
+      "where": "const BODY_ASSIGNMENTS",
+      "code": "const BODY_ASSIGNMENTS = new Set([\"innerHTML\", \"outerHTML\", \"textContent\"]);"
+    },
+    {
+      "where": "const BODY_METHODS",
+      "code": "const BODY_METHODS = new Set([\"replaceChildren\", \"remove\", \"removeChild\"]);"
+    },
+    {
+      "where": "const BODY_COLLECTIONS",
+      "code": "const BODY_COLLECTIONS = new Set(["
+    },
+    {
+      "where": "sweepRemovesBody",
+      "code": "if (tokens[index + 1]?.text === \"(\") return true;"
+    },
+    {
+      "where": "sweepRemovesBody",
+      "code": "return false;"
+    },
+    {
+      "where": "bodyMemberAt",
+      "code": "if (tokens[index]?.text !== \"document\") return null;"
+    },
+    {
+      "where": "bodyMemberAt",
+      "code": "if (tokens[index + 1]?.text !== \".\" || tokens[index + 2]?.text !== \"body\") return null;"
+    },
+    {
+      "where": "bodyMemberAt",
+      "code": "if (tokens[index + 3]?.text !== \".\") return null;"
+    },
+    {
+      "where": "bindsBodyCollection",
+      "code": "if (member !== null && BODY_COLLECTIONS.has(member)) return true;"
+    },
+    {
+      "where": "bindsBodyCollection",
+      "code": "return false;"
+    },
+    {
+      "where": "bodyClearIndex",
+      "code": "if (BODY_ASSIGNMENTS.has(member)) {"
+    },
+    {
+      "where": "bodyClearIndex",
+      "code": "} else if (BODY_METHODS.has(member)) {"
+    },
+    {
+      "where": "bodyClearIndex",
+      "code": "} else if (BODY_COLLECTIONS.has(member)) {"
+    },
+    {
+      "where": "clearsBodyBeforeCleanup",
+      "code": "if (cleanupAt === -1) return false;"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": "const afterEachHooks = callSites(code, \"afterEach\").map(({ text }) => text);"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": ".map((hook, index) => (hook.includes(\"cleanupSurfaces(\") ? index : -1))"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": ".filter((index) => index !== -1);"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": "if (cleanupHooks.length === 0) return \"never cleans up\";"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": "if (clearsBodyBeforeCleanup(afterEachHooks[index])) return \"clears the body before cleaning up\";"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": "return \"clears the body before cleaning up\";"
+    },
+    {
+      "where": "cleanupProblem",
+      "code": "return null;"
+    },
+    {
+      "where": "const COLOUR_PROPERTIES",
+      "code": "const COLOUR_PROPERTIES = ["
+    },
+    {
+      "where": "declarations",
+      "code": "if (piece.includes(\"{\") || piece.trimStart().startsWith(\"@\")) return;"
+    },
+    {
+      "where": "unlayeredColourOffenders",
+      "code": ".filter((rule) => rule.selector.includes(\".\"))"
+    },
+    {
+      "where": "unlayeredColourOffenders",
+      "code": ".filter((rule) => rule.declarations.some((property) => COLOUR_PROPERTIES.includes(property)))"
+    },
+    {
+      "where": "unlayeredColourOffenders",
+      "code": ".map((rule) => `${rule.selector} { ${rule.declarations.join(\", \")} }`);"
+    },
+    {
+      "where": "contentsBlock",
+      "code": "if (start === -1) return \"\";"
+    },
+    {
+      "where": "declaresFunction",
+      "code": "if (depth === 0) return false;"
+    },
+    {
+      "where": "declaresFunction",
+      "code": "} else if (depth === 0 && (text === \",\" || text === \";\")) return false;"
+    },
+    {
+      "where": "declaresFunction",
+      "code": "else if (text === \"=\" && tokens[at + 1]?.text === \">\") return true;"
+    },
+    {
+      "where": "declaresFunction",
+      "code": "return false;"
+    },
+    {
+      "where": "ownsRepeatingClock",
+      "code": "return tokens.some("
+    },
+    {
+      "where": "ownsRepeatingClock",
+      "code": "(token, index) => CLOCK_METHODS.has(token.text) && tokens[index + 1]?.text === \"(\","
+    },
+    {
+      "where": "clockSteps",
+      "code": "if (!CLOCK_METHODS.has(tokens[index].text) || tokens[index + 1].text !== \"(\") continue;"
+    },
+    {
+      "where": "imperativeBeatSeams",
+      "code": "if (!seams.has(text)) seams.set(text, \"runs on the clock's own step\");"
+    },
+    {
+      "where": "imperativeBeatSeams",
+      "code": "if (!BEAT_RUNNER_NAMES.has(name) && !BEAT_CALLBACK_NAMES.has(name)) continue;"
+    },
+    {
+      "where": "imperativeBeatSeams",
+      "code": "return [...seams].map(([name, reason]) => `${name} ${reason}`);"
+    },
+    {
+      "where": "installedClocks",
+      "code": "if (!CLOCK_METHODS.has(tokens[index].text) || tokens[index + 1].text !== \"(\") continue;"
+    },
+    {
+      "where": "const BUNDLER_INLINED_NAMES",
+      "code": "const BUNDLER_INLINED_NAMES = new Set([\"NODE_ENV\"]);"
+    },
+    {
+      "where": "isPublicEnvName",
+      "code": "return name.startsWith(PUBLIC_ENV_PREFIX) || BUNDLER_INLINED_NAMES.has(name);"
+    },
+    {
+      "where": "const ENV_NAME",
+      "code": "const ENV_NAME = /^[A-Z][A-Z0-9_]*$/;"
+    },
+    {
+      "where": "const PUBLIC_SECRET_WORD",
+      "code": "const PUBLIC_SECRET_WORD = new RegExp("
+    },
+    {
+      "where": "const CLIENT_BUNDLE_KEYS",
+      "code": "const CLIENT_BUNDLE_KEYS = new Set([\"define\", \"env\"]);"
+    },
+    {
+      "where": "const ENVIRONMENT_OBJECT_KEY",
+      "code": "const ENVIRONMENT_OBJECT_KEY = /^(?:globalThis\\.)?process\\??\\.env$/;"
+    },
+    {
+      "where": "environmentObjectEnd",
+      "code": "return tokens[at + 1]?.text === property ? at + 2 : -1;"
+    },
+    {
+      "where": "environmentObjectEnd",
+      "code": "return afterMeta === -1 ? -1 : propertyOf(afterMeta, \"env\");"
+    },
+    {
+      "where": "memberReadAfter",
+      "code": "return tokens[at + 2]?.text === \"]\" ? name : undefined;"
+    },
+    {
+      "where": "const ENVIRONMENT_OBJECT",
+      "code": "const ENVIRONMENT_OBJECT = \"the environment object\";"
+    },
+    {
+      "where": "environmentAliases",
+      "code": "if (name === undefined || !isIdentifier(name) || aliases.has(name)) continue;"
+    },
+    {
+      "where": "environmentReadsIn",
+      "code": "if (isPublicEnvName(name) || seen.has(name)) return;"
+    },
+    {
+      "where": "environmentReadsIn",
+      "code": "if (tokens[index - 1]?.text === \".\" || !aliases.has(tokens[index].text)) continue;"
+    },
+    {
+      "where": "environmentReadsIn",
+      "code": "if (environmentObjectEnd(tokens, index + 1) === -1 && !aliases.has(bound)) continue;"
+    },
+    {
+      "where": "handedOverNames",
+      "code": "if (isPublicEnvName(name) || seen.has(name)) return;"
+    },
+    {
+      "where": "serverEnvReads",
+      "code": "return environmentReadsIn(tokens, 0, tokens.length, aliases).map("
+    },
+    {
+      "where": "inlinedClientValues",
+      "code": "if (!CLIENT_BUNDLE_KEYS.has(key)) continue;"
+    },
+    {
+      "where": "stageNameIn",
+      "code": "return canonicalOrder.includes(bare) ? bare : null;"
+    },
+    {
+      "where": "inCanonicalOrder",
+      "code": "const index = names.map((name) => canonicalOrder.indexOf(name));"
+    },
+    {
+      "where": "inCanonicalOrder",
+      "code": "return index.every((value, position) => position === 0 || index[position - 1] < value);"
+    },
+    {
+      "where": "staleStageLists",
+      "code": "if (runs.every((run) => run.length < 2)) continue;"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+/*
+ * `@theme inline` is supposed to inline values and emit no variables — but the
+ * app's stylesheet ends up with three (`--color-accent`, `--color-input`,
+ * `--color-ring`) while the other sixteen stay inlined. This bisects which
+ * generated utility drags each one back out.
+ */
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
+
+const TOKENS = [
+  "background",
+  "foreground",
+  "card",
+  "card-foreground",
+  "popover",
+  "popover-foreground",
+  "primary",
+  "primary-foreground",
+  "secondary",
+  "secondary-foreground",
+  "muted",
+  "muted-foreground",
+  "accent",
+  "accent-foreground",
+  "destructive",
+  "destructive-foreground",
+  "border",
+  "input",
+  "ring",
+];
+
+const candidates = [
+  "bg-accent",
+  "text-accent-foreground",
+  "accent-accent",
+  "ring-ring",
+  "ring-2",
+  "border-input",
+  "bg-input",
+  "bg-secondary",
+  "bg-secondary/80",
+  "text-muted-foreground",
+  "placeholder:text-muted-foreground",
+  "bg-border",
+  "bg-destructive/90",
+  "border-border",
+  "bg-card",
+  "bg-background",
+  "bg-accent/50",
+  "ring-ring/50",
+];
+
+const from = `${process.cwd().replace(/\\/g, "/")}/src/app/globals.css`;
+
+for (const candidate of candidates) {
+  const theme = TOKENS.map((t) => `  --color-${t}: hsl(var(--${t}));`).join("\n");
+  const source = `@import "tailwindcss" source(none);\n@source inline("${candidate}");\n@theme inline {\n${theme}\n}\n`;
+  const result = await postcss([tailwind()]).process(source, { from });
+  const themeBlock = result.css.slice(result.css.indexOf("@layer theme"), result.css.indexOf("@layer base"));
+  const emitted = [...themeBlock.matchAll(/--color-([\w-]+): hsl\(var\(--/g)].map((m) => m[1]);
+  console.log(`${candidate.padEnd(32)} -> ${emitted.length ? emitted.join(", ") : "(none)"}`);
+}

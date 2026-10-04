@@ -1,0 +1,34 @@
+node_modules/
+.next/
+.env
+.env.local
+.wrangler/
+.dev.vars
+/dist/
+.vinext/
+.coverage/
+.ci/
+# Transient collect-budget reporter output: the soft-gate sidecar, the run report
+# the `collect:stale` gate step and the `collect:gates` summary read, and the
+# proposal the `collect:propose` job writes for its artifact/comment.
+.freebuff/.collect-budget-soft.json
+.freebuff/.collect-budget-run.json
+.freebuff/collect-budget-proposal.md
+.freebuff/.collect-budget-proposal.json
+.freebuff/collect-apply-pr.md
+.freebuff/.collect-budget-samples/
+.freebuff/collect-gates.md
+# The rendered-links guard's coverage stamp: written by the suite's own close-out,
+# cleared by the runner's test stage at each attempt, read by the runbook's close.
+# Transient like the reporter's sidecars above.
+.freebuff/.rendered-links-coverage.txt
+# The poster's record of what it redacted before posting a comment: written beside the body
+# it maps to, so CI uploads it with the artifact that holds the raw text. Generated, not kept.
+*.redactions.json
+# Session scratch and build output, added at the initial commit
+.temp/
+.vitest-out/
+*.tsbuildinfo
+.freebuff/*.exe
+.freebuff/*.log
+.freebuff/*.log.err

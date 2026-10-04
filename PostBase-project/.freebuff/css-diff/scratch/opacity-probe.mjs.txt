@@ -1,0 +1,11 @@
+import { readFileSync } from "node:fs";
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
+
+const from = new URL("./opacity-probe.css", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+
+const result = await postcss([tailwind()]).process(readFileSync(from, "utf8"), { from });
+const css = result.css;
+
+const utilities = css.slice(css.indexOf("@layer utilities"));
+console.log(utilities.replace(/\n\s*/g, " ").trim());

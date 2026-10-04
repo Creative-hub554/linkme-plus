@@ -1,0 +1,14 @@
+import { readFileSync } from "node:fs";
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
+
+const from = new URL("./theme-emit-probe.css", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const result = await postcss([tailwind()]).process(readFileSync(from, "utf8"), { from });
+
+const theme = result.css.slice(result.css.indexOf("@layer theme"), result.css.indexOf("@layer base"));
+console.log("=== emitted theme variables ===");
+for (const match of theme.matchAll(/(--color-[\w-]+): ([^;]+);/g)) console.log(`  ${match[1]}: ${match[2]}`);
+
+console.log("\n=== generated utilities ===");
+const utilities = result.css.slice(result.css.indexOf("@layer utilities"));
+console.log(utilities.replace(/\n\s*/g, " ").trim());

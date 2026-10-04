@@ -1,0 +1,16 @@
+{
+  "stages": [
+    "typecheck",
+    "runbook",
+    "lint",
+    "test",
+    "preflight",
+    "drift",
+    "mutation-example",
+    "mutation-fifth",
+    "mutation-coverage",
+    "mutation-preflight",
+    "mutation"
+  ],
+  "count": 11
+}

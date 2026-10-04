@@ -1,0 +1,25 @@
+/*
+ * Scratch harness: which @theme declaration form survives an opacity modifier?
+ * Run with .freebuff/css-diff/opacity-probe.mjs
+ */
+@import "tailwindcss" source(none);
+
+/* Force the exact utilities under test. */
+@source inline("bg-a bg-a/10 bg-b bg-b/10 bg-c bg-c/10");
+
+:root {
+  --a: 0 84.2% 60.2%;
+  --b: hsl(0 84.2% 60.2%);
+}
+
+@theme inline {
+  /* form 1: hsl(var(--triplet)) — what the app now uses */
+  --color-a: hsl(var(--a));
+  /* form 2: var() holding a complete colour */
+  --color-b: var(--b);
+}
+
+@theme {
+  /* form 3: a static colour, for reference */
+  --color-c: #ef4444;
+}

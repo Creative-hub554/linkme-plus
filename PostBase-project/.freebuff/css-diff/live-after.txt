@@ -1,0 +1,16 @@
+AFTER  (tokens declared in `@theme inline`)
+page            live  tokenElements  stableElements  stableHash
+/feed           true  61             31              1534360084
+/               true  30             24              1606683883
+/marketplace    true  36             18              -75500288
+/jobs           true  44             31              -2121484261
+/groups         true  32             19              1036780731
+/messages       true  14              9              1732244512
+/profile        true  67             40              -530578439
+/settings       true  59             40              1559652343
+/cover-studio   true  34             25              1734397875
+/admin          true  43             32              -420259234
+/search         true  27             16              1760675299
+/login          true  21             12              -973319943
+/register       true  24             14              1874146398
+/help           true  19             15              -2114851428

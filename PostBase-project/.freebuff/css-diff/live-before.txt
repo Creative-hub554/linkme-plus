@@ -1,0 +1,53 @@
+BEFORE  (the twenty hand-written rules, tokens not in `@theme`)
+page            live   tokenElements  stableElements  stableHash
+/feed           false  61             31              1534360084
+/               false  30             24              1606683883
+/marketplace    false  36             18              -75500288
+/jobs           false  44             31              -2121484261
+/groups         false  32             19              1036780731
+/messages       false  14              9              1732244512
+/profile        false  67             40              -530578439
+/settings       false  59             40              1559652343
+/cover-studio   false  34             25              1734397875
+/admin          false  43             32              -420259234
+/search         false  27             16              1760675299
+/login          false  21             12              -973319943
+/register       false  24             14              1874146398
+/help           false  19             15              -2114851428
+
+Every hash AND every count is identical to the AFTER pass (see live-after.txt).
+`live` is the only field that differs: false here, true in the AFTER pass.
+
+== what changed, measured value by value ==
+
+class                                   before                              after
+placeholder:text-muted-foreground       oklab(0.137 0.0072 -0.035 / 0.5)   rgb(100, 116, 139)
+  (the browser's DEFAULT placeholder colour, i.e. no rule)                 = hsl(215.4 16.3% 46.9%)
+bg-border  on /settings, /login,        rgba(0, 0, 0, 0)                    rgb(226, 232, 240)
+  /register (n = 1 each)                  (no rule at all)                    = hsl(214.3 31.8% 91.4%)
+data-[state=active]:text-foreground     rgb(100, 116, 139) for all four     rgb(2, 8, 23) for the active one,
+  on /admin (n = 4), /search (n = 6)      tabs — the active tab was not       rgb(100, 116, 139) for the rest
+                                          distinguishable
+
+== probe (a detached element carrying the class, on /help) ==
+
+                                   before              after
+data-[state=unchecked]:bg-input    rgba(0, 0, 0, 0)    rgb(226, 232, 240)   = hsl(214.3 31.8% 91.4%)
+bg-border                          rgba(0, 0, 0, 0)    rgb(226, 232, 240)
+focus:bg-accent (real :focus)      rgba(0, 0, 0, 0)    rgb(241, 245, 249)   = hsl(210 40% 96.1%)
+focus:ring-ring   (real :focus)    ""                  hsl(221.2 83.2% 53.3%)
+
+NB the probe needs `document.hasFocus()` to be true — :focus does not match otherwise.
+A real click (preview_click on the h1) is what makes it true.
+
+== real hover (preview_click leaves the pointer on the element) ==
+
+hover:bg-accent           :hover true -> rgb(241, 245, 249)
+hover:bg-destructive/10   :hover true -> oklab(0.636792 0.187796 0.0888786 / 0.1)
+                          (the red at 10% alpha, i.e. the opacity modifier compiles)
+
+== the Radix select on /settings, opened with a real click ==
+
+[role=option].focus:bg-accent.focus:text-accent-foreground
+  focused item  : bg rgb(241, 245, 249), color rgb(15, 23, 42)   (accent / accent-foreground)
+  the other two : bg rgba(0, 0, 0, 0),  color rgb(2, 8, 23)      (unchanged, as before)

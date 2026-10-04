@@ -1,0 +1,47 @@
+{
+  "name": "linkme-plus",
+  "main": "worker/index.ts",
+  "compatibility_date": "2024-10-22",
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    { "pattern": "linkmeplus.com", "custom_domain": true },
+    { "pattern": "www.linkmeplus.com", "custom_domain": true }
+  ],
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WEBSOCKET_ROOM",
+        "class_name": "WebSocketRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WebSocketRoom"]
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "linkme-plus-uploads"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "4a8785a91f694003a27afc7495210980"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

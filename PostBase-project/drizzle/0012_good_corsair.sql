@@ -1,0 +1,16 @@
+-- The `group` audience: a post published into a group is readable by that
+-- group's members, and by nobody else. See `src/lib/post-audiences.ts` for the
+-- rule and `src/lib/db/post-visibility.ts` for the arm of the predicate this
+-- value renders.
+--
+-- The column is shared: `visibility` also backs `profiles.visibility` (whether a
+-- member is listed in discovery) and `groups.visibility` (whether a group is
+-- listed). Those two gain an allowed value they never store — every one of their
+-- checks compares against `'public'`, so nothing about them changes. One set of
+-- values, three meanings, as the column's own note in `src/lib/db/schema.ts`
+-- says.
+--
+-- Not idempotent: `ADD VALUE` fails if the value is already there, and Drizzle
+-- records this file in its journal so it is applied exactly once. Written by
+-- `drizzle-kit generate` from the schema, which is where this enum is declared.
+ALTER TYPE "public"."visibility" ADD VALUE 'group';
