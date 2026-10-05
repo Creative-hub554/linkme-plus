@@ -92,7 +92,7 @@ export const files = {
   ".freebuff/whole-write.mjs": "09b2940f3e7c667e9df9fe673c0f01e9e38e1954",
   ".github/workflows/ci.yml": "e437070d0912d193a0637df4195567bae9977c9d",
   ".github/workflows/collect-apply.yml": "daf4b2bdd25d9e98924ee21587c928d5d644ee83",
-  ".github/workflows/nightly.yml": "302779185cb28aa16a38d22bb341dec8d04375f0",
+  ".github/workflows/nightly.yml": "0a7939f3cc49e7406983e3494fd91e24e5a37e45",
   "eslint.config.mjs": "bd761c6281906b47654ca74f935ab3d0485a73c3",
   "next.config.mjs": "5b8c8f1b8c74942de25b86d40886935234b1132b",
   "postcss.config.mjs": "8f8be689e9af58f80351df6e6b551146822f42a4",
