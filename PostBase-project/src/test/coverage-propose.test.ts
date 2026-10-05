@@ -146,12 +146,12 @@ describe("the coverage threshold proposer", () => {
     ]);
 
     expect(status).toBe(0);
-    // `src/lib/**` is held on lines 92; 98% measured leaves room for 97 (a raise
-    // of 5), and the Δ column names what the change did.
-    expect(message).toContain("| `src/lib/**` | lines | 90.00% | 98.00% | +8.00 | 92 | 97 (+5) |");
-    // The whole tree's own row: 94% against the bare 85 backstop, so 93.
+    // `src/lib/**` is held on lines 83; 98% measured leaves room for 97 (a raise
+    // of 14), and the Δ column names what the change did.
+    expect(message).toContain("| `src/lib/**` | lines | 90.00% | 98.00% | +8.00 | 83 | 97 (+14) |");
+    // The whole tree's own row: 94% against the bare 80 backstop, so 93.
     expect(message).toContain(
-      "| all `src/**` *(whole-tree backstop)* | lines | 90.00% | 94.00% | +4.00 | 85 | 93 (+8) |",
+      "| all `src/**` *(whole-tree backstop)* | lines | 90.00% | 94.00% | +4.00 | 80 | 93 (+13) |",
     );
     // The paste-ready row carries every metric, raised or not.
     expect(message).toContain('"src/lib/**": { lines: 97, statements: 97, branches: 89, functions: 79 },');
@@ -199,7 +199,10 @@ describe("the coverage threshold proposer", () => {
   });
 
   it("proposes nothing when the target headroom is not reachable", () => {
-    const head = fixture("head-small", { "src/lib/a.ts": coverage(93, 93, 90, 80) });
+    // Branches is the binding row: floor(86 − 20) = 66, which is exactly the
+    // backstop's branches threshold, so even the closest metric has nowhere to
+    // go — the fixture tracks the threshold module deliberately.
+    const head = fixture("head-small", { "src/lib/a.ts": coverage(93, 93, 86, 80) });
     const { status, output, message } = propose(["--summary", head, "--target", "20"]);
 
     expect(status).toBe(0);
