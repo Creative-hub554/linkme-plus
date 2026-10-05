@@ -37,6 +37,13 @@ export function ReportPostDialog({ postId }: { postId: string }) {
     setError(null);
   };
 
+  // Closing is closing, however it happens — Cancel, Done, Escape, backdrop.
+  // Every path forgets the draft so the next open starts empty.
+  const close = () => {
+    reset();
+    setOpen(false);
+  };
+
   const submitReport = async () => {
     if (!reason || submitting) return;
     setSubmitting(true);
@@ -70,7 +77,7 @@ export function ReportPostDialog({ postId }: { postId: string }) {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><ShieldAlert className="h-6 w-6" /></div>
             <DialogTitle className="mt-4">Thanks for reporting this</DialogTitle>
             <DialogDescription className="mt-2">Our safety team will review the post. You can close this window now.</DialogDescription>
-            <Button className="mt-5" onClick={() => setOpen(false)}>Done</Button>
+            <Button className="mt-5" onClick={close}>Done</Button>
           </div>
         ) : (
           <>
@@ -101,7 +108,7 @@ export function ReportPostDialog({ postId }: { postId: string }) {
               {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={close}>Cancel</Button>
               <Button onClick={() => void submitReport()} disabled={!reason || submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Submit report
