@@ -4,6 +4,9 @@
 # defaults.run.working-directory, cache-dependency-path, artifact path prefixes,
 # plus a push trigger on master so the 11-stage gate (with --skip=preflight, the
 # stage a hosted runner cannot hold) runs on every push, not only nightly.
+# Delta: CI is cleared on the gate step and --keep-going is passed explicitly,
+# because the runner's CI=true would otherwise flip the suite's spawned inner
+# gate runs into keep-going mode and red their fail-fast assertions.
 # The commit-back pushes with [skip ci], so it cannot wake this trigger again.
 name: Nightly
 
@@ -74,9 +77,11 @@ jobs:
       # ahead of the JSON and break the parse — while stdout carries exactly the
       # one report object and stderr (the runner's progress) goes to the log.
       - name: Run the full CI gate
+        env:
+          CI: ""
         run: |
           mkdir -p .ci
-          npm run --silent ci -- --json --skip=preflight > .ci/report.json 2> .ci/ci.log
+          npm run --silent ci -- --json --keep-going --skip=preflight > .ci/report.json 2> .ci/ci.log
 
       # Publish even when the gate failed — a report nobody can read is the one
       # failure that would make the schedule pointless. The Markdown summary goes

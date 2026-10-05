@@ -72,6 +72,8 @@ jobs:
       # backstop by less than a point — a ratchet that tightens as the tree
       # improves, without anyone editing a number.
       - run: npm run test:coverage
+        env:
+          CI: ""
       # Publish the numbers whether the gate passed or failed — the point is the
       # trajectory, and a run that just went red is exactly the one worth reading.
       # `if: always()` is what makes that work after a failing step.
@@ -290,6 +292,8 @@ jobs:
         name: Propose baseline and soft-threshold drops
         continue-on-error: true
         run: npm run collect:propose
+        env:
+          CI: ""
       # The gate half of the same session. The reporter left its run report after
       # the last run — which recorded baselines held against the worst case every run
       # measured — and this fails when the session was complete and they all agreed
