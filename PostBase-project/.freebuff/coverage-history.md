@@ -11,4 +11,3 @@ Record a row by hand with:
 
 | Date | Rendered-links coverage |
 | :-- | :-- |
-| 2026-10-05 | rendered-links coverage: chrome — the footer 14, the signed-in header 5, the opened account menu 5, the opened mobile panel 3, the opened notification panel 2, the bottom nav 3, the Social strip 4, the signed-out header 5, the signed-out mobile panel 4, the signed-out bottom nav 2 (28 unique destinations) \| data — 28 page mounts, 18 unique destinations |
