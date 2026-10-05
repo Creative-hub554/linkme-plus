@@ -74,6 +74,19 @@ export default defineConfig({
     // ~21-27s), because the same work spent less time thrashing. It is a
     // ceiling, not a target, so a quiet machine just runs files back to back.
     maxWorkers: 4,
+    // Twenty seconds per test rather than Vitest's 5s default, for the same
+    // reason the cap above exists: the default assumes a quiet box, and this
+    // suite spawns real processes — the gate runner itself, ~110 spawnSync calls
+    // deep — where the budget is the spawn count and the machine's load, not the
+    // machine's best day. `20_000` is already the rate dozens of cases here pass
+    // explicitly (and 120s the one that spawns nine times); this makes it the
+    // floor instead of the exception. Against a hosted runner's four workers over
+    // 170 files, whole tests sat at 3–4.9s against the 5s cliff, and the only reds
+    // left on the box were tests that had run their course and run out of
+    // wall-clock — flake in tests that had not changed, which is the failure mode
+    // this whole section exists to prevent. A hang still fails, at this bound
+    // instead of 5s, and no assertion moves.
+    testTimeout: 20_000,
     // Needed by `src/test/globals-layer.test.ts`, which imports `globals.css`
     // with Vite's `?raw` query to read the stylesheet's *source*. Without this,
     // Vitest replaces every CSS import with an empty string and `?raw` hands back

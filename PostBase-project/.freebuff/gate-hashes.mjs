@@ -98,7 +98,7 @@ export const files = {
   "postcss.config.mjs": "8f8be689e9af58f80351df6e6b551146822f42a4",
   "tsconfig.json": "a076ee85950d91fb2bca6d0eb34a9b01f3f496a2",
   "vite.config.ts": "0dc836972f946782c5b7e126a4ab86bfed3e6d24",
-  "vitest.config.ts": "9a3e3df22924126c1c3efcbbfea3ff3fbba82a55",
+  "vitest.config.ts": "708823f6e0b2d2318aa0990087266eb79a51d39e",
   "vitest.mutation.config.ts": "8175e1110ca2ddc20b3d197b1108dbae5ed8d5c4",
   "wrangler.jsonc": "6e156adc28562b3124f637db4fe41a1a8809956e",
 };
