@@ -90,7 +90,7 @@ export const files = {
   ".freebuff/scaffold-sweep.mjs": "d57fa0fd6e56cca1ad5d6da12ecd54b2c3442e38",
   ".freebuff/stage-order.json": "db851a8db5470b8d72e00a6443723d2a0adc98ac",
   ".freebuff/whole-write.mjs": "09b2940f3e7c667e9df9fe673c0f01e9e38e1954",
-  ".github/workflows/ci.yml": "e437070d0912d193a0637df4195567bae9977c9d",
+  ".github/workflows/ci.yml": "18fd9315b135e370e7564f9f360c094613beeac7",
   ".github/workflows/collect-apply.yml": "daf4b2bdd25d9e98924ee21587c928d5d644ee83",
   ".github/workflows/nightly.yml": "0a7939f3cc49e7406983e3494fd91e24e5a37e45",
   "eslint.config.mjs": "bd761c6281906b47654ca74f935ab3d0485a73c3",
