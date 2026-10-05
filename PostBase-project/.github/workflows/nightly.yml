@@ -110,6 +110,8 @@ jobs:
       # step exists to prevent.
       - name: Commit the coverage history
         if: always()
+        env:
+          NIGHTLY_DEPLOY_KEY: ${{ secrets.NIGHTLY_DEPLOY_KEY }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -118,6 +120,20 @@ jobs:
             echo "The coverage history is unchanged — nothing to commit."
           else
             git commit -m "chore(coverage): record the nightly rendered-links reading ($(date -u +%F)) [skip ci]"
+            # The ruleset grants github-actions no bypass on a personal repository: the token's
+            # push is declined with "Changes must be made through a pull request". A deploy key
+            # *is* a listed bypass actor, so this one push authenticates as the key the secret
+            # holds instead of as the workflow token — the guard below says so plainly rather
+            # than letting an absent secret fail as an opaque ssh error at the far end.
+            if [ -z "$NIGHTLY_DEPLOY_KEY" ]; then
+              echo "NIGHTLY_DEPLOY_KEY is not set — the commit-back cannot push master." >&2
+              exit 1
+            fi
+            mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+            printf '%s\n' "$NIGHTLY_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
+            chmod 600 "$HOME/.ssh/id_ed25519"
+            ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+            git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
