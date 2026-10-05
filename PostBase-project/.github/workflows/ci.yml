@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 # A superseded PR run is wasted runner time and a second, stale result on the
-# same commit; cancel it. Pushes are left alone so a run that is about to deploy
-# is never cancelled halfway through.
+# same commit; cancel it. Pushes are left alone so a merge's own run finishes
+# on its commit rather than being cut short by the next push.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -346,37 +346,3 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-
-  deploy-staging:
-    name: Deploy to Staging
-    needs: [lint, test, build]
-    if: github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run deploy:staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
-  deploy-production:
-    name: Deploy to Production
-    needs: [lint, test, build]
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run deploy:production
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
