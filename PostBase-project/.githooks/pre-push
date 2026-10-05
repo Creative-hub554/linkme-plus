@@ -1,0 +1,51 @@
+#!/bin/sh
+# pre-push gate for master (local enforcement; GitHub Free can't protect a
+# private repo server-side, so the push is stopped here instead).
+#
+# Installed with:  git config core.hooksPath PostBase-project/.githooks
+# (see README.md beside this file). .git/hooks/pre-push carries the same
+# script for clones that predate the versioned copy.
+#
+#   default          fast gate: typecheck + lint:ci + gates:drift
+#   PUSH_GATE=full   additionally runs the full coverage suite
+#   bypass once      git push --no-verify
+#
+# Pushes to any other branch, and deletions of master, are not gated.
+
+set -u
+
+gate_master=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/master" ] || continue
+  # A deletion arrives with an all-zero local sha; nothing to gate.
+  case "$local_sha" in
+    *[!0]*) gate_master=1 ;;
+  esac
+done
+
+[ "$gate_master" -eq 1 ] || exit 0
+
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+echo "pre-push: gating push to master (PUSH_GATE=${PUSH_GATE:-fast})" >&2
+
+run() {
+  echo "pre-push: $*" >&2
+  (cd PostBase-project && "$@") || {
+    echo "pre-push: BLOCKED — '$*' failed in PostBase-project." >&2
+    echo "pre-push: fix it, or bypass this once with: git push --no-verify" >&2
+    exit 1
+  }
+}
+
+run npm run typecheck
+run npm run lint:ci
+run npm run gates:drift
+
+if [ "${PUSH_GATE:-fast}" = "full" ]; then
+  run npm run test:coverage
+fi
+
+echo "pre-push: gate passed — push to master allowed." >&2
+exit 0
