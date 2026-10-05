@@ -1,0 +1,232 @@
+# MIRROR — GitHub only reads .github/workflows at the repository root. The
+# gate-pinned canonical stays at PostBase-project/.github/workflows/collect-apply.yml
+# (drift checks its hash); keep the two in sync. Only delta: the working-directory
+# default — this workflow installs nothing and has no artifact paths.
+name: Collect-budget apply
+
+# The other half of the collect-budget ratchet's pull-request story.
+#
+# `ci.yml`'s `collect-propose` job measures a pull request and comments what the
+# change would tighten — the tracked-import baselines and the soft threshold —
+# plus a hidden payload of the exact values it measured. This workflow lets a
+# reviewer *act* on that comment: reply with the apply command and it opens a
+# follow-up pull request that writes those values into
+# `.freebuff/collect-budget-baselines.mjs`.
+#
+# Three things are deliberate:
+#
+#   - only a maintainer can trigger it. `issue_comment` fires for any comment on
+#     any issue and the whole payload arrives in the event, so the guard is an
+#     `author_association` check plus a bot exclusion: a contributor cannot move
+#     the gates by commenting. (Comments have no reply linkage in the REST
+#     payload, so the command is honoured on any comment on the pull request
+#     rather than only on the proposal thread.)
+#   - it applies the *payload*, never a fresh measurement. Re-running the suite
+#     on the runner would produce different numbers than the reviewer was shown,
+#     and reading the payload needs no dependencies at all — this job installs
+#     nothing.
+#   - it opens a pull request rather than pushing to the branch under review. The
+#     baselines describe the tree that earned them, so the follow-up is stacked on
+#     that branch's head: merging it lands the tightening together with the change
+#     that earned it, and merging the change first leaves a baselines-only diff.
+#     Opening against `main` instead would apply numbers measured on unmerged code
+#     and could leave `main` failing its own budget if the change were reverted.
+#
+# It also re-pins `.freebuff/gate-hashes.mjs`, and commits the two together. The baselines
+# are a pinned gate file — `npm run gates:drift` compares their content to the hash recorded
+# there — so a commit that rewrote them alone would land a tree whose pin no longer describes
+# it, and every branch carrying that commit would be red on drift until somebody re-pinned by
+# hand. The applier does the re-pin (targeted: that one file, and only if the rest of the pin
+# already matches the tree), and refuses rather than half-write — a refusal puts the baselines
+# back, reports `drift` and opens nothing.
+#
+# Then the alarm is run over the tree the commit is about to carry, and its verdict is the
+# job's. The applier's re-pin is what makes the commit consistent; running `gate-drift` anyway
+# is what makes that visible, because this is the one branch where nothing else will check it:
+# a pull request opened with `GITHUB_TOKEN` starts no workflows, so `ci.yml`'s drift stage
+# never runs on the commit that lands a re-pin. A check that disagrees stops the job before
+# the commit, and the reply says so in its own status rather than reporting `applied` over a
+# follow-up pull request that was never opened.
+#
+# Note a GitHub limitation this shares with any `GITHUB_TOKEN` automation: the pull
+# request it opens does not itself trigger `ci.yml` (token-created events do not
+# start workflows). The stacked pull request is one commit of recorded numbers, so
+# its own CI adds little, but the merge that lands it should still be a person's.
+#
+# Like the proposal job, nothing here is required for a merge: it is a convenience
+# for a review that has already been decided. The one thing it does that a person
+# could not do by hand is *lower* a gate, which is why applying it is a merge.
+on:
+  issue_comment:
+    types: [created]
+
+# One approval at a time per pull request: a second command while the first is
+# still running would race the same file and the same branch.
+concurrency:
+  group: collect-apply-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+defaults:
+  run:
+    working-directory: PostBase-project
+
+jobs:
+  apply:
+    name: Apply collect-budget proposal
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/collect-apply') &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    steps:
+      # The event carries a comment, not a pull request, so everything else has to
+      # be fetched. `head.ref` is the branch the follow-up stacks on; `base.ref`
+      # is what the originating pull request targets. A fork's head branch is not
+      # ours to push to, so `same_repo` is what the apply step is gated on.
+      - name: Resolve the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr="${{ github.event.issue.number }}"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" > "$RUNNER_TEMP/pr.json"
+          head=$(jq -r .head.ref "$RUNNER_TEMP/pr.json")
+          base=$(jq -r .base.ref "$RUNNER_TEMP/pr.json")
+          sha=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")
+          fork=$(jq -r .head.repo.full_name "$RUNNER_TEMP/pr.json")
+          same_repo=false
+          if [ "$fork" = "$GITHUB_REPOSITORY" ]; then same_repo=true; fi
+          {
+            echo "head=$head"
+            echo "base=$base"
+            echo "sha=$sha"
+            echo "same_repo=$same_repo"
+          } >> "$GITHUB_OUTPUT"
+          echo "pull request #$pr: head=$head base=$base same_repo=$same_repo"
+
+      - uses: actions/checkout@v4
+        with:
+          # The pull request's own head, not the default branch: the baselines the
+          # payload tightens are the ones on the tree that earned it.
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No `npm ci`: the launcher reads the payload, merges it onto the committed
+      # baselines and writes the file with Node's own modules only.
+      - name: Apply the approved proposal
+        id: apply
+        if: steps.pr.outputs.same_repo == 'true'
+        env:
+          # Through the environment, never interpolated into the script: a comment
+          # is attacker-controlled text, and `${{ }}` inside `run:` would be a
+          # shell injection.
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$COMMENT_BODY" > "$RUNNER_TEMP/proposal.md"
+          node .freebuff/apply-collect-baselines.mjs --body-file "$RUNNER_TEMP/proposal.md"
+
+      # The alarm, over the exact tree the commit is about to carry — the same command
+      # `ci.yml`'s drift stage runs, and it needs no dependencies, like the step above. The
+      # applier has already re-pinned (and refuses rather than write a pin it cannot record),
+      # so this is not the thing that makes the commit consistent; it is the thing that puts
+      # the verdict in the run. Nothing else will: `GITHUB_TOKEN`-created pull requests do not
+      # start workflows, so the drift stage never sees the commit this job pushes.
+      - name: Check the pin describes the tree the commit will carry
+        id: verify
+        if: steps.apply.outputs.changed == 'true'
+        run: node .freebuff/gate-drift.mjs
+
+      # A fresh branch off the pull request's head, so the follow-up's diff is the
+      # baselines commit alone and its base is the branch that earned it. The run
+      # id keeps two approvals of different proposals on one pull request from
+      # fighting over the same branch.
+      - name: Open the follow-up pull request
+        if: steps.apply.outputs.changed == 'true' && steps.verify.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          HEAD: ${{ steps.pr.outputs.head }}
+        run: |
+          set -euo pipefail
+          branch="collect-budget/apply-pr${PR}-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          # Both files the applier wrote: the baselines, and the gate manifest that pins
+          # them. Committing one without the other is the state the drift alarm refuses.
+          git add .freebuff/collect-budget-baselines.mjs .freebuff/gate-hashes.mjs
+          git commit -m "chore: apply the collect-budget proposal from #${PR}"
+          git push origin "$branch"
+          gh pr create \
+            --base "$HEAD" \
+            --head "$branch" \
+            --title "chore: apply the collect-budget proposal from #${PR}" \
+            --body-file .freebuff/collect-apply-pr.md
+
+      # Always answered, so a command never disappears into a log nobody reads.
+      # One comment per pull request, updated in place by its marker — and the
+      # marker deliberately does not contain the apply command, or the reply would
+      # arm the trigger again.
+      #
+      # The posting is `.freebuff/pr-comment.mjs`, the same one every comment step in
+      # `ci.yml` calls, so the marker lookup and the post-or-patch are one implementation
+      # rather than four. The reply is composed here rather than rendered to a file, so it
+      # goes through `--text` instead of `--body` — and that path carries the same guard: a
+      # blank reply is announced on the run page rather than posted as an empty comment.
+      #
+      # This step is deliberately **not** `continue-on-error`, and so needs no
+      # `.freebuff/comment-gate.mjs` step after it the way the three comment steps in
+      # `ci.yml` do: there is nothing after it to protect, so a poster that exits non-zero —
+      # a blank reply, or a `gh` that refused — fails this job directly. The gate exists
+      # exactly where `continue-on-error` would otherwise let a missing comment pass.
+      - name: Reply on the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          SAME_REPO: ${{ steps.pr.outputs.same_repo }}
+          # The verification step's own outcome wins over the applier's: `applied` describes
+          # the files, and a check that disagreed with them means nothing was committed — so
+          # the reply has to say that, not that a follow-up pull request was opened.
+          STATUS: ${{ steps.verify.outcome == 'failure' && 'unverified' || steps.apply.outputs.status }}
+        run: |
+          set -euo pipefail
+          marker='<!-- collect-budget-apply -->'
+          if [ "$SAME_REPO" != "true" ]; then
+            summary="This pull request comes from a fork, so there is no branch here to open a follow-up against. Run \`npm run collect:record\` locally and commit the result instead."
+          else
+            case "$STATUS" in
+              applied)
+                summary="Applied the proposed narrowing in a follow-up pull request stacked on this branch. Review and merge it to adopt the tighter budgets." ;;
+              unchanged)
+                summary="Nothing to apply — the recorded baselines already sit at or below the proposed values." ;;
+              no-payload)
+                summary="This comment carries no collect-budget proposal payload, so there is nothing to apply. Use the command on the proposal comment itself." ;;
+              refused)
+                summary="Refused — the payload would have raised a recorded budget. A proposal may only tighten a gate, so nothing was written." ;;
+              drift)
+                summary="Refused — the values applied, but \`.freebuff/gate-hashes.mjs\` could not record the baselines they write, so nothing was committed and the baselines were put back. Run \`npm run gates:pin\` on that branch, look at why the pin did not match, and commit the two together." ;;
+              unverified)
+                summary="Refused — the values applied and were re-pinned, but \`npm run gates:drift\` then disagreed with the tree, so nothing was committed. That means the pin does not describe what the commit would have carried; run \`npm run gates:drift\` on that branch and look at what it reports." ;;
+              *)
+                summary="The approval could not be applied. See this workflow's log." ;;
+            esac
+          fi
+          body=$(printf '%s\n\n%s' "$marker" "$summary")
+          node .freebuff/pr-comment.mjs \
+            --text "$body" \
+            --marker "$marker" \
+            --label 'Collect-budget apply reply' \
+            --producer 'Reply on the pull request'

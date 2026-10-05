@@ -1,0 +1,399 @@
+# MIRROR — GitHub only reads .github/workflows at the repository root, so this
+# copy is what actually runs. The gate-pinned canonical stays at
+# PostBase-project/.github/workflows/ci.yml (drift checks its hash); keep the two
+# in sync. Mechanical deltas from the canonical: defaults.run.working-directory,
+# cache-dependency-path, artifact path prefixes, push/PR branch main→master.
+# Deploy jobs remain keyed to main/staging and stay inert until wrangler envs and
+# the CLOUDFLARE_API_TOKEN secret exist.
+name: CI/CD
+
+on:
+  push:
+    branches: [master, staging]
+  pull_request:
+    branches: [master]
+
+# A superseded PR run is wasted runner time and a second, stale result on the
+# same commit; cancel it. Pushes are left alone so a run that is about to deploy
+# is never cancelled halfway through.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: PostBase-project
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      # `--max-warnings 0` (the `lint:ci` script) makes one warning fail the
+      # job. `npm run lint` stays permissive for local iteration, but CI must
+      # hold the zero-warning baseline the project worked to reach.
+      - run: npm run lint:ci
+      - run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    # The proposal steps below read the base branch's coverage artifact
+    # (`actions: read`) and comment on the pull request (`pull-requests: write`).
+    # A fork PR gets a read-only token whatever is declared here, which is why
+    # those steps are advisory and the job summary carries the proposal for them.
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      # `test:coverage` is `vitest run --coverage && npm run coverage:floor &&
+      # npm run coverage:headroom`: the one-shot run is explicit rather than
+      # relying on Vitest noticing `CI=true`; the thresholds in
+      # `.freebuff/coverage-thresholds.mjs` hold each directory's aggregate; the
+      # floor script checks every file on its own against 52% lines/statements,
+      # and src/lib + src/utils on branches/functions too (a per-file floor
+      # Vitest's global `perFile` flag cannot express alongside the globs); and the
+      # headroom gate fails the job when the whole-tree aggregate clears its
+      # backstop by less than a point — a ratchet that tightens as the tree
+      # improves, without anyone editing a number.
+      - run: npm run test:coverage
+      # Publish the numbers whether the gate passed or failed — the point is the
+      # trajectory, and a run that just went red is exactly the one worth reading.
+      # `if: always()` is what makes that work after a failing step.
+      - name: Publish coverage summary
+        if: always()
+        run: npm run coverage:report
+      # The same run summary, the other gate: the collect baselines and soft
+      # threshold the reporter enforces on every collect. Two sources, deliberately.
+      # The recorded values come from `.freebuff/collect-budget-baselines.mjs` — the
+      # very file the gate imports — so the displayed number cannot disagree with the
+      # enforced one; and this run's measurements, the reporter's loose-gate verdicts,
+      # and the boundaries it judges against (how far past a recorded import cost is
+      # stale, how much headroom a band must lose to be stale, and the floor below
+      # which a band is not judged at all) come from the run report the suite leaves
+      # at `.freebuff/.collect-budget-run.json`. Printed together, both halves are
+      # legible on a *green* build, the one time nobody is looking at the gate. When
+      # no report is present — the script run on its own, or before any suite run in
+      # the job — the recorded columns still render and the row says so, rather than
+      # showing a blank as if it were zero.
+      - name: Publish collect-budget summary
+        if: always()
+        run: npm run collect:gates
+      # The rendered summary, posted where the reviewer already is: a pull request,
+      # updated in place. It adds nothing to measure — the body is the file the step
+      # above just wrote — and the marker the summary opens with is what identifies
+      # the previous comment, so a run edits that one rather than stacking a new
+      # comment every push. Skipped on forks, whose read-only token cannot comment;
+      # they still get the job summary and the artifact.
+      #
+      # The posting is `.freebuff/pr-comment.mjs`, shared with the two proposal comment
+      # steps below so the three cannot diverge: it refuses to hand `gh` a body that is
+      # missing, empty or blank — announcing the miss on the run page instead, the way the
+      # nightly job reports a report it never got — and it looks up the marked comment, then
+      # PATCHes it or POSTs the first one. Each step passes its own `--body`/`--marker` pair,
+      # held beside the writing script's own constant in `src/test/collect-budget.test.ts`.
+      - name: Comment the collect-budget summary on the pull request
+        id: comment-summary
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --body .freebuff/collect-gates.md \
+            --marker '<!-- collect-budget-summary -->' \
+            --label 'Collect-budget summary comment' \
+            --producer 'Publish collect-budget summary'
+      # The gate machinery itself, pinned by content: the runner, every stage script, the
+      # two mutation checks and the lock they share, the redactor and the nightly report,
+      # the collect ratchet, the coverage gates, the two vitest configs, the compiler and
+      # linter config, and the workflows that run all of it. Each is compared to the hash
+      # recorded in `.freebuff/gate-hashes.mjs`, so a floor lowered by hand, a threshold
+      # moved in `coverage-thresholds.mjs`, an extra suite `exclude`, an `exclude` widened
+      # in `tsconfig.json`, a step deleted from `.github/workflows/ci.yml` or a stage with
+      # empty `inputs` fails here rather than passing every test it was written to pass.
+      # The step below proves the tests that hold a gate still notice a weakening; this
+      # proves the files they hold are the ones that were recorded. It is instant: it
+      # hashes files and reads one. Re-pin a deliberate change with `npm run gates:pin`, so
+      # the change arrives in the same diff a reviewer reads — and note that *this* file is
+      # one of the pinned ones, so an edit to the workflow itself is re-pinned the same way.
+      - name: Check the gate machinery is the pinned one
+        run: npm run gates:drift
+      # The coverage gates' own load-bearingness. `npm run test:coverage` above proves
+      # the numbers hold and the drift step proves the scripts are the recorded ones;
+      # this proves the tests that hold them still do — each coverage script is
+      # weakened in place, one at a time, and that script's own test file has to
+      # fail. It is affordable on every pull request (five single-file Vitest runs,
+      # not the minutes-long route sweep the nightly job owns through `npm run ci`,
+      # which reports this check the way it reports that sweep). It belongs here as
+      # well as at night because editing a gate script or one of its tests is
+      # exactly what moves the pin, and that edit arrives in a pull request.
+      - name: Check the coverage gates are load-bearing
+        run: npm run mutation:coverage
+      # The markdown summaries are also kept as an artifact, alongside the raw JSON
+      # the coverage report was built from, so any commit's coverage can be diffed
+      # against any other's: download two and run the report with `--compare`.
+      # The two record files ride along with the bodies they map: the poster files what
+      # it redacted beside the body it read, so a reviewer comparing the posted comment
+      # against this artifact needs the two together. Each exists only when its body had
+      # to be scrubbed, and a missing one is simply not uploaded.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            PostBase-project/.coverage/coverage-report.md
+            PostBase-project/.coverage/coverage-summary.json
+            PostBase-project/.coverage/coverage-proposal.md
+            PostBase-project/.coverage/coverage-proposal.redactions.json
+            PostBase-project/.freebuff/collect-gates.md
+            PostBase-project/.freebuff/collect-gates.redactions.json
+          retention-days: 30
+      # A pull request is where the ratchet should tighten: the change that raised
+      # coverage is the one holding the context to raise the threshold with it.
+      # Fetch the base branch's uploaded summary — the artifact two steps up — so
+      # the proposal can say what *this* change moved, and let
+      # `.freebuff/coverage-propose.mjs` turn that delta into numbers.
+      - name: Download the base branch's coverage artifact
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --branch "${{ github.base_ref }}" --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId')
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "No successful '${{ github.base_ref }}' run has uploaded a coverage artifact yet."
+            exit 0
+          fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name coverage-report --dir baseline
+      # Advisory, not a gate: it exits 0 whether or not there is anything to
+      # propose. `earned` tells the comment step whether this change is what made
+      # a raise possible — slack that was already there is listed but not
+      # commented on.
+      - id: propose
+        name: Propose threshold raises
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          baseline=$(find baseline -name coverage-summary.json 2>/dev/null | head -n1 || true)
+          if [ -n "$baseline" ]; then
+            npm run coverage:propose -- --baseline "$baseline" --baseline-label "${{ github.base_ref }}"
+          else
+            npm run coverage:propose
+          fi
+      # One comment per pull request, updated in place: the marker in the
+      # proposal is what identifies the previous one. Skipped on forks, whose
+      # token cannot comment — they still get the job summary and the artifact.
+      #
+      # `.freebuff/pr-comment.mjs` does the posting, as it does for the collect-budget
+      # summary above and the collect-budget proposal below, so all three share one
+      # guard: `earned` is the proposer's claim about what it found, not proof that the
+      # markdown is on disk, and the poster announces a body that is missing, empty or
+      # blank on the run page rather than handing a path that is not there to `gh` under
+      # `continue-on-error`. The `--body` and `--marker` it is given here are held beside
+      # the proposer's own declarations of both in `src/test/collect-budget.test.ts`.
+      - name: Comment the proposal on the pull request
+        id: comment-coverage
+        if: >-
+          steps.propose.outputs.earned == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --body .coverage/coverage-proposal.md \
+            --marker '<!-- coverage-threshold-proposal -->' \
+            --label 'Coverage-proposal comment' \
+            --producer 'Propose threshold raises'
+      # The verdict on the two comment steps above, and the reason they can stay
+      # `continue-on-error: true`: a comment that could not be posted must not stop the
+      # drift check or the coverage-mutation check between them and this step, and the
+      # price of that is a comment step failing while the job stays green — which is what
+      # this step converts. `.freebuff/pr-comment.mjs` exits non-zero whenever the comment
+      # is not on the pull request, `steps.<id>.outcome` is what the step did rather than
+      # what `continue-on-error` let the job make of it, and `.freebuff/comment-gate.mjs`
+      # holds the judgment: `failure` and `cancelled` fail the job and are named on the run
+      # page, while `skipped` passes because a step that was never run was never owed a
+      # comment — a fork's pull request, or one whose proposal was not earned.
+      - name: Fail when a comment this run owed was not posted
+        if: always()
+        run: |
+          node .freebuff/comment-gate.mjs \
+            "Collect-budget summary comment=${{ steps.comment-summary.outcome }}" \
+            "Coverage-proposal comment=${{ steps.comment-coverage.outcome }}"
+
+  # The collect-budget ratchet, the sibling of the coverage proposal above: a
+  # pull request is where it should tighten, because the change that sped
+  # collection up is the one holding the context to tighten the gate with it.
+  # This runs the recorder in *propose* mode — it measures the same way but writes
+  # a proposal instead of the checked-in `.freebuff/collect-budget-baselines.mjs`
+  # — and comments the baseline and soft-threshold drops it would make. Advisory:
+  # it exits 0 whether or not there is anything to propose, so it never fails a
+  # build, and the diff it proposes is applied by a person.
+  #
+  # The same runs are also the only place a *loose* baseline fails. One run is one
+  # noisy sample of a wall-clock quantity, so a single reading of a stale-high
+  # baseline is a warning everywhere else — the `test` job annotates it and moves
+  # on. Here the suite runs three times, and the step below fails only when every
+  # run agreed the recorded number is looser than the tree needs. That is why the
+  # job is not confined to pull requests: the default branch needs the confirmed
+  # version of the same judgment, and the fix still rides the proposal comment.
+  collect-propose:
+    name: Collect-budget proposal
+    runs-on: ubuntu-latest
+    # Three full suite runs, with room for a slow runner on top of them.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      # Measuring collect time needs a real run — only the reporter can reach
+      # Vitest's `importDurations` — so this re-runs the suite rather than reading
+      # an artifact. It runs it three times: collect time is one noisy sample per
+      # run, so a proposed drop has to hold across all of them before it is posted
+      # and the reporter aggregates the runs by worst case. It writes
+      # `.freebuff/collect-budget-proposal.md` and an `earned` output for the comment
+      # step below — never `true` if any run left no sample.
+      - id: propose
+        name: Propose baseline and soft-threshold drops
+        continue-on-error: true
+        run: npm run collect:propose
+      # The gate half of the same session. The reporter left its run report after
+      # the last run — which recorded baselines held against the worst case every run
+      # measured — and this fails when the session was complete and they all agreed
+      # one is loose. It reads the report rather than re-measuring, and fails closed
+      # if the session never wrote one.
+      - name: Fail on a baseline every run agreed is loose
+        run: npm run collect:stale
+      # Kept even when nothing is proposed, so the artifact records that the check
+      # ran and any commit's proposal can be read back later. The redaction record, where
+      # the poster filed one, is kept with it for the same reason the coverage artifact
+      # keeps its own: it is what maps the posted comment back to the body here.
+      - name: Upload the collect-budget proposal
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-budget-proposal
+          path: |
+            PostBase-project/.freebuff/collect-budget-proposal.md
+            PostBase-project/.freebuff/collect-budget-proposal.redactions.json
+          retention-days: 30
+      # One comment per pull request, updated in place: the marker in the proposal
+      # is what identifies the previous one. Skipped on forks, whose read-only token
+      # cannot comment — they still get the job summary and the artifact.
+      #
+      # `.freebuff/pr-comment.mjs` does the posting, as it does for the two comment
+      # steps in the test job, so all three share one guard. `earned` is the launcher's
+      # claim about what the session confirmed, not proof that the markdown survived it
+      # — the proposal is deleted at the start of every run and rewritten only by a run
+      # that has something to say — and the poster announces a body that is missing,
+      # empty or blank on the run page rather than handing a path that is not there to
+      # `gh` under `continue-on-error`. The `--body` and `--marker` here are held beside
+      # the launcher's own declaration of each in `src/test/collect-budget.test.ts`.
+      - name: Comment the proposal on the pull request
+        id: comment-proposal
+        if: >-
+          always() &&
+          steps.propose.outputs.earned == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --body .freebuff/collect-budget-proposal.md \
+            --marker '<!-- collect-budget-proposal -->' \
+            --label 'Collect-budget proposal comment' \
+            --producer 'Propose baseline and soft-threshold drops'
+      # The verdict on the comment step above, for the same reason the `test` job has one:
+      # the step is `continue-on-error` so that a failed comment cannot take the artifact
+      # upload with it, and this is what stops the job passing when the comment never
+      # arrived. Its wording and its `--label` are that step's, so the run page carries one
+      # name for the loss rather than two.
+      - name: Fail when a comment this run owed was not posted
+        if: always()
+        run: |
+          node .freebuff/comment-gate.mjs \
+            "Collect-budget proposal comment=${{ steps.comment-proposal.outcome }}"
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [lint, test, build]
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      - run: npm run deploy:staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [lint, test, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      - run: npm run deploy:production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
