@@ -56,9 +56,17 @@ const samplesDir = join(freebuff, ".collect-budget-samples");
 const reportPath = join(freebuff, RUN_REPORT_FILE);
 
 // Resolve the installed Vitest CLI rather than shelling out to `npx`, so this
-// works from any directory and on any platform.
+// works from any directory and on any platform. The CLI is reached through the
+// subpath the package's `exports` map guarantees — resolving `vitest/vitest.mjs`
+// directly throws ERR_PACKAGE_PATH_NOT_EXPORTED, because the map does not name
+// it — and the file's own spelling comes from the package's `bin` entry rather
+// than a copy of it here.
 const require = createRequire(import.meta.url);
-const vitest = require.resolve("vitest/vitest.mjs");
+const vitestManifestPath = require.resolve("vitest/package.json");
+const vitestManifest = JSON.parse(readFileSync(vitestManifestPath, "utf8"));
+const vitestBin =
+  typeof vitestManifest.bin === "string" ? vitestManifest.bin : vitestManifest.bin.vitest;
+const vitest = join(dirname(vitestManifestPath), vitestBin);
 
 // Captured before the runs and blanked for them: one of the suite's own tests
 // spawns the coverage proposer, which inherits `$GITHUB_STEP_SUMMARY` and appends

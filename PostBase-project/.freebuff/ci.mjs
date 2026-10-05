@@ -334,6 +334,7 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { redactInput, redactInputs, redactText } from "./redact.mjs";
@@ -391,6 +392,31 @@ const here = (name) => fileURLToPath(new URL(name, import.meta.url));
  * the result without parsing the rendered log. The exit code is unchanged.
  */
 const JSON_OUTPUT = process.argv.includes("--json");
+
+/**
+ * Writes `text` to stdout synchronously — all of it, before returning.
+ *
+ * `process.stdout.write` queues through libuv, and `process.exit` does not wait
+ * for a queued pipe write: on POSIX anything the pipe will not take in one go
+ * (64KB by default) is dropped, which is how a runner reading a `--json` report
+ * through a pipe got a document cut mid-string. `fs.writeSync` is finished when
+ * it returns, on every platform, so a report followed by `process.exit` reaches
+ * its reader whole.
+ */
+function writeStdoutSync(text) {
+  const buffer = Buffer.from(text, "utf8");
+  let offset = 0;
+  while (offset < buffer.length) {
+    try {
+      offset += writeSync(1, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      // A full pipe retries, an interrupted write retries, and a reader that
+      // closed the far end has heard enough — none of them are worth crashing on.
+      if (error.code === "EPIPE") return;
+      if (error.code !== "EAGAIN" && error.code !== "EINTR") throw error;
+    }
+  }
+}
 
 /**
  * `--github-annotations` prints GitHub Actions workflow commands for the details
@@ -3058,7 +3084,7 @@ const skip = option("--skip")
  */
 function abort(message, extra = {}) {
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeStdoutSync(
       `${JSON.stringify({ gate: "fail", exitCode: 1, error: message, ...extra, stages: [], failed: [], skipped: [], annotations: [] }, null, 2)}\n`,
     );
   }
@@ -3791,7 +3817,7 @@ if (stagesAsked) {
     process.exit(0);
   }
   if (mode === "json") {
-    process.stdout.write(`${JSON.stringify({ stages: STAGE_NAMES, count: STAGE_NAMES.length }, null, 2)}\n`);
+    writeStdoutSync(`${JSON.stringify({ stages: STAGE_NAMES, count: STAGE_NAMES.length }, null, 2)}\n`);
     process.exit(0);
   }
   const findings = stageOrderFindings(stageOrderRoot, watchGlobs);
@@ -3812,7 +3838,7 @@ if (stagesAsked) {
   if (mode === "check") {
     const failed = findings.length > 0;
     if (JSON_OUTPUT) {
-      process.stdout.write(
+      writeStdoutSync(
         `${JSON.stringify(
           {
             stages: STAGE_NAMES,
@@ -3939,13 +3965,13 @@ if (process.argv.includes("--status")) {
       // The alarm's object is this report's spine; without it there is nothing to add the
       // coverage to, so its output goes out untouched.
     }
-    process.stdout.write(
+    writeStdoutSync(
       payload === null || coverage === null
         ? text
         : `${JSON.stringify({ ...payload, coverage, families, watch, exempt: KEY_EXEMPT_PINNED }, null, 2)}\n`,
     );
   } else {
-    process.stdout.write(text);
+    writeStdoutSync(text);
     if (coverage !== null) {
       const width = Math.max(0, ...coverage.map((row) => coverageLabel(row).length));
       console.log(
@@ -4230,7 +4256,7 @@ if (process.argv.includes("--dry-run")) {
   const names = wouldRun.map((stage) => stage.name);
   const skippedNames = wouldSkip.map((stage) => stage.name);
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeStdoutSync(
       `${JSON.stringify({ dryRun: true, gate: "pass", exitCode: 0, stages: names, failed: [], skipped: [], annotations: [], unchanged: skippedNames, excluded, keepGoing, maxFailures }, null, 2)}\n`,
     );
   } else {
@@ -4582,7 +4608,7 @@ if (process.argv.includes("--explain-cache")) {
   });
 
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeStdoutSync(
       `${JSON.stringify(
         {
           explainCache: true,
@@ -5237,7 +5263,7 @@ if (JSON_OUTPUT) {
   // The verdict is progress, not the report: under `--json` it belongs on
   // stderr with the rest, where it still closes the CI log.
   progress(finalVerdict());
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  writeStdoutSync(`${JSON.stringify(payload, null, 2)}\n`);
   process.exit(exitCode);
 }
 

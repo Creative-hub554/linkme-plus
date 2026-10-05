@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 // The alarm's watch rules, read as the alarm itself reads them. The drift stage's `inputs`
@@ -24,6 +24,17 @@ import { makeScratchDir, removeScratchDir } from "./scratch";
 import { importClosure } from "../../.freebuff/import-closure.mjs";
 
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+/**
+ * How many `.env*` files this working tree has. The preflight stage's inputs are
+ * globbed against the working tree, so anything counted from them — an input
+ * count, a "file(s) behind the key" line — depends on the machine: a clean
+ * checkout (a hosted runner) has only the committed `.env.example`, this one
+ * also has a developer's `.env.local`. Counts are asserted against what is
+ * actually on disk rather than pinned to one machine's secret files.
+ */
+const envFileCount = () =>
+  readdirSync(projectRoot).filter((name) => name.startsWith(".env")).length;
 const ciRunner = path.join(projectRoot, ".freebuff", "ci.mjs");
 const preflight = path.join(projectRoot, ".freebuff", "preview-preflight.mjs");
 const sweep = path.join(projectRoot, ".freebuff", "mutation-guards.mjs");
@@ -307,10 +318,27 @@ function runLintStage(stubPath: string, extraArgs: string[] = []) {
 }
 
 /**
- * Runs the real CI runner with arbitrary args and stage-script overrides. `CI`
- * is cleared by default so a run keeps the *local*, fail-fast behavior even when
- * the suite itself is executed inside a CI environment; a test that wants the CI
- * default passes `CI: "true"`.
+ * Every CI marker `ci.mjs`'s `inCi()` reads (its `CI_MARKERS` list). All of them
+ * are cleared for spawned runs, not just `CI`: a hosted runner sets
+ * `GITHUB_ACTIONS` alongside `CI`, and one surviving marker is enough to flip
+ * the spawned run's default to keep-going — which is exactly the local-vs-CI
+ * distinction these cases exist to pin.
+ */
+const CI_MARKERS: Record<string, string> = {
+  CI: "",
+  CONTINUOUS_INTEGRATION: "",
+  GITHUB_ACTIONS: "",
+  GITLAB_CI: "",
+  CIRCLECI: "",
+  TRAVIS: "",
+  BUILDKITE: "",
+};
+
+/**
+ * Runs the real CI runner with arbitrary args and stage-script overrides. Every
+ * CI marker is cleared by default (see `CI_MARKERS`) so a run keeps the *local*,
+ * fail-fast behavior even when the suite itself is executed inside a CI
+ * environment; a test that wants the CI default passes `CI: "true"`.
  */
 function runCi(args: string[], env: Record<string, string> = {}) {
   return spawnSync(process.execPath, [ciRunner, ...args], {
@@ -318,7 +346,7 @@ function runCi(args: string[], env: Record<string, string> = {}) {
     encoding: "utf8",
     env: {
       ...process.env,
-      CI: "",
+      ...CI_MARKERS,
       CI_CACHE_FILE: freshCachePath(),
       // A run's test-stage attempt clears the stamp path its stage names, and a
       // stubbed suite never writes it — so every spawned run points the seam at
@@ -3486,8 +3514,11 @@ describe("the CI runner's read of the real preflight payload", () => {
         : `gate "fail", ${failed.length} check(s) failed`;
     expect(result.stdout).toContain(expected);
 
-    // And every failed check reaches the log by name and with its fix.
-    for (const check of failed) {
+    // And every failed check reaches the log by name and with its fix — except a check
+    // whose *name* is one the redactor hides: a clean checkout has no `.env.local`, so
+    // that check fails on a hosted runner, and its name never reaches the log by design
+    // (the cache-explanation cases pin the redaction itself).
+    for (const check of failed.filter((check) => !check.name.startsWith(".env"))) {
       expect(result.stdout).toContain(`${check.name}  ${check.detail}`);
       expect(result.stdout).toContain(`fix: ${check.fix}`);
     }
@@ -4902,13 +4933,14 @@ describe("the CI runner's cache explanation", () => {
     // The names a `.gitignore` keeps out of the repo never reach the log…
     expect(result.stdout).not.toContain(".env.local");
     expect(result.stdout).not.toContain(".env.example");
-    // …but the `<redacted>` marker and the honest file count still tell the truth. Eight, not
-    // seven: the stage names its own script as machinery, so that is one of the files behind its
-    // key along with the six it reads about the environment and the worker config its
-    // `wrangler.*` entry names — an entry that resolved to nothing at all while it read
-    // `wrangler.toml`, a spelling this checkout has never had.
+    // …but the `<redacted>` marker and the honest file count still tell the truth: the
+    // stage's own script as machinery, the six files it reads about the environment and
+    // the worker config its `wrangler.*` entry names — an entry that resolved to nothing
+    // at all while it read `wrangler.toml`, a spelling this checkout has never had — plus
+    // one entry per `.env*` file on disk, read from the tree so a clean checkout (which
+    // lacks the developer's `.env.local`) asserts its own honest count.
     expect(result.stdout).toContain("<redacted>");
-    expect(result.stdout).toContain("8 file(s) behind the key");
+    expect(result.stdout).toContain(`${6 + envFileCount()} file(s) behind the key`);
     // The header says how much of every key the per-stage lists cannot show.
     expect(result.stdout).toContain("file(s) behind every key");
     // A non-secret input is named exactly as it always was, with the glob that swept it up
@@ -5027,9 +5059,10 @@ describe("the CI runner's cache explanation", () => {
     expect(names.some((name: string) => name.startsWith(".env"))).toBe(false);
     expect(names).toContain("<redacted>");
     // …but the count is the honest one — the six the check reads about the environment, the
-    // script it runs, and the worker config its `wrangler.*` entry names — and the rest of the
-    // names are intact.
-    expect(stage.inputCount).toBe(8);
+    // script it runs, and the worker config its `wrangler.*` entry names — plus one entry per
+    // `.env*` file on disk, read here because a clean checkout has one fewer — and the rest of
+    // the names are intact.
+    expect(stage.inputCount).toBe(6 + envFileCount());
     expect(names).toContain("next.config.mjs");
     expect(names).toContain("package.json");
     expect(names).toContain(".freebuff/preview-preflight.mjs");

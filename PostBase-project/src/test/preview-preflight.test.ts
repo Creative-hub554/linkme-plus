@@ -146,11 +146,17 @@ async function startChildServer(namesPath = ""): Promise<{ pid: number; port: nu
  * so the cases that assert a *verdict* from the real read are skipped there instead
  * of failed — the seam cases above cover the reasoning on every platform.
  */
+/**
+ * Whether the preflight can read the process table here *at all*. The script's
+ * lookup is a Windows read by design — `listenerOn` and `processCommandLine`
+ * both answer `unknown` for every other platform (`no process lookup for …`),
+ * so the only real read these two cases can pin is Windows' own. They spawn the
+ * genuine lookup, not the seam; on any other OS they would pin nothing but an
+ * `info` that says "could not ask" — the shared verdict logic is covered by the
+ * seam-driven cases above, which run everywhere.
+ */
 function processTableReadable(): boolean {
-  if (process.platform === "win32") return true;
-  return ["lsof", "ss"].some(
-    (tool) => spawnSync(tool, ["-h"], { stdio: "ignore" }).error === undefined,
-  );
+  return process.platform === "win32";
 }
 
 const cleanup: string[] = [];

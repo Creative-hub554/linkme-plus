@@ -89,9 +89,11 @@ function renderReport(payload: unknown, extraArgs: string[] = []) {
 
 /**
  * Runs the real CI runner against the stubs above, with a lock path the caller names.
- * `CI` is cleared so the run keeps the *local*, fail-fast behavior even inside a CI
- * environment, and the cache goes to a throwaway so no test reads — or writes — the
- * developer's own `.ci/cache.json`.
+ * Every CI marker `ci.mjs` reads is cleared — not just `CI`, because a hosted runner
+ * also sets `GITHUB_ACTIONS`, and one surviving marker would flip the spawned run to
+ * keep-going instead of the local, fail-fast behavior these cases pin — and the cache
+ * goes to a throwaway so no test reads — or writes — the developer's own
+ * `.ci/cache.json`.
  */
 function runCi(args: string[], env: Record<string, string> = {}) {
   cacheSeq += 1;
@@ -101,6 +103,12 @@ function runCi(args: string[], env: Record<string, string> = {}) {
     env: {
       ...process.env,
       CI: "",
+      CONTINUOUS_INTEGRATION: "",
+      GITHUB_ACTIONS: "",
+      GITLAB_CI: "",
+      CIRCLECI: "",
+      TRAVIS: "",
+      BUILDKITE: "",
       CI_CACHE_FILE: path.join(stubDir, `cache-${cacheSeq}.json`),
       ...env,
     },

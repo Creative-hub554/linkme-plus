@@ -41,6 +41,7 @@
  * because losing a measurement to fix a hash would be the wrong trade.
  */
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,9 +51,17 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The file the recording run rewrites, as the gate manifest keys it.
 const baselineKey = rel(join(root, ".freebuff", "collect-budget-baselines.mjs"));
 // Resolve the installed Vitest CLI rather than shelling out to `npx`, so this
-// works from any directory and on any platform.
+// works from any directory and on any platform. The CLI is reached through the
+// subpath the package's `exports` map guarantees — resolving `vitest/vitest.mjs`
+// directly throws ERR_PACKAGE_PATH_NOT_EXPORTED, because the map does not name
+// it — and the file's own spelling comes from the package's `bin` entry rather
+// than a copy of it here.
 const require = createRequire(import.meta.url);
-const vitest = require.resolve("vitest/vitest.mjs");
+const vitestManifestPath = require.resolve("vitest/package.json");
+const vitestManifest = JSON.parse(readFileSync(vitestManifestPath, "utf8"));
+const vitestBin =
+  typeof vitestManifest.bin === "string" ? vitestManifest.bin : vitestManifest.bin.vitest;
+const vitest = join(dirname(vitestManifestPath), vitestBin);
 
 const run = spawnSync(process.execPath, [vitest, "run"], {
   cwd: root,

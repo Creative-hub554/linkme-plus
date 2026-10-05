@@ -1761,8 +1761,12 @@ describe("the sweep scaffold", { timeout: 60_000 }, () => {
     expect(report.gate).toBe("pass");
     expect(report.name).toBe("mutation-fifthcase");
     expect(report.stages).toBe(12);
-    expect(report.edited).toEqual(
-      expect.arrayContaining([".freebuff\\mutation-vocabulary.mjs", ".freebuff\\gate-drift.mjs", ".freebuff\\ci.mjs"]),
+    // The scaffold reports each edited path in the platform's own spelling, so
+    // normalize to forward slashes before comparing — the same normalization the
+    // closure walk above does — and the expectation reads identically on every OS.
+    const edited = (report.edited ?? []).map((file) => file.split("\\").join("/"));
+    expect(edited).toEqual(
+      expect.arrayContaining([".freebuff/mutation-vocabulary.mjs", ".freebuff/gate-drift.mjs", ".freebuff/ci.mjs"]),
     );
     // The generated sweep answers both of its modes out of the tree it was written into.
     const sweep = spawnSync(process.execPath, [path.join(root, ".freebuff", "mutation-fifthcase.mjs"), "--json"], {
