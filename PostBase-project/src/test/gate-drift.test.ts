@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1043,6 +1044,68 @@ describe("the targeted re-pin", () => {
  * `GATE_CONTENT_DIR` is the seam: every run in this file stashes into a temp directory, so a
  * fixture cannot write the project's own, and a case can point a run at its own.
  */
+/**
+ * Which end of a line a byte follows, and why the pin cannot be made of it.
+ *
+ * This was the one drift the alarm could report that was not there, and it was silent in the
+ * direction that matters. A hash over raw bytes is not reproducible across two checkouts of one
+ * blob: `core.autocrlf=true` gives this working tree CRLF and gives the `ubuntu-latest` runner
+ * the drift stage actually runs on LF, and git records LF either way. So a pin taken here was a
+ * hash the runner could not produce — the drift stage failed in CI on a file nobody had changed,
+ * while every local run stayed green, because the checkout kept restoring the very line endings
+ * the pin had been taken from. Nothing about the code could tell the two apart, and the two
+ * copies of `hashFile`/`hashBytes` were the shape of it: one reading of "a file's hash", written
+ * twice, so a change to one of them would have left the pin and the stash disagreeing about the
+ * same file.
+ *
+ * A workflow edit is where it surfaced, and it is worth saying why that file: it was the one
+ * file in the pin a CRLF checkout had rewritten, so it was the only one whose re-pin could come
+ * out unreproducible. Every other pinned file was already LF and hashed the same either way.
+ */
+describe("the pin's line endings", () => {
+  /** One pinned fixture, written with the line endings the case asks for. */
+  function pinned(eol: string): { manifest: string; script: string } {
+    const dir = caseDir();
+    const script = path.join(dir, "coverage-alpha.mjs");
+    const manifest = path.join(dir, "gate-hashes.mjs");
+    const lines = ["export const alpha = 1;", "export const beta = 2;", ""];
+    writeFileSync(script, lines.join(eol));
+    writeFileSync(
+      manifest,
+      renderManifest({
+        algorithm: "sha1",
+        watches: fixtureWatches(dir),
+        files: { [keyOf(script)]: hashFile(script) },
+      }),
+    );
+    return { manifest, script };
+  }
+
+  it("reads the LF bytes a runner checks out as the content a CRLF checkout pinned", () => {
+    const { manifest, script } = pinned("\r\n");
+    expect(check(manifest).status).toBe(0);
+
+    // The same commit, checked out on ubuntu-latest: git's blob is LF, so the runner's
+    // working tree is. This is the run that used to report CHANGED on an untouched file.
+    writeFileSync(script, ["export const alpha = 1;", "export const beta = 2;", ""].join("\n"));
+    expect(check(manifest).status).toBe(0);
+
+    // And the fold is narrow: content is still what the pin is made of, so a real edit on
+    // either side of it is still a drift rather than something the folding absorbed.
+    writeFileSync(script, ["export const alpha = 1;", "export const beta = 3;", ""].join("\r\n"));
+    expect(check(manifest).status).toBe(1);
+  });
+
+  it("leaves a file that has no CRLF hashing as its own bytes", () => {
+    // The other forty-nine pins were recorded from an LF tree, so folding has to be a no-op
+    // there or this would have re-pinned the whole gate surface to accommodate one file.
+    const dir = caseDir();
+    const script = path.join(dir, "coverage-alpha.mjs");
+    writeFileSync(script, "export const alpha = 1;\n");
+    expect(hashFile(script)).toBe(createHash("sha1").update(readFileSync(script)).digest("hex"));
+  });
+});
+
 describe("reading a drift", () => {
   it("stashes the text a passing check matched, and diffs against it when the file moves", () => {
     const { manifest, script } = fixture();

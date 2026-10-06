@@ -2,7 +2,8 @@
 # copy is what actually runs. The gate-pinned canonical stays at
 # PostBase-project/.github/workflows/ci.yml (drift checks its hash); keep the two
 # in sync. Mechanical deltas from the canonical: defaults.run.working-directory,
-# cache-dependency-path, artifact path prefixes, push/PR branch main→master.
+# cache-dependency-path, artifact path prefixes, push/PR branch main→master, and the
+# two `CI: ""` step envs that keep Vitest off its Actions-detection path.
 name: CI/CD
 
 on:
@@ -10,6 +11,10 @@ on:
     branches: [master, staging]
   pull_request:
     branches: [master]
+  # Manual runs — re-ship production or re-run every gate without a merge. The
+  # run dialog's branch picker sets `github.ref`, so the deploy job's own ref
+  # guard below decides what this run is allowed to ship.
+  workflow_dispatch:
 
 # A superseded PR run is wasted runner time and a second, stale result on the
 # same commit; cancel it. Pushes are left alone so a merge's own run finishes
@@ -363,3 +368,49 @@ jobs:
           cache-dependency-path: PostBase-project/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  # Ship the merge, not the pull request. This is the job that puts the built
+  # worker on Cloudflare, and it waits for this run's own lint, test and build
+  # (`needs`) rather than trusting the checks a pull request ran: the exact
+  # commit that was verified is the exact commit that deploys. The jobs this
+  # replaces were removed for keying themselves to refs this repository never
+  # pushes — a permanent skip in every run — so this one is keyed to the ref
+  # that does move (master), and a pull request reports it as skipped because
+  # there is nothing to ship before a merge.
+  #
+  # A manual run ships through this same chain: on `workflow_dispatch` the jobs
+  # above still run, and `github.ref` is still the branch picked in the run
+  # dialog — so picking the deploy branch re-ships it, verified, while any
+  # other branch leaves this job skipped exactly as a pull request does.
+  #
+  # `npm run deploy` is `npm run build && wrangler deploy`: a job gets its own
+  # runner, so the build is redone here rather than reused from the build job
+  # above. `wrangler.jsonc` carries the production configuration directly — it
+  # declares no `env` blocks — so the default deploy is the production deploy,
+  # custom domains and bindings included.
+  #
+  # CLOUDFLARE_API_TOKEN comes from the repository's secrets, and the
+  # `production` environment gates the job's own deployment. Until that secret
+  # exists this job fails loudly rather than skipping: a merge that did not
+  # ship is a red run, which is the signal the inert jobs could never give.
+  deploy-production:
+    name: Deploy to Production
+    needs: [lint, test, build]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    # The job holds a third-party credential and ships code; its GitHub token
+    # needs nothing beyond reading the checkout it is about to deploy.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      - run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

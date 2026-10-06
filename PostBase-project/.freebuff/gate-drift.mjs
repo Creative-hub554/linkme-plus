@@ -249,6 +249,9 @@ export const MANIFEST_FILE = ".freebuff/gate-hashes.mjs";
 /** The digest a pinned file is recorded under. */
 export const DEFAULT_ALGORITHM = "sha1";
 
+/** The pair of bytes a checkout policy rewrites, and the only ones `hashBytes` folds. */
+const CRLF = Buffer.from("\r\n");
+
 /**
  * Which files count as gate machinery — the one place the watch rules are written.
  *
@@ -1041,9 +1044,9 @@ export function rel(path) {
   return relative(ROOT, path ?? "").split("\\").join("/");
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/** One file's content hash — `hashBytes`, given the file. One reading, shared with the stash. */
 export function hashFile(path, algorithm = DEFAULT_ALGORITHM) {
-  return createHash(algorithm).update(readFileSync(path)).digest("hex");
+  return hashBytes(readFileSync(path), algorithm);
 }
 
 /**
@@ -1267,9 +1270,32 @@ function readContentIndex(dir) {
   }
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/**
+ * One file's content hash, over the raw bytes so encoding cannot change the pin — and over
+ * CRLF folded to LF, because the line endings a file arrives with are not the file's content.
+ *
+ * The bytes are read raw for the first half of that: a BOM, or a file written in an encoding
+ * this reads as mojibake, is a real change to a file's content and has to move the pin. The
+ * one thing about a byte that is *not* the file's content is which end of a line it follows,
+ * because that is chosen by the checkout rather than written by the author. With
+ * `core.autocrlf=true` this working tree is CRLF and the same blob is LF on the
+ * `ubuntu-latest` runner the drift stage actually runs on, and git records LF either way — so
+ * a hash over raw bytes is not reproducible across the two. Pinning from a CRLF checkout then
+ * gives a hash the runner cannot reproduce, and the drift fails in CI on a file nobody changed
+ * while every local run stays green, because the checkout keeps restoring the very line endings
+ * the pin was taken from. That is the one way this alarm was able to report drift that was not
+ * there, and it is silent in the direction that matters: green locally, red on the runner.
+ *
+ * Folding is the other direction of the same trade, and it is the one the pin's own comment
+ * already asked for — it cannot catch an edit that only changes line endings, which is not an
+ * edit any verdict in this repository is made of. A file with no CRLF is hashed as the bytes it
+ * is, so this changes no hash that was already recorded from an LF tree.
+ */
 function hashBytes(bytes, algorithm) {
-  return createHash(algorithm).update(bytes).digest("hex");
+  const folded = bytes.includes(CRLF)
+    ? Buffer.from(bytes.toString("latin1").replace(/\r\n/g, "\n"), "latin1")
+    : bytes;
+  return createHash(algorithm).update(folded).digest("hex");
 }
 
 /**
