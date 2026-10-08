@@ -11,12 +11,16 @@ import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fe
  * row exactly as a grid card does, and the heart it wears is the same write
  * the grid's hearts make. What this page adds is the listening half: when the
  * server confirms an un-save, the row leaves the shelf — on the server's word,
- * not on the press. And because the shelf can be deeper than one page, the
- * read's `hasMore` decides the Load-more control: it names what pressing it
- * does, asks for the next page, appends without duplicating a row, hides once
- * the read says the shelf is exhausted, and sits disabled while a page is in
- * flight.
+ * not on the press — and the confirmation is written into the row the cards
+ * are painted from, so a mounted card wears the answer the moment it lands
+ * instead of waiting on a refetch to discover it. And because the shelf can
+ * be deeper than one page, the read's `hasMore` decides the Load-more
+ * control: it names what pressing it does, asks for the next page, appends
+ * without duplicating a row, hides once the read says the shelf is exhausted,
+ * and sits disabled while a page is in flight.
  */
+const SAVED_PHOTO = "https://cdn.example.com/seed/listings/listing-01.jpg";
+
 const savedListing = {
   id: "77777777-7777-4777-8777-777777777777",
   title: "Vintage camera",
@@ -25,6 +29,7 @@ const savedListing = {
   condition: "Good",
   location: "Singapore",
   categoryName: "Electronics",
+  imageUrl: SAVED_PHOTO,
   isSaved: true,
 };
 
@@ -32,6 +37,7 @@ const secondListing = {
   ...savedListing,
   id: "55555555-5555-4555-8555-555555555555",
   title: "Desk lamp",
+  imageUrl: null,
 };
 
 const PAGINATION = { total: 2, page: 1, limit: 20, totalPages: 1, hasMore: false };
@@ -83,6 +89,19 @@ describe("the saved listings page", () => {
     expect(ui.container.querySelector('button[aria-label="Save listing"]')).toBeNull();
   });
 
+  test("shows the photo the shelf read resolved, and names the placeholder when there is none", async () => {
+    const { ui } = await mountSaved();
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Vintage camera") ?? false,
+      { description: "the saved rows" },
+    );
+    // The shelf reads the same `imageUrl` the grid does, so a listing does not
+    // lose its picture on the way from one shelf to the other.
+    expect(ui.container.querySelector("img[alt='Vintage camera']")?.getAttribute("src")).toBe(
+      SAVED_PHOTO,
+    );
+  });
+
   test("a confirmed un-save removes the row; the write rides the same DELETE the grid's hearts make", async () => {
     const { ui, requests } = await mountSaved({
       "/api/marketplace/saved": (request) =>
@@ -106,6 +125,71 @@ describe("the saved listings page", () => {
       () => !ui.container.textContent?.includes("Vintage camera"),
       { description: "the row to leave the shelf" },
     );
+  });
+
+  test("a confirmed un-save reaches the mounted heart through the rows, not only the shelf", async () => {
+    // The stale-heart shape, written down: the shelf's rows are the one state
+    // a mounted card reads its flag from, so a parent that filtered its list
+    // on a confirmation was the only half that reached the heart. With the
+    // row itself rewritten (`isSaved: false`) before it is dropped, the heart
+    // has been told twice over — once by the parent's repaint, once by the
+    // card's own reconciliation — and the row the shelf briefly still holds
+    // can never come back reading saved.
+    const { ui, requests } = await mountSaved({
+      "/api/marketplace/saved": (request) =>
+        request.method === "DELETE" ? { saved: false } : shelfResponse([savedListing], false),
+    });
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Vintage camera") ?? false,
+      { description: "the saved rows" },
+    );
+
+    const heart = ui.byName("Remove from saved");
+    await ui.click(heart);
+
+    await ui.waitFor(
+      () => requests.calls.some((call) => call.method === "DELETE"),
+      { description: "the un-save request" },
+    );
+    // The row leaves the shelf on the server's word — unchanged behaviour.
+    await ui.waitFor(
+      () => !ui.container.textContent?.includes("Vintage camera"),
+      { description: "the row to leave the shelf" },
+    );
+    // And nothing is left behind: neither row nor heart anywhere on the shelf.
+    expect(ui.container.querySelector('button[aria-label="Remove from saved"]')).toBeNull();
+    expect(ui.container.querySelector('button[aria-label="Save listing"]')).toBeNull();
+  });
+
+  test("a save's `{ saved: true }` answer re-lights the row through the rows, not the press", async () => {
+    // The exact shape that once stranded a heart: a row that arrives reading
+    // unsaved (a stale shelf read) is saved by a press, and the confirmation
+    // — `{ saved: true }` — used to live only in the card's own state. The
+    // row is rewritten in the same commit now, so the repainted rows answer
+    // the same truth the card holds: the heart reads lit because the row says
+    // so, not because the press painted it.
+    const unlitRow = { ...savedListing, isSaved: false };
+    const { ui, requests } = await mountSaved({
+      "/api/marketplace/saved": (request) =>
+        request.method === "POST" ? { saved: true } : shelfResponse([unlitRow], false),
+    });
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Vintage camera") ?? false,
+      { description: "the saved rows" },
+    );
+    // The row the shelf read answered, faithfully rendered unsaved.
+    expect(ui.container.querySelector('button[aria-label="Save listing"]')).toBeTruthy();
+
+    await ui.click(ui.byName("Save listing"));
+    await ui.waitFor(() => requests.calls.some((call) => call.method === "POST"), {
+      description: "the save request",
+    });
+
+    // The row stayed on the shelf, and the heart it wears now reads lit —
+    // carried by the repainted row, not by a state the press painted.
+    expect(ui.container.textContent).toContain("Vintage camera");
+    expect(ui.container.querySelector('button[aria-label="Remove from saved"]')).toBeTruthy();
+    expect(ui.container.querySelector('button[aria-label="Save listing"]')).toBeNull();
   });
 
   test("an answer with no rows renders the empty state, not a broken grid", async () => {

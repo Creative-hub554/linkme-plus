@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { blocks, conversations, conversationMembers, messages, users, profiles } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, count, gt } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
 import { blockedEitherWay } from "@/lib/db/blocks";
 
@@ -132,15 +132,41 @@ export async function GET(request: Request) {
           .orderBy(desc(messages.createdAt))
           .limit(1);
 
+        // The unread count, computed where the data lives: messages sent by
+        // somebody else since this member last opened the thread — and every
+        // one of them when the thread has never been read. Sending does not
+        // move `lastReadAt` (only opening the thread does), so the sender
+        // filter is what keeps a member's own words from counting as their
+        // own unread.
+        const [unread] = await db
+          .select({ unread: count() })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, conv.id),
+              sql`${messages.senderId} != ${session.user.id}`,
+              conv.lastReadAt ? gt(messages.createdAt, conv.lastReadAt) : undefined,
+            ),
+          );
+
         return {
           ...conv,
           otherMember: other,
           lastMessage,
+          unreadCount: unread?.unread ?? 0,
         };
       })
     );
 
-    return successResponse({ conversations: conversationsWithDetails });
+    // The badge's number, answered once for the whole list the way the
+    // notifications route answers its own: the sum of the per-conversation
+    // counts above, so the total and the rows can never disagree.
+    const unreadCount = conversationsWithDetails.reduce(
+      (total, conversation) => total + conversation.unreadCount,
+      0,
+    );
+
+    return successResponse({ conversations: conversationsWithDetails, unreadCount });
   } catch (err) {
     console.error("Get conversations error:", err);
     return errorResponse("Failed to fetch conversations", 500);

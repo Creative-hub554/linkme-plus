@@ -249,6 +249,9 @@ export const MANIFEST_FILE = ".freebuff/gate-hashes.mjs";
 /** The digest a pinned file is recorded under. */
 export const DEFAULT_ALGORITHM = "sha1";
 
+/** The pair of bytes a checkout policy rewrites, and the only ones `hashBytes` folds. */
+const CRLF = Buffer.from("\r\n");
+
 /**
  * Which files count as gate machinery — the one place the watch rules are written.
  *
@@ -264,7 +267,11 @@ export const DEFAULT_ALGORITHM = "sha1";
  * resolved against the project root and scanned one level deep; it may name a nested
  * directory (the workflows live in one), and `.github/workflows` is one level deep because
  * that is all GitHub Actions reads — a workflow in a subdirectory there would not run, so
- * it is not a gate to pin.
+ * it is not a gate to pin. It may also name a directory *above* the project root, which is
+ * what the repository's own `.github/workflows` is: a rule's `dir` is a path, and `../` is
+ * a path. The key such a file is recorded under is likewise `../`-prefixed, which is what
+ * keeps the pin honest about where the file is rather than flattening it into a path that
+ * looks like it is inside the project.
  */
 export const DEFAULT_WATCHES = [
   // The coverage gates, and the algebra, thresholds and floor rules they share.
@@ -321,6 +328,16 @@ export const DEFAULT_WATCHES = [
   // conditional, a `continue-on-error: true` added, a `--skip=` widened — the gate is
   // cancelled from above, and the stages below never know they did not run.
   { dir: ".github/workflows", pattern: "^.*\\.ya?ml$" },
+  // The same directory at the repository root, which is the copy GitHub reads: a workflow
+  // runs only from `.github/workflows` at the root of the repository, so the ones in this
+  // directory are a mirror of those and the mirror is what a pull request's weakening
+  // actually ships. Pinning only the copy in the project left the file the runner reads
+  // outside the pin's reach, so a step deleted there passed every gate below it. The two
+  // rules are separate because the two directories are separate facts — the mirror is
+  // deliberately not a byte-for-byte copy (its branch names, working directory and artifact
+  // paths differ, and its own header says how), and a rule that merged them would pin one
+  // file under the other's name.
+  { dir: "../.github/workflows", pattern: "^.*\\.ya?ml$" },
 ];
 
 /**
@@ -1041,9 +1058,9 @@ export function rel(path) {
   return relative(ROOT, path ?? "").split("\\").join("/");
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/** One file's content hash — `hashBytes`, given the file. One reading, shared with the stash. */
 export function hashFile(path, algorithm = DEFAULT_ALGORITHM) {
-  return createHash(algorithm).update(readFileSync(path)).digest("hex");
+  return hashBytes(readFileSync(path), algorithm);
 }
 
 /**
@@ -1267,9 +1284,32 @@ function readContentIndex(dir) {
   }
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/**
+ * One file's content hash, over the raw bytes so encoding cannot change the pin — and over
+ * CRLF folded to LF, because the line endings a file arrives with are not the file's content.
+ *
+ * The bytes are read raw for the first half of that: a BOM, or a file written in an encoding
+ * this reads as mojibake, is a real change to a file's content and has to move the pin. The
+ * one thing about a byte that is *not* the file's content is which end of a line it follows,
+ * because that is chosen by the checkout rather than written by the author. With
+ * `core.autocrlf=true` this working tree is CRLF and the same blob is LF on the
+ * `ubuntu-latest` runner the drift stage actually runs on, and git records LF either way — so
+ * a hash over raw bytes is not reproducible across the two. Pinning from a CRLF checkout then
+ * gives a hash the runner cannot reproduce, and the drift fails in CI on a file nobody changed
+ * while every local run stays green, because the checkout keeps restoring the very line endings
+ * the pin was taken from. That is the one way this alarm was able to report drift that was not
+ * there, and it is silent in the direction that matters: green locally, red on the runner.
+ *
+ * Folding is the other direction of the same trade, and it is the one the pin's own comment
+ * already asked for — it cannot catch an edit that only changes line endings, which is not an
+ * edit any verdict in this repository is made of. A file with no CRLF is hashed as the bytes it
+ * is, so this changes no hash that was already recorded from an LF tree.
+ */
 function hashBytes(bytes, algorithm) {
-  return createHash(algorithm).update(bytes).digest("hex");
+  const folded = bytes.includes(CRLF)
+    ? Buffer.from(bytes.toString("latin1").replace(/\r\n/g, "\n"), "latin1")
+    : bytes;
+  return createHash(algorithm).update(folded).digest("hex");
 }
 
 /**

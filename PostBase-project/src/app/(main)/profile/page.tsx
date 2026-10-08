@@ -61,6 +61,12 @@ interface ProfilePost {
     avatarUrl?: string | null;
   };
   media?: ProfileMediaItem[];
+  /**
+   * The viewer's own reaction, once a write confirms. The profile read answers
+   * no viewer state, so this starts unset and is written by the confirmed-write
+   * seam — the row is what a mounted card re-derives its heart from.
+   */
+  viewerLiked?: boolean;
 }
 
 
@@ -895,7 +901,7 @@ function ProfileContent() {
                 <>
                   {profilePosts.map((post) => {
                     const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));
-                    return <PostCard key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
+                    return <PostCard key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} liked={post.viewerLiked} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onReactionSettled={(type) => setProfilePosts((current) => current.map((row) => (row.id === post.id ? { ...row, viewerLiked: type === "like" } : row)))} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
                   })}
 
                   {(postsHasMore || postsMoreError) && (

@@ -1,5 +1,6 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { withDbRetry } from "./index";
+import { db, withDbRetry } from "./index";
 
 /**
  * `withDbRetry` wraps almost every route's database work, and the one decision
@@ -77,5 +78,34 @@ describe("withDbRetry", () => {
       throw "a bare string";
     });
     await expect(withDbRetry(operation)).rejects.toBe("a bare string");
+  });
+});
+
+/**
+ * The `db` proxy binds every function it hands out, so a drizzle method pulled off it
+ * without a receiver still reaches its own instance. `$client` is the exception, and the
+ * one that mattered: it is drizzle's escape hatch to the driver, postgres.js's client is
+ * itself a function whose own properties (`end`, `unsafe`) *are* how it is used, and
+ * `bind` does not carry those properties across. Bound, `db.$client.end(...)` threw
+ * `undefined is not a function` — a script failing after all of its work had landed, which
+ * is how `npm run db:seed` came to exit 1 on a seed that had succeeded. So the contract is
+ * two-sided and both halves are asserted here: the driver's client arrives intact, and a
+ * method still arrives bound.
+ */
+describe("the db proxy", () => {
+  it("hands out the driver's client with its own methods intact", () => {
+    expect(typeof db.$client).toBe("function");
+    // The properties `bind` would have stripped — `end` is the one a script closes its
+    // pool with, and the one this test exists for.
+    expect(typeof db.$client.end).toBe("function");
+    expect(typeof db.$client.unsafe).toBe("function");
+  });
+
+  it("still binds a drizzle method to the instance behind the proxy", () => {
+    // Pulled off with no receiver: bound, so the builder is built on the real instance and
+    // a lost `this` would throw here instead of returning one.
+    const { select } = db;
+    const builder = select({ one: sql`1` });
+    expect(typeof builder.from).toBe("function");
   });
 });

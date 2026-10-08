@@ -108,6 +108,14 @@ interface FeedPost {
   /** Authoritative engagement totals, patched by live activity. */
   commentCount?: number | null;
   reactionCount?: number | null;
+  /**
+   * The viewer's own reaction, once a write confirms. The feed read does not
+   * answer per-row viewer state, so this starts unset and is written by the
+   * confirmed-write seam (`onReactionSettled`): the row is what a repainted
+   * card re-derives its colour from, which is why a confirmed write lands
+   * here and not only in the card's own state.
+   */
+  viewerLiked?: boolean;
   author: {
     /** Present on posts from the API; used to recognise the reader's own posts. */
     id?: string | null;
@@ -683,7 +691,18 @@ function FeedContent() {
     [revealPosts],
   );
 
-  /** Patches what a change touched, leaving the rest of the card alone. */  const patchPost = useCallback((postId: string, patch: Partial<FeedPost>) => {
+  /**
+   * Patches what a change touched, leaving the rest of the card alone.
+   *
+   * This is also the confirmed-write seam: a card's action row hands
+   * `onReactionSettled` its type when the server confirms, and the row is
+   * rewritten first — so the card re-derives from written truth on the
+   * repaint, not from a state the press is holding. A like count is not a
+   * viewer state, so nothing in `FeedPost` carries `liked`; the row's side of
+   * the confirmation is the count the card's own `bumpLikes` brought forward,
+   * and the card's colour is here: `viewerLiked`.
+   */
+  const patchPost = useCallback((postId: string, patch: Partial<FeedPost>) => {
     setPosts((previous) =>
       previous.map((post) => (post.id === postId ? { ...post, ...patch } : post)),
     );
@@ -1310,7 +1329,7 @@ function FeedContent() {
                 highlightKey={highlightId}
                 renderItem={(post) => {
                   const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));
-                  return <PostCard id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined} />;
+                  return <PostCard id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} liked={post.viewerLiked} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onReactionSettled={(type) => patchPost(post.id, { viewerLiked: type === "like" })} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined} />;
                 }}
               />
 

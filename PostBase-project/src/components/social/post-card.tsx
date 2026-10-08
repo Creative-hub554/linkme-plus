@@ -50,6 +50,14 @@ interface PostCardProps {
   saved?: boolean;
   visibility?: "public" | "followers" | "private" | string | null;
   /**
+   * Told the server's answer once a write is confirmed — the state the row
+   * the card was painted from now holds: `null` when the reaction came off,
+   * `"like"` when it went on, the new type on a swap. Silence is the
+   * rollback's answer: a write that did not happen leaves the rows where they
+   * were, so the parent never repaints from one.
+   */
+  onReactionSettled?: (type: string | null) => void;
+  /**
    * The group a post was published into, when it was published into one. A
    * group post reaches a feed because the reader is in that group, and without
    * this the card gives no sign of why it is there.
@@ -107,13 +115,26 @@ function useReconciledCount(authoritative: number) {
 
 const stickers = ["❤️", "😂", "🔥", "👏", "🎉", "😍"];
 
-export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false }: PostCardProps) {
+/**   * The card that holds a post, which is held in the rows its parent lists. The
+   * `liked`/`reaction` pair starts from the row the parent passed (`initialLiked`,
+   * and the row's confirmed type when it carries one as `reaction`),
+ * but a parent whose rows move under a still-mounted card would otherwise leave
+ * a stale heart behind — so the card adopts the row's state whenever it changes
+ * and nothing of the card's own is in flight, and the parent repainting from
+ * `onReactionSettled`'s written rows is how a confirmed write reaches a card's
+ * colour, even mid-scroll.
+ */
+export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false, onReactionSettled }: PostCardProps) {
+  // The reaction is the row's state the card holds in escrow, exactly as the
+  // listing card's heart is: `useState` reads the prop once, and a parent whose
+  // rows move under a still-mounted card leaves a stale react behind unless the
+  // row's new state reaches the card. The parent does that by calling
+  // `onReactionSettled` — through which the row is written — and the card below
+  // then adopts the new state on the parent's re-render (the card's own press
+  // is in flight meanwhile, guarded by `reactionLoading`).
   const [liked, setLiked] = useState(initialLiked);
   const [reaction, setReaction] = useState<string | null>(initialLiked ? "like" : null);
   const [saved, setSaved] = useState(initialSaved);
-  // Both counters follow one rule: the feed's number is authoritative, and an
-  // optimistic local change is held until the authoritative number catches up.
-  const [likes, bumpLikes] = useReconciledCount(initialLikes);
   const [commentCount, bumpComments] = useReconciledCount(initialComments);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
@@ -123,6 +144,43 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   const [submitting, setSubmitting] = useState(false);
   const [reactionLoading, setReactionLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // The row's confirmed reaction type reaches the card through the parent's
+  // re-render; while one of this card's own writes is in flight, what it is
+  // writing is what the card holds, not what an in-between row says.
+  //
+  // `reactionLoading` is fed through a ref on purpose: the guard is a
+  // "don't adopt mid-write" gate, not a subscription — putting it in the deps
+  // would re-run this effect when a write starts or ends and adopt whatever
+  // the row happens to say at that moment, exactly the stale repaint the
+  // guard exists to prevent. The listing card holds the same rule with its
+  // own `saving` ref.
+  const reactionLoadingRef = useRef(false);
+  useEffect(() => {
+    reactionLoadingRef.current = reactionLoading;
+  }, [reactionLoading]);
+  // What the last confirmed write settled, as the row will hold it. A repaint
+  // that matches this is the echo of this card's own write arriving through
+  // the parent — and adopting an echo could only downgrade the card, because
+  // the row's boolean (`viewerLiked: type === "like"`) carries strictly less
+  // than the confirmation the card already holds: re-deriving the reaction
+  // *type* from that boolean would clobber a confirmed 🔥 into nothing. So an
+  // echo is skipped, and any repaint the card did not cause is adopted.
+  const confirmedReactionRef = useRef({
+    liked: initialLiked,
+    reaction: initialLiked ? "like" : null,
+  });
+  useEffect(() => {
+    if (reactionLoadingRef.current) return;
+    const confirmed = confirmedReactionRef.current;
+    if (confirmed.liked === initialLiked && confirmed.reaction !== null) return;
+    setReaction(initialLiked ? "like" : null);
+    setLiked(initialLiked);
+  }, [initialLiked]);
+
+  // Both counters follow one rule: the feed's number is authoritative, and an
+  // optimistic local change is held until the authoritative number catches up.
+  const [likes, bumpLikes] = useReconciledCount(initialLikes);
   const isVideo = mediaType?.toLowerCase().startsWith("video");
 
   /**
@@ -236,6 +294,18 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
       const nextReaction = payload.type ?? null;
       setReaction(nextReaction);
       setLiked(nextReaction === "like");
+      // Recorded before the parent is told, so the repaint its write causes
+      // reads as this card's own echo rather than as a row to adopt.
+      confirmedReactionRef.current = {
+        liked: nextReaction === "like",
+        reaction: nextReaction,
+      };
+      // The server's word, carried to the row: the parent writes it into the
+      // row this card was painted from, so the same card — same key, still
+      // mounted — re-derives from written truth on the repaint rather than
+      // from a state the press is holding. Only a confirmed write is told; a
+      // rollback is the rows staying exactly where they were.
+      onReactionSettled?.(nextReaction);
     } catch {
       setReaction(previousReaction);
       setLiked(previousLiked);

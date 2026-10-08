@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -357,6 +357,31 @@ function runCi(args: string[], env: Record<string, string> = {}) {
       CI_COVERAGE_STAMP_FILE: path.join(stubDir, "coverage-stamp-default.txt"),
       ...env,
     },
+  });
+}
+
+/**
+ * Runs the real CI runner without waiting for it, so several instances can be in flight at
+ * once — the one thing `runCi`'s `spawnSync` cannot express. The streams are collected as
+ * they arrive and the promise answers once the instance has exited.
+ */
+function runCiInBackground(args: string[], env: Record<string, string> = {}) {
+  const child = spawn(process.execPath, [ciRunner, ...args], {
+    cwd: projectRoot,
+    env: {
+      ...process.env,
+      ...CI_MARKERS,
+      CI_CACHE_FILE: freshCachePath(),
+      CI_COVERAGE_STAMP_FILE: path.join(stubDir, "coverage-stamp-default.txt"),
+      ...env,
+    },
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += chunk));
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+  return new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve) => {
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
 }
 
@@ -807,6 +832,27 @@ const VANISHING_TEST = [
   "  }],",
   "}));",
 ].join("\n");
+
+/**
+ * A stub suite that says which suite it is and then holds its process open — the two halves
+ * a concurrent-instance case needs. The report names this suite in both its file and its test
+ * title, so whichever instance reads that file reports whose suite it was; the hold is the
+ * window a sibling instance needs to unlink and rewrite that file before this one reads it.
+ */
+function namedSuite(label: string, failed: boolean, holdMs: number): string {
+  const status = failed ? "failed" : "passed";
+  return [
+    "import { writeFileSync } from 'node:fs';",
+    "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
+    "writeFileSync(out, JSON.stringify({",
+    "  numTotalTests: 1,",
+    `  numFailedTests: ${failed ? 1 : 0},`,
+    `  testResults: [{ name: 'src/test/${label}.test.ts', status: '${status}',`,
+    `    assertionResults: [{ status: '${status}', title: '${label} case' }] }],`,
+    "}));",
+    `await new Promise((resolve) => setTimeout(resolve, ${holdMs}));`,
+  ].join("\n");
+}
 
 /**
  * A stub whose every test passes but whose process still exits nonzero — the
@@ -4821,6 +4867,57 @@ describe("the CI runner's result cache", () => {
       rmSync(probe, { force: true });
     }
   });
+
+  it(
+    "keeps two concurrent instances' reports apart, so neither reads a suite the other ran",
+    async () => {
+      // The report is the one file a stage's verdict is read out of, and a second instance is
+      // the ordinary case rather than a contortion: `ci-runner-tree-editing.test.ts` spawns
+      // its own nested runs while this file spawns these, and vitest runs the two files in
+      // parallel. Under the one fixed name every instance wrote and unlinked, the instance that
+      // touched it last won — and the loser reproduced as `FAIL  vitest suite — the suite wrote
+      // no report — it may have crashed`, a red stage over a suite it had run, with its own
+      // verdict destroyed and no failing test named. That is a lie about the tests, which is
+      // why the two paths are pinned apart rather than the collision merely noted.
+      //
+      // The window is made rather than hoped for: the failing suite writes its report and then
+      // holds its process open, so the instance started 400 ms later is certain to unlink and
+      // rewrite the shared name while this one is still waiting to read it.
+      const alphaCache = freshCachePath();
+      const bravoCache = freshCachePath();
+      const alphaStub = writeStub("report-alpha.mjs", namedSuite("alpha", true, 4_000));
+      const bravoStub = writeStub("report-bravo.mjs", namedSuite("bravo", false, 0));
+
+      const alpha = runCiInBackground(["--only=test"], {
+        CI_TEST_SCRIPT: alphaStub,
+        CI_CACHE_FILE: alphaCache,
+      });
+      const bravo = await (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return runCiInBackground(["--only=test"], {
+          CI_TEST_SCRIPT: bravoStub,
+          CI_CACHE_FILE: bravoCache,
+        });
+      })();
+      const alphaDone = await alpha;
+
+      // Each verdict is its own suite's. The failing one names its own failing test — not the
+      // other's, and not a missing report — and caches nothing, because only a pass is cached;
+      // the passing one passes and records its own summary.
+      expect(alphaDone.stderr).not.toContain("wrote no report");
+      expect(alphaDone.status).toBe(1);
+      expect(alphaDone.stdout).toContain("src/test/alpha.test.ts");
+      expect(alphaDone.stdout).toContain("alpha case");
+      expect(alphaDone.stdout).not.toContain("bravo");
+      expect(bravo.status).toBe(0);
+      expect(bravo.stdout).toContain("PASS  vitest suite");
+      expect(bravo.stdout).not.toContain("alpha");
+      expect(readCache(bravoCache).stages.test.pass).toBe(true);
+      expect(readCache(bravoCache).stages.test.summary).toBe("1 test(s) passed in 1 file(s)");
+      expect(existsSync(alphaCache) ? readCache(alphaCache).stages.test : undefined).toBeUndefined();
+    },
+    30_000,
+  );
 });
 
 describe("the CI runner's cache explanation", () => {
@@ -5118,6 +5215,33 @@ describe("the CI runner's cache explanation", () => {
     expect(line).toContain(`${label(rule)} ×${expected}`);
     expect(line, "the names do not fit, so the line gives the families").not.toContain(
       ".freebuff/apply-collect-baselines.mjs",
+    );
+  });
+
+  it("keeps the workflows GitHub runs behind the drift stage's key", () => {
+    // The pin holding a file is only half of it: the file has to be behind a key, or the
+    // stage that checks it can be answered from a recorded pass over a tree it never read.
+    // A tree walk starts at the project root and has nowhere to go but down, so the
+    // repository-root workflows are exactly the files a scan misses — a mirror edit would
+    // have left the drift stage `reused`. Both halves are asserted here: the file is behind
+    // the key, and the rule that put it there is the declaration's own, so a rule renamed
+    // in `.freebuff/gate-drift.mjs` and not in the runner cannot agree with a copy of itself
+    // in this test.
+    const mirror = DEFAULT_WATCHES.find(
+      (candidate: { dir: string; pattern: string }) => candidate.dir === "../.github/workflows",
+    ) as { dir: string; pattern: string } | undefined;
+    expect(mirror, "no watch rule names the repository root's workflows").toBeDefined();
+
+    const json = runCi(["--explain-cache", "--json", "--only=drift"]);
+    const drift = JSON.parse(json.stdout).stages.find(
+      (stage: { name: string }) => stage.name === "drift",
+    ) as { matchedBy: { name: string; input: string }[] };
+    const pair = drift.matchedBy.find(
+      (entry) => entry.name === "../.github/workflows/ci.yml",
+    );
+    expect(pair, "the workflow GitHub runs is behind no key").toBeDefined();
+    expect(pair?.input).toBe(
+      `${(mirror as { dir: string; pattern: string }).dir}/${(mirror as { dir: string; pattern: string }).pattern}`,
     );
   });
 

@@ -39,6 +39,12 @@ interface PagePost {
   commentCount?: number;
   reactionCount?: number;
   media?: PagePostMedia[];
+  /**
+   * The viewer's own reaction, once a write confirms. Same shape as the
+   * group's rows: the read answers totals, the confirmed write writes the
+   * row, and the repainted card re-derives from the row.
+   */
+  viewerLiked?: boolean;
 }
 
 /**
@@ -291,10 +297,20 @@ export default function PageView() {
                   mediaType={media?.type}
                   time={formatPostTime(post.createdAt)}
                   likes={post.reactionCount ?? 0}
+                  liked={post.viewerLiked}
                   comments={post.commentCount ?? 0}
                   shares={0}
                   visibility={post.visibility ?? undefined}
                   edited={Boolean(post.editedAt)}
+                  onReactionSettled={(type) => {
+                    // Same seam the group's rows use: the confirmation is
+                    // written into the row the card reads its heart from.
+                    setPosts((current) =>
+                      current.map((row) =>
+                        row.id === post.id ? { ...row, viewerLiked: type === "like" } : row,
+                      ),
+                    );
+                  }}
                 />
               );
             })

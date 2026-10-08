@@ -3,8 +3,12 @@ import {
   assertDemoMediaConfigured,
   avatarSvg,
   ensureDemoAvatar,
+  ensureDemoListingImage,
+  ensureDemoPageCover,
   ensureDemoPostImage,
   ensureDemoVideo,
+  listingPhotoSvg,
+  pageCoverSvg,
   postArtworkSvg,
 } from "./demo-media";
 import { putObject } from "@/lib/r2";
@@ -44,6 +48,82 @@ describe("postArtworkSvg", () => {
     expect(svg).toContain('width="320"');
     expect(svg).toContain('height="240"');
     expect(svg).toContain('viewBox="0 0 320 240"');
+  });
+});
+
+describe("listingPhotoSvg", () => {
+  it("is deterministic for a given index and varies by index", () => {
+    const first = listingPhotoSvg(2);
+    expect(listingPhotoSvg(2)).toBe(first);
+    expect(listingPhotoSvg(3)).not.toBe(first);
+  });
+
+  it("is square by default, because the card crops it into a square tile", () => {
+    const svg = listingPhotoSvg(0);
+    expect(svg).toContain('width="1200"');
+    expect(svg).toContain('height="1200"');
+    expect(svg).toContain('viewBox="0 0 1200 1200"');
+  });
+
+  it("honours the requested size", () => {
+    const svg = listingPhotoSvg(1, 240);
+    expect(svg).toContain('width="240"');
+    expect(svg).toContain('height="240"');
+  });
+
+  it("does not draw the post artwork, so a shop grid cannot read as a feed", () => {
+    // Same index, same palette source: the two compositions must differ, or the
+    // marketplace would be a wall of the pictures the feed already shows.
+    expect(listingPhotoSvg(5)).not.toBe(postArtworkSvg(5));
+  });
+});
+
+describe("pageCoverSvg", () => {
+  it("is a wide band by default, because the Page crops it into a short header", () => {
+    const svg = pageCoverSvg(0);
+    expect(svg).toContain('width="1600"');
+    expect(svg).toContain('height="400"');
+    expect(svg).toContain('viewBox="0 0 1600 400"');
+  });
+
+  it("is deterministic for a given index and varies by index", () => {
+    const first = pageCoverSvg(1);
+    expect(pageCoverSvg(1)).toBe(first);
+    expect(pageCoverSvg(2)).not.toBe(first);
+  });
+});
+
+describe("ensureDemoListingImage", () => {
+  it("renders and uploads a jpeg when the object is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
+
+    const url = await ensureDemoListingImage(4);
+    expect(url).toBe("https://test.r2.dev/seed/listings/listing-04.jpg");
+    const [key, body, contentType] = putObjectMock.mock.calls[0];
+    expect(key).toBe("seed/listings/listing-04.jpg");
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(contentType).toBe("image/jpeg");
+  });
+
+  it("returns the existing URL without uploading when the object is already there", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+
+    const url = await ensureDemoListingImage(0);
+    expect(url).toBe("https://test.r2.dev/seed/listings/listing-00.jpg");
+    expect(putObjectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ensureDemoPageCover", () => {
+  it("renders and uploads a jpeg when the object is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
+
+    const url = await ensureDemoPageCover(2);
+    expect(url).toBe("https://test.r2.dev/seed/pages/cover-02.jpg");
+    const [key, body, contentType] = putObjectMock.mock.calls[0];
+    expect(key).toBe("seed/pages/cover-02.jpg");
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(contentType).toBe("image/jpeg");
   });
 });
 
