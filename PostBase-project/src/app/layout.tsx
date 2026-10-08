@@ -1,5 +1,6 @@
 import "@/lib/weak-ref-polyfill";
 import type { Metadata } from "next";
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { MainNav } from "@/components/layout/main-nav";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Footer } from "@/components/layout/footer";
@@ -56,6 +57,10 @@ export default function RootLayout({
                 <main className="mx-auto max-w-7xl px-4 py-6 pb-20 md:pb-6">{children}</main>
                 <Footer />
                 <BottomNav />
+                {/* Mounted last, like the bar above it: a floating door to
+                    messages on every page. It renders nothing until the reader
+                    is signed in — see the component itself. */}
+                <ChatBubble />
               </TooltipProvider>
             </NotificationProvider>
           </AuthProvider>

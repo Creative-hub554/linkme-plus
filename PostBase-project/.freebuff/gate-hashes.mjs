@@ -48,12 +48,16 @@ export const watches = [
   {"dir":".","pattern":"^(postcss\\.config\\.mjs|wrangler\\.jsonc)$"},
   {"dir":".","pattern":"^(tsconfig.*\\.json|eslint\\.config\\..*)$"},
   {"dir":".github/workflows","pattern":"^.*\\.ya?ml$"},
+  {"dir":"../.github/workflows","pattern":"^.*\\.ya?ml$"},
 ];
 
 export const files = {
+  "../.github/workflows/ci.yml": "06f6abb57e96a162cfd254f01e7787c8dc421028",
+  "../.github/workflows/collect-apply.yml": "176bc86ef5c5741a5296a3bb2393fff8108fe06a",
+  "../.github/workflows/nightly.yml": "a79f7e9583278f84e7ae15c566d7bbd8188c72b4",
   ".freebuff/apply-collect-baselines.mjs": "c804eb03816d8251a0932a9d4503208dcbc5d7a4",
   ".freebuff/build-contents.mjs": "5a3c1e4d3639ccf4ad345d128ff83dc163b73795",
-  ".freebuff/ci.mjs": "a2a58fae19547eead103b0a5ff95d35dc681a72e",
+  ".freebuff/ci.mjs": "225a1dfe73cbf99faba21ea09775489c9d5c3475",
   ".freebuff/collect-apply.mjs": "2e12a5bbd12b165575da17cb76fa71a5e4660880",
   ".freebuff/collect-budget-baselines.mjs": "b2d757d381a325adc94e743084d763bc95f5aaeb",
   ".freebuff/collect-budget-soft.mjs": "1ba522fec3a00c11613fc50d8d45291df9768d44",
@@ -70,7 +74,7 @@ export const files = {
   ".freebuff/coverage-strikes.mjs": "d57cb5a6ad4db910ba0235cb1607d8fccaf7ebea",
   ".freebuff/coverage-thresholds.mjs": "cdcd700dc4dea46d3e3cff2c0d4f2270e54bbb78",
   ".freebuff/gate-collect-baselines.mjs": "395b7628aa9c72ea866880f56054a50d1bbd5015",
-  ".freebuff/gate-drift.mjs": "d7fca6c2bcbceb89e5819ea3f52e1760e4b4c5d9",
+  ".freebuff/gate-drift.mjs": "73e96b2d9352a1c03d7ed9389caca58412d094b3",
   ".freebuff/import-closure.mjs": "0c013ff33489db8ab7d04222d8e41b84114f9359",
   ".freebuff/lint-baseline.mjs": "4985328e061d42d0d975ab0a905bd631d9772dcc",
   ".freebuff/mutation-coverage.mjs": "282a71b0d568a447e77854d05eb1362b2e49140c",

@@ -15,6 +15,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file-if-exists=.env.local src/lib/db/seed.ts",
+    "notifications:check": "node --env-file-if-exists=.env.local .freebuff/notifications-check.mjs",
     "runbook:contents": "node .freebuff/build-contents.mjs",
     "runbook:check": "node .freebuff/build-contents.mjs --check",
     "preview:preflight": "node .freebuff/preview-preflight.mjs",

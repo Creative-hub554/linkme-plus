@@ -13,6 +13,10 @@ import { THEME_INIT_SCRIPT } from "@/lib/theme";
 vi.mock("@/components/layout/main-nav", () => ({ MainNav: () => <nav data-testid="main-nav" /> }));
 vi.mock("@/components/layout/bottom-nav", () => ({ BottomNav: () => <nav data-testid="bottom-nav" /> }));
 vi.mock("@/components/layout/footer", () => ({ Footer: () => <footer data-testid="footer" /> }));
+// The bubble reads the auth context through `useAuth`, which this file's
+// `auth-provider` mock does not export — so, like every other chrome piece, it
+// is mocked to its testid and the composition is what is judged.
+vi.mock("@/components/chat/chat-bubble", () => ({ ChatBubble: () => <div data-testid="chat-bubble" /> }));
 // A provider mock returns its children directly rather than JSX, because the
 // factory runs before any module-level helper could be defined.
 vi.mock("@/components/auth-provider", () => ({
@@ -50,6 +54,7 @@ describe("the root layout", () => {
     expect(html).toContain('data-testid="main-nav"');
     expect(html).toContain('data-testid="bottom-nav"');
     expect(html).toContain('data-testid="footer"');
+    expect(html).toContain('data-testid="chat-bubble"');
   });
 
   it("applies the theme before first paint with the blocking init script", () => {

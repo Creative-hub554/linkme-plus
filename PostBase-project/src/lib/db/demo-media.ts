@@ -125,6 +125,110 @@ export function avatarSvg(index: number, initials: string, size = 320): string {
 </svg>`;
 }
 
+/**
+ * A catalogue-style product shot: a lit surface with the object standing on it.
+ *
+ * Square, because the card crops its photo into a square tile and a wide
+ * composition would be cut down to its middle. Deliberately not the post
+ * artwork: a shop grid and a feed are different surfaces, and a wall of
+ * posters in the marketplace reads as a feed that lost its way.
+ */
+export function listingPhotoSvg(index: number, size = 1200): string {
+  const [primary, secondary, deep] = PALETTES[(index * 5 + 1) % PALETTES.length];
+  const random = pseudoRandom(index * 13 + 9);
+
+  const horizon = Math.round(size * (0.56 + random() * 0.12));
+  const angle = Math.round(random() * 24 - 12);
+  const objectWidth = Math.round(size * (0.4 + random() * 0.22));
+  const objectHeight = Math.round(objectWidth * (0.52 + random() * 0.4));
+  const objectX = Math.round((size - objectWidth) / 2);
+  const objectY = Math.round(horizon - objectHeight * 0.86);
+  const objectBand = Math.round(objectY + objectHeight * 0.62);
+  const poolY = Math.round(horizon + size * (0.06 + random() * 0.06));
+
+  const motes = Array.from({ length: 18 }, () => {
+    const cx = Math.round(random() * size);
+    const cy = Math.round(random() * size);
+    const r = (1 + random() * 2.6).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#ffffff" fill-opacity="0.16"/>`;
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${deep}"/>
+      <stop offset="100%" stop-color="${primary}" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="surface" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${primary}" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="${deep}" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="object" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.92"/>
+      <stop offset="60%" stop-color="${secondary}" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="${primary}" stop-opacity="0.85"/>
+    </linearGradient>
+    <radialGradient id="pool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="${size}" height="${size}" fill="url(#wall)"/>
+  <rect y="${horizon}" width="${size}" height="${size - horizon}" fill="url(#surface)"/>
+  ${motes}
+  <ellipse cx="${Math.round(size / 2)}" cy="${poolY}" rx="${Math.round(objectWidth * 0.65)}" ry="${Math.round(objectWidth * 0.16)}" fill="url(#pool)"/>
+  <g transform="rotate(${angle} ${Math.round(size / 2)} ${objectBand})">
+    <rect x="${objectX}" y="${objectY}" width="${objectWidth}" height="${objectHeight}" rx="${Math.round(objectWidth * 0.08)}" fill="url(#object)"/>
+    <rect x="${objectX}" y="${objectBand}" width="${objectWidth}" height="${Math.round(objectHeight * 0.08)}" fill="${deep}" fill-opacity="0.25"/>
+  </g>
+</svg>`;
+}
+
+/**
+ * A wide banner for a Page's header.
+ *
+ * The Page detail crops its cover into a short band, so this one is wide and
+ * shallow rather than square — the opposite of the listing photo, for the same
+ * reason: a composition is drawn for the box that will hold it.
+ */
+export function pageCoverSvg(index: number, width = 1600, height = 400): string {
+  const [primary, secondary, deep] = PALETTES[(index * 7 + 4) % PALETTES.length];
+  const random = pseudoRandom(index * 17 + 11);
+
+  const arcs = Array.from({ length: 4 }, (_unused, step) => {
+    const cx = Math.round(width * (0.1 + random() * 0.8));
+    const cy = Math.round(height * (0.7 + random() * 0.5));
+    const r = Math.round(width * (0.14 + random() * 0.26));
+    const opacity = (0.1 + step * 0.05).toFixed(2);
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${step % 2 === 0 ? secondary : "#ffffff"}" fill-opacity="${opacity}"/>`;
+  }).join("");
+
+  const bars = Array.from({ length: 3 }, () => {
+    const x = Math.round(random() * width);
+    const barWidth = Math.round(width * (0.06 + random() * 0.14));
+    return `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="#ffffff" fill-opacity="0.05"/>`;
+  }).join("");
+
+  const angle = Math.round(random() * 40 - 20);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="band" gradientTransform="rotate(${angle} 0.5 0.5)">
+      <stop offset="0%" stop-color="${deep}"/>
+      <stop offset="50%" stop-color="${primary}"/>
+      <stop offset="100%" stop-color="${secondary}"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="${width}" height="${height}" fill="url(#band)"/>
+  ${bars}
+  ${arcs}
+  <rect width="${width}" height="${height}" fill="url(#glow)"/>
+</svg>`;
+}
+
 function svgBytes(svg: string): Uint8Array {
   return new TextEncoder().encode(svg);
 }
@@ -168,6 +272,26 @@ export async function ensureDemoPostImage(index: number): Promise<string> {
   return ensureAsset(
     key,
     async () => sharp(svgBytes(postArtworkSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
+    "image/jpeg",
+  );
+}
+
+/** Seeds the cover banner for a demo Page and returns its public URL. */
+export async function ensureDemoPageCover(index: number): Promise<string> {
+  const key = `seed/pages/cover-${String(index).padStart(2, "0")}.jpg`;
+  return ensureAsset(
+    key,
+    async () => sharp(svgBytes(pageCoverSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
+    "image/jpeg",
+  );
+}
+
+/** Seeds the photo for a demo marketplace listing and returns its public URL. */
+export async function ensureDemoListingImage(index: number): Promise<string> {
+  const key = `seed/listings/listing-${String(index).padStart(2, "0")}.jpg`;
+  return ensureAsset(
+    key,
+    async () => sharp(svgBytes(listingPhotoSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
     "image/jpeg",
   );
 }

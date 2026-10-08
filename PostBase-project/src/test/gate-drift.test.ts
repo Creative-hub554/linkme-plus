@@ -1739,6 +1739,94 @@ describe("the committed gate manifest", () => {
   });
 });
 
+// GitHub runs a workflow only from `.github/workflows` at the root of the *repository*, so
+// the copy inside this project is a mirror of what actually gates a pull request. Both are
+// pinned, under two rules kept apart on purpose: they are separate files with separate
+// headers and different branch names, working directories and artifact paths, and a rule
+// that merged them would pin one file under the other's name. Before this, the mirror was
+// the one gate file nothing watched — a step deleted there passed every check below it.
+describe("the workflows GitHub actually runs", () => {
+  /** The declaration this family is read from, found rather than re-typed. */
+  const mirrorRule = DEFAULT_WATCHES.find(
+    (rule: { dir: string; pattern: string }) => rule.dir === "../.github/workflows",
+  ) as { dir: string; pattern: string } | undefined;
+
+  /** The project's own workflows rule, for the reading that the two families stay apart. */
+  const projectRule = DEFAULT_WATCHES.find(
+    (rule: { dir: string; pattern: string }) => rule.dir === ".github/workflows",
+  ) as { dir: string; pattern: string } | undefined;
+
+  it("pins every repository-root workflow under its own rule, at the bytes on disk", async () => {
+    expect(mirrorRule, "no watch rule names the repository root's workflows").toBeDefined();
+    expect(projectRule, "no watch rule names the project's own workflows").toBeDefined();
+    const committed = (await import(pathToFileURL(manifestPath()).href)) as unknown as {
+      files: Record<string, string>;
+    };
+
+    const keys = Object.keys(pin([manifestPath()], [mirrorRule as { dir: string; pattern: string }])).sort();
+    expect(keys.length, "the rule matches nothing — a dead pin").toBeGreaterThan(0);
+
+    for (const key of keys) {
+      // `../`-prefixed: the key names the file where it is rather than flattening it into a
+      // path that looks like it lives inside the project.
+      expect(key.startsWith("../.github/workflows/"), key).toBe(true);
+      const file = path.join(projectRoot, key);
+      expect(existsSync(file), `${key} is pinned but not on disk`).toBe(true);
+      expect(committed.files[key], `${key} is not pinned`).toBe(hashFile(file));
+      // The rule that pins it is this one, and not the project's own family beside it.
+      expect(matchesInput(mirrorRule as { dir: string; pattern: string }, key)).toBe(true);
+      expect(matchesInput(projectRule as { dir: string; pattern: string }, key)).toBe(false);
+    }
+
+    // And the family does not leak the other way: no path inside the project is claimed by
+    // the mirror rule, so a report cannot fold a project workflow under the mirror's heading.
+    for (const key of Object.keys(committed.files)) {
+      if (key.startsWith("../.github/workflows/")) continue;
+      expect(matchesInput(mirrorRule as { dir: string; pattern: string }, key), key).toBe(false);
+    }
+  });
+
+  it("fails the check when the workflow GitHub runs has been weakened", async () => {
+    // The seam, not the tree: nothing here edits a real workflow. A manifest that records
+    // every pin except a wrong hash for the mirror's `ci.yml` is the state a weakening
+    // leaves behind, and the alarm has to answer `changed` for that path — which it can only
+    // do by reading the real file at `../.github/workflows/ci.yml`, hashing it and finding it
+    // does not match. `gone` would be the wrong answer (it means the file is not there), and
+    // `unpinned` would mean the rules never named it, so the kind asserted here is the one
+    // that proves a byte edit to that file is what a reader is told about.
+    const seam = process.env.GATE_HASHES_FILE;
+    delete process.env.GATE_HASHES_FILE;
+    try {
+      const own = await readManifest(manifestPath());
+      expect(own.problem).toBeNull();
+      const key = "../.github/workflows/ci.yml";
+      expect(Object.keys(own.recorded), "the mirror is not in the pin").toContain(key);
+
+      const weakened = path.join(caseDir(), "gate-hashes.mjs");
+      writeFileSync(
+        weakened,
+        renderManifest({
+          algorithm: own.algorithm,
+          watches: DEFAULT_WATCHES,
+          files: { ...own.recorded, [key]: "0".repeat(40) },
+        }),
+      );
+
+      const { status, report } = check(weakened);
+      expect(status, JSON.stringify(report.findings)).toBe(1);
+      expect(report.changed).toContain(key);
+      const finding = report.findings.find((entry) => entry.path === key);
+      expect(finding?.kind).toBe("changed");
+      // The detail quotes the real file's hash, so the row is about the bytes on disk.
+      expect(finding?.detail).toContain(hashFile(path.join(projectRoot, key)).slice(0, 8));
+      expect(finding?.family).toBe("../.github/workflows/^.*\\.ya?ml$");
+    } finally {
+      if (seam === undefined) delete process.env.GATE_HASHES_FILE;
+      else process.env.GATE_HASHES_FILE = seam;
+    }
+  });
+});
+
 // Seven sequential spawns of the real scaffold — and the apply-check case adds five git
 // spawns on top — against a scratch tree copied fresh per case. The default 5s test timeout
 // assumes a quiet box; this checkout is routinely shared (a concurrent sweep's load once

@@ -35,6 +35,11 @@ interface ConversationPayload {
   id: string;
   otherMember?: { name?: string; userId?: string } | null;
   lastMessage?: { content?: string; createdAt?: string } | null;
+  /**
+   * The server's count of messages the reader has not caught up on — the
+   * column below used to render a hardcoded zero because there was none.
+   */
+  unreadCount?: number;
 }
 
 function MessagesContent() {
@@ -68,7 +73,7 @@ function MessagesContent() {
           name: item.otherMember?.name || "Member",
           lastMessage: item.lastMessage?.content || "No messages yet",
           time: item.lastMessage?.createdAt ? new Date(item.lastMessage.createdAt).toLocaleDateString() : "",
-          unread: 0,
+          unread: typeof item.unreadCount === "number" ? item.unreadCount : 0,
           otherUserId: item.otherMember?.userId || "",
         }));
         setConversations(mapped);

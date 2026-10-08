@@ -24,6 +24,9 @@ interface SavedListing {
   condition?: string | null;
   location?: string | null;
   categoryName?: string | null;
+  /** The same photo field the grid's rows carry, from the same subquery — a
+   * listing keeps its picture when it moves between the two shelves. */
+  imageUrl?: string | null;
   isSaved: boolean;
 }
 
@@ -145,6 +148,7 @@ export default function SavedListingsPage() {
                 id={listing.id}
                 title={listing.title}
                 price={listing.priceMin ?? listing.priceMax ?? 0}
+                image={listing.imageUrl ?? undefined}
                 seller={{ name: "Community seller" }}
                 location={listing.location || undefined}
                 category={listing.categoryName || undefined}
@@ -156,7 +160,17 @@ export default function SavedListingsPage() {
                   // back and leaves the shelf exactly as it was.
                   if (!saved) {
                     setListings((current) => current.filter((row) => row.id !== listing.id));
+                    return;
                   }
+                  // A confirmed save stays: the flag is rewritten in the row
+                  // itself so the same card — same key, still mounted — wears
+                  // the state the write settled, instead of a heart still lit
+                  // from the mount-day read.
+                  setListings((current) =>
+                    current.map((row) =>
+                      row.id === listing.id ? { ...row, isSaved: saved } : row,
+                    ),
+                  );
                 }}
               />
             ))}

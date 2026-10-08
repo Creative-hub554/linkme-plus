@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { listingFirstPhoto } from "@/lib/db/listing-first-photo";
 import { categories, marketplaceListings, listingMedia, inventoryItems, productVariants, savedListings } from "@/lib/db/schema";
 import {
   optionalAuth,
@@ -127,6 +128,10 @@ export async function GET(request: Request) {
         condition: marketplaceListings.condition,
         location: marketplaceListings.location,
         status: marketplaceListings.status,
+        // The card's photo — the one read, spelled once in
+        // `@/lib/db/listing-first-photo`, so the grid and the saved shelf
+        // cannot drift apart.
+        imageUrl: listingFirstPhoto(),
         createdAt: marketplaceListings.createdAt,
       })
       .from(marketplaceListings)

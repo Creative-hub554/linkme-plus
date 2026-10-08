@@ -35,6 +35,13 @@ interface GroupPost {
   reactionCount?: number;
   media?: GroupPostMedia[];
   author?: { name?: string | null; username?: string | null; avatarUrl?: string | null };
+  /**
+   * The viewer's own reaction, once a write confirms. The group read answers
+   * totals, not viewer state, so this starts unset and is written by the
+   * confirmed-write seam — which is what keeps a repainted card's colour on
+   * written truth rather than on a press the card is holding.
+   */
+  viewerLiked?: boolean;
 }
 
 /**
@@ -261,27 +268,37 @@ export default function GroupView() {
                   item.type.toLowerCase().startsWith("video"),
               );
               return (
-                <PostCard
-                  key={post.id}
-                  id={post.id}
-                  // The member who wrote it, which is who a group post is by: a
-                  // group speaks in the voices of the people in it.
-                  author={{
-                    name: post.author?.name ?? "A member",
-                    username: post.author?.username ?? "member",
-                    avatar: post.author?.avatarUrl ?? undefined,
-                  }}
-                  content={post.content ?? ""}
-                  image={media?.url}
-                  mediaType={media?.type}
-                  time={formatPostTime(post.createdAt)}
-                  likes={post.reactionCount ?? 0}
-                  comments={post.commentCount ?? 0}
-                  shares={0}
-                  visibility={post.visibility ?? undefined}
-                  groupName={group.name}
-                  edited={Boolean(post.editedAt)}
-                />
+        <PostCard
+          key={post.id}
+          id={post.id}
+          // The member who wrote it, which is who a group post is by: a
+          // group speaks in the voices of the people in it.
+          author={{
+            name: post.author?.name ?? "A member",
+            username: post.author?.username ?? "member",
+            avatar: post.author?.avatarUrl ?? undefined,
+          }}
+          content={post.content ?? ""}
+          image={media?.url}
+          mediaType={media?.type}
+          time={formatPostTime(post.createdAt)}
+          likes={post.reactionCount ?? 0}
+          liked={post.viewerLiked}
+          comments={post.commentCount ?? 0}
+          shares={0}
+          visibility={post.visibility ?? undefined}
+          groupName={group.name}
+          edited={Boolean(post.editedAt)}
+          onReactionSettled={(type) => {
+            // The confirmation lands in the row the card painted from, so a
+            // card that stays mounted re-derives its heart on the repaint.
+            setPosts((current) =>
+              current.map((row) =>
+                row.id === post.id ? { ...row, viewerLiked: type === "like" } : row,
+              ),
+            );
+          }}
+        />
               );
             })
           )}

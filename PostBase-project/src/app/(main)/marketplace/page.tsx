@@ -22,6 +22,9 @@ interface ListingResult {
   location?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
+  /** The listing's first photo, resolved by the read; null when it has none, in
+   * which case the card shows its named placeholder rather than an empty frame. */
+  imageUrl?: string | null;
   createdAt: string;
   /** The viewer's own flag, answered per row by the list read for a signed-in
    * member and `false` for a visitor — the same contract the single-listing
@@ -52,6 +55,17 @@ export default function MarketplacePage() {
   }, [searchQuery, selectedCategory]);
 
   useEffect(() => { void loadListings(); }, [loadListings]);
+
+  // The server's word settles a row's flag: when a confirmed write answers —
+  // from this card or the saved shelf's — the flag is rewritten *in the row
+  // itself*, the same row the grid's cards painted from, so a card's heart is
+  // the row's state the moment it changes. The rows are what the cards read;
+  // this is how a repainted parent reaches a mounted card.
+  const handleSavedChange = useCallback((listingId: string, saved: boolean) => {
+    setListings((current) =>
+      current.map((row) => (row.id === listingId ? { ...row, isSaved: saved } : row)),
+    );
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -104,7 +118,7 @@ export default function MarketplacePage() {
       ) : listings.length === 0 ? (
         <EmptyState title="No listings found" description="There are no active listings here yet. Check back when the community adds something new." />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} seller={{ name: "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} />)}</div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} image={listing.imageUrl ?? undefined} seller={{ name: "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} onSavedChange={(saved) => handleSavedChange(listing.id, saved)} />)}</div>
       )}
     </div>
   );

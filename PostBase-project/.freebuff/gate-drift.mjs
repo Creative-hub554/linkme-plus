@@ -267,7 +267,11 @@ const CRLF = Buffer.from("\r\n");
  * resolved against the project root and scanned one level deep; it may name a nested
  * directory (the workflows live in one), and `.github/workflows` is one level deep because
  * that is all GitHub Actions reads — a workflow in a subdirectory there would not run, so
- * it is not a gate to pin.
+ * it is not a gate to pin. It may also name a directory *above* the project root, which is
+ * what the repository's own `.github/workflows` is: a rule's `dir` is a path, and `../` is
+ * a path. The key such a file is recorded under is likewise `../`-prefixed, which is what
+ * keeps the pin honest about where the file is rather than flattening it into a path that
+ * looks like it is inside the project.
  */
 export const DEFAULT_WATCHES = [
   // The coverage gates, and the algebra, thresholds and floor rules they share.
@@ -324,6 +328,16 @@ export const DEFAULT_WATCHES = [
   // conditional, a `continue-on-error: true` added, a `--skip=` widened — the gate is
   // cancelled from above, and the stages below never know they did not run.
   { dir: ".github/workflows", pattern: "^.*\\.ya?ml$" },
+  // The same directory at the repository root, which is the copy GitHub reads: a workflow
+  // runs only from `.github/workflows` at the root of the repository, so the ones in this
+  // directory are a mirror of those and the mirror is what a pull request's weakening
+  // actually ships. Pinning only the copy in the project left the file the runner reads
+  // outside the pin's reach, so a step deleted there passed every gate below it. The two
+  // rules are separate because the two directories are separate facts — the mirror is
+  // deliberately not a byte-for-byte copy (its branch names, working directory and artifact
+  // paths differ, and its own header says how), and a rule that merged them would pin one
+  // file under the other's name.
+  { dir: "../.github/workflows", pattern: "^.*\\.ya?ml$" },
 ];
 
 /**
