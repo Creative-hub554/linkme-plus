@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { DisclosureButton } from "@/components/ui/disclosure-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useTypingAnnouncer } from "@/hooks/use-typing-announcer";
+import { TypingIndicator } from "@/components/realtime/typing-indicator";
 
 /** A conversation as the panel renders it, after the API's payload is flattened. */
 interface Conversation {
@@ -52,8 +55,9 @@ interface ConversationPayload {
  * It renders nothing signed out, for the same reason the signed-out header
  * omits Messages: the API answers a visitor with an auth error, so a bubble
  * that opened on a 401 would only advertise a door that bounces. The badge is
- * fed by the same list endpoint the `/messages` page reads, on a slow poll —
- * and the count is the server's, the unread total that endpoint computes from
+ * fed by the same list endpoint the `/messages` page reads — live over the
+ * socket when one answers, on the old slow poll when it does not — and the
+ * count is the server's, the unread total that endpoint computes from
  * each member's `lastReadAt`, so no second derivation here can disagree with
  * the column that page renders.
  */
@@ -76,6 +80,26 @@ export function ChatBubble() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  /**
+   * How far the *other* member has read, as an epoch instant: the server's
+   * watermark from the thread's payload, advanced live by their `read` frames.
+   * Own messages at or before it have been seen by the person they were sent
+   * to — the receipt shown beside their timestamp.
+   */
+  const [otherReadAt, setOtherReadAt] = useState<number | null>(null);
+  /**
+   * Bumped when a message for the open thread arrives over the socket: the
+   * thread re-reads on that bump rather than on a navigation, so a new
+   * message lands in the conversation the reader is already looking at.
+   */
+  const [threadArrived, setThreadArrived] = useState(0);
+  // The realtime half. `room: "global"` is the room every chat socket shares,
+  // so a message sent anywhere reaches every signed-in page's bubble; the
+  // connection is also what says whether the slow half below is needed at all.
+  const { isConnected, lastMessage, send, sendRead } = useWebSocket({ room: "global" });
+  // The composer's half of the typing indicator: frames go out on this same
+  // socket, so no second connection exists just to say someone is typing.
+  const announcer = useTypingAnnouncer(send, selected?.id ?? null);
 
   /**
    * Re-reads the conversation list — the badge's whole data source.
@@ -116,9 +140,11 @@ export function ChatBubble() {
   }, []);
 
   // The badge has to be right while the panel is shut, so the list loads as
-  // soon as the reader is signed in and is re-read on a slow poll — the only
-  // thing that can change it from outside this component is somebody else
-  // sending a message.
+  // soon as the reader is signed in — and what used to *keep* it right, a
+  // slow poll, now belongs to the socket: a message arriving over `/ws`
+  // re-reads this list in the moment, and the interval below exists only for
+  // as long as no socket answers, so a dead realtime channel degrades into
+  // the old polling rather than into a badge frozen at its last read.
   //
   // Not on the messages page: that page reads the same list itself, so a
   // hidden bubble polling it would only be a second reader of one endpoint.
@@ -128,18 +154,60 @@ export function ChatBubble() {
   useEffect(() => {
     if (!isAuthenticated || pathname === "/messages") return;
     void refreshConversations();
+  }, [isAuthenticated, pathname, refreshConversations]);
+
+  // The fallback beat: while — and only while — nothing is carrying updates
+  // in real time.
+  useEffect(() => {
+    if (!isAuthenticated || pathname === "/messages" || isConnected) return;
     const timer = setInterval(() => void refreshConversations(), 30_000);
     return () => clearInterval(timer);
-  }, [isAuthenticated, pathname, refreshConversations]);
+  }, [isAuthenticated, pathname, isConnected, refreshConversations]);
 
   // Opening re-reads too, so the panel never opens on the poll's last answer.
   useEffect(() => {
     if (open) void refreshConversations();
   }, [open, refreshConversations]);
 
-  // Keyed on the id alone: closing and reopening the panel must not re-fetch
-  // a thread the reader is already looking at.
+  // Keyed on the id alone — plus the socket's bump below: closing and
+  // reopening the panel must not re-fetch a thread the reader is already
+  // looking at, but a message that arrives for it must.
   const selectedId = selected?.id;
+
+  // A different conversation means a different counterpart: the old thread's
+  // watermark says nothing about this one's.
+  useEffect(() => {
+    setOtherReadAt(null);
+  }, [selectedId]);
+
+  // Realtime: the socket is the fast path. Any message anywhere re-reads the
+  // conversation list — that is where the unread total comes from — and one
+  // for the open thread bumps the effect below too. The messages page owns
+  // this list while it is open, so the bubble stays out of its way there.
+  useEffect(() => {
+    if (!lastMessage || pathname === "/messages") return;
+    // A receipt: the counterpart saying how far they have caught up. It counts
+    // only for the open thread, only from the member on the other side of it,
+    // and only forward — the watermark never walks back.
+    if (lastMessage.type === "read") {
+      const { at, userId } = lastMessage;
+      if (
+        typeof at === "number" &&
+        lastMessage.conversationId === selectedId &&
+        typeof userId === "string" &&
+        userId === selected?.otherUserId
+      ) {
+        setOtherReadAt((current) => (current === null ? at : Math.max(current, at)));
+      }
+      return;
+    }
+    if (lastMessage.type !== "message" && lastMessage.type !== "notification") return;
+    void refreshConversations();
+    if (typeof lastMessage.conversationId === "string" && lastMessage.conversationId === selectedId) {
+      setThreadArrived((count) => count + 1);
+    }
+  }, [lastMessage, pathname, selectedId, selected?.otherUserId, refreshConversations]);
+
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
@@ -157,6 +225,17 @@ export function ChatBubble() {
       .then((payload) => {
         if (cancelled) return;
         setMessages(Array.isArray(payload.messages) ? payload.messages : []);
+        // Their watermark: how far the counterpart had read as of their last
+        // open — everything this member sent before it has been seen.
+        const theirs = typeof payload.otherMember?.lastReadAt === "string"
+          ? Date.parse(payload.otherMember.lastReadAt)
+          : NaN;
+        setOtherReadAt(Number.isNaN(theirs) ? null : theirs);
+        // …and this open just moved *our* watermark in the database. Saying so
+        // over the socket is how the other side hears, in the moment, that
+        // their words landed — with the server's instant, not the browser's.
+        const ours = typeof payload.lastReadAt === "string" ? Date.parse(payload.lastReadAt) : NaN;
+        if (!Number.isNaN(ours)) sendRead(selectedId, ours);
         // This request also marks the thread read server-side, so the list is
         // re-read immediately — the badge is the panel's own promise, and it
         // has to clear the moment the reader has seen the thread.
@@ -171,7 +250,7 @@ export function ChatBubble() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, refreshConversations]);
+  }, [selectedId, threadArrived, refreshConversations, sendRead]);
 
   // Newest message at the bottom of a scrollable panel, as on the messages page.
   useEffect(() => {
@@ -213,6 +292,9 @@ export function ChatBubble() {
     setSending(true);
     setMessages((prev) => [...prev, pendingMessage]);
     setDraft("");
+    // The words are gone from the composer and on their way; the other side
+    // should stop seeing dots for them.
+    announcer.release();
 
     try {
       const response = await fetch("/api/messages", {
@@ -229,6 +311,11 @@ export function ChatBubble() {
       setMessages((prev) => prev.map((item) => (item.id === tempId ? saved : item)));
       // The conversation list's preview and time just changed with it.
       void refreshConversations();
+      // …and the rest of the world needs telling. The API has persisted the
+      // row; this says it exists, so every recipient's list re-reads in the
+      // moment instead of on their next beat. A closed socket sends nothing —
+      // which is exactly when their fallback poll is already running.
+      send({ type: "message", conversationId: selected.id });
     } catch {
       setMessages((prev) => prev.filter((item) => item.id !== tempId));
       setDraft(content);
@@ -310,38 +397,50 @@ export function ChatBubble() {
                   <p role="alert" className="p-2 text-sm text-red-600">
                     {threadError}
                   </p>
-                ) : messages.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No messages yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={cn("flex", msg.senderId === readerId ? "justify-end" : "justify-start")}
-                      >
+                    {messages.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No messages yet.</p>
+                    )}
+                    {messages.map((msg) => {
+                      // A message of mine the counterpart's watermark covers
+                      // has been opened by them — the receipt, in the same
+                      // small type as the time it sits beside.
+                      const readByThem =
+                        msg.senderId === readerId &&
+                        otherReadAt !== null &&
+                        Date.parse(msg.createdAt) <= otherReadAt;
+                      return (
                         <div
-                          className={cn(
-                            "max-w-[80%] rounded-lg px-2.5 py-1.5",
-                            msg.senderId === readerId
-                              ? "bg-brand-blue text-white"
-                              : "bg-surface-light-blue",
-                          )}
+                          key={msg.id}
+                          className={cn("flex", msg.senderId === readerId ? "justify-end" : "justify-start")}
                         >
-                          <p className="break-words text-sm">{msg.content}</p>
-                          <span
+                          <div
                             className={cn(
-                              "text-[10px]",
-                              msg.senderId === readerId ? "text-blue-100" : "text-muted-foreground",
+                              "max-w-[80%] rounded-lg px-2.5 py-1.5",
+                              msg.senderId === readerId
+                                ? "bg-brand-blue text-white"
+                                : "bg-surface-light-blue",
                             )}
                           >
-                            {new Date(msg.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
+                            <p className="break-words text-sm">{msg.content}</p>
+                            <span
+                              className={cn(
+                                "text-[10px]",
+                                msg.senderId === readerId ? "text-blue-100" : "text-muted-foreground",
+                              )}
+                            >
+                              {new Date(msg.createdAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                              {readByThem && <> · Read</>}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                    <TypingIndicator conversationId={selected.id} />
                     <div ref={messagesEndRef} />
                   </div>
                 )}
@@ -358,7 +457,10 @@ export function ChatBubble() {
                     placeholder="Type a message..."
                     aria-label="Message text"
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) => {
+                    setDraft(event.target.value);
+                    announcer.onType();
+                  }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

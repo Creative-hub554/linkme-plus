@@ -254,9 +254,10 @@ const CANNED: Record<string, StubPayload> = {
     results: { users: [{ id: "user-2", username: "maya_designs", displayName: "Maya Chen", isFollowing: false }] },
   },
   "/api/messages": { conversations: [conversation] },
-  // The Social strip's listing, with one member online and one not: the row
-  // as a reader meets it — name, dot, and the words that say which dot it is
-  // — rather than the empty block a bare stub would leave to audit.
+  // The Social strip's listing: one member online, one idle. The strip drops
+  // the idle row and draws the live one — name, dot, and the words that say
+  // which dot it is — so the audit judges a real row rather than the empty
+  // block a bare stub would leave to audit.
   "/api/presence": {
     users: [
       { userId: "user-1", displayName: "Theo Wu", avatarUrl: null, online: true },
@@ -1365,6 +1366,15 @@ const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => Reac
       <svg aria-hidden="true" />
     </DisclosureButton>
   ),
+  "../components/chat/message-reactions.tsx#MessageReactions": (MessageReactions) => (
+    <MessageReactions
+      reactions={[
+        { type: "heart", count: 2, mine: true },
+        { type: "fire", count: 1, mine: false },
+      ]}
+      onToggle={() => {}}
+    />
+  ),
   "../components/ui/toggle-button.tsx#ToggleButton": (ToggleButton) => (
     <ToggleButton pressed={false}>Show</ToggleButton>
   ),
@@ -1831,6 +1841,8 @@ const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KIND
   "../components/profile/member-list-dialog.tsx#MemberListDialog": "nothing",
   "../components/profile/profile-cover.tsx#CoverCameraIcon": "nothing",
   "../components/profile/profile-cover.tsx#CoverEditIcon": "nothing",
+  "../components/providers/presence-provider.tsx#PresenceProvider": "nothing",
+  "../components/providers/room-provider.tsx#RoomProvider": "nothing",
   "../components/providers/theme-provider.tsx#ThemeProvider": "nothing",
   "../components/providers/theme-sync.tsx#ThemeSync": "nothing",
   "../components/realtime/typing-indicator.tsx#TypingIndicator": "nothing",

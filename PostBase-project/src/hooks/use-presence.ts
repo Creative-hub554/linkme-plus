@@ -1,70 +1,45 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useWebSocket } from "@/hooks/use-websocket";
+import { useCallback } from "react";
+import { usePresenceFlags } from "@/hooks/use-presence-flags";
 
-interface PresenceInfo {
-  online: boolean;
-  lastSeen: number;
-}
+/**
+ * One indicator's read of who is here — an adapter, not another answer.
+ *
+ * This hook used to own a socket of its own and listen to `user:online` /
+ * `user:offline` frames alone: no roster, no snapshot, nothing that had been
+ * true before it connected. The strip read the roster and the snapshot, so the
+ * two disagreed about the same member — green in one place, grey in the other
+ * — because they were genuinely different questions. It now delegates to
+ * {@link usePresenceFlags}, the hook the strip and the listings read, so there
+ * is one roster, one socket, and one set of rules; a surface cannot disagree
+ * with the strip because there is no second opinion left to hold.
+ *
+ * `active` is that hook's flag: `false` when the answer is handed in from
+ * elsewhere (a conversation column that already asked passes its verdict down),
+ * so a list of twenty indicators is one connection rather than twenty. A
+ * caller that never passes the flag — a lone indicator — asks for itself,
+ * which is the shape the words below were written for.
+ *
+ * The verdict arrives as `boolean | null`, where `null` is *not yet asked*.
+ * The listings draw nothing for that (a row with no answer claims nothing),
+ * but a lone indicator has no "unasked" sentence to say: it has always fallen
+ * back to "Offline" before an answer, and keeps doing so — the honesty rule
+ * lives where the listing draws, because that is where silence is possible.
+ */
+export function usePresence(active = true) {
+  const { isOnline, lastSeenAt, isConnected, send } = usePresenceFlags(active);
 
-export function usePresence(_targetUserId?: string) {
-  const [presenceMap, setPresenceMap] = useState<Map<string, PresenceInfo>>(new Map());
-  const { isConnected, send, lastMessage } = useWebSocket({
-    room: "presence",
-  });
-
-  // Track online users
-  useEffect(() => {
-    if (!lastMessage) return;
-
-    switch (lastMessage.type) {
-      case "user:online": {
-        const { userId } = lastMessage;
-        if (typeof userId !== "string") break;
-        setPresenceMap((prev) => {
-          const next = new Map(prev);
-          next.set(userId, {
-            online: true,
-            lastSeen: Date.now(),
-          });
-          return next;
-        });
-        break;
-      }
-
-      case "user:offline": {
-        const { userId } = lastMessage;
-        if (typeof userId !== "string") break;
-        setPresenceMap((prev) => {
-          const next = new Map(prev);
-          next.set(userId, {
-            online: false,
-            lastSeen: Date.now(),
-          });
-          return next;
-        });
-        break;
-      }
-    }
-  }, [lastMessage]);
-
-  // Check if specific user is online
+  /** A drawn verdict: `null` (never asked) folds to away, as the words below have always done. */
   const isUserOnline = useCallback(
-    (userId: string): boolean => {
-      const presence = presenceMap.get(userId);
-      return presence?.online ?? false;
-    },
-    [presenceMap]
+    (userId: string): boolean => isOnline(userId) === true,
+    [isOnline],
   );
 
   // Get user's last seen time
   const getLastSeen = useCallback(
-    (userId: string): number | null => {
-      const presence = presenceMap.get(userId);
-      return presence?.lastSeen ?? null;
-    },
-    [presenceMap]
+    (userId: string): number | null => lastSeenAt(userId),
+    [lastSeenAt],
   );
 
   // Format last seen time
@@ -88,7 +63,7 @@ export function usePresence(_targetUserId?: string) {
       if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
       return `${Math.floor(diff / 86400000)}d ago`;
     },
-    [getLastSeen]
+    [getLastSeen],
   );
 
   // Request presence for specific user
@@ -96,7 +71,7 @@ export function usePresence(_targetUserId?: string) {
     (userId: string) => {
       send({ type: "check-presence", userId });
     },
-    [send]
+    [send],
   );
 
   return {

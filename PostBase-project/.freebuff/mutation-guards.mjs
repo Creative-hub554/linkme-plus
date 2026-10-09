@@ -799,6 +799,17 @@ const CONVENTION_MUTATIONS_ALL = [
     replace: "      if (false) {\n",
     test: clientEnvTest,
   }),
+  // The public-name predicate with its `NEXT_PUBLIC_` half dropped, leaving only the
+  // bundler's own allowance: `isPublicEnvName` is one decision written as two, and the
+  // meta-test's single fixture cannot tell which half went dark. `client-env.test.ts`
+  // catches it from four cases — every public name it leaves alone, and the graph cases
+  // beside them — so the margin is the real tree rather than one fixture. Measured by
+  // writing the mutation first: 4 of 30 fail, file restored byte-identical after.
+  limb("client-env: the `NEXT_PUBLIC_` prefix stops counting as public", {
+    find: "return name.startsWith(PUBLIC_ENV_PREFIX) || BUNDLER_INLINED_NAMES.has(name);",
+    replace: "return BUNDLER_INLINED_NAMES.has(name);",
+    test: clientEnvTest,
+  }),
   limb("beat-clock: the half of the carousel named by the vocabulary stops counting", {
     find: `const AMBIENT_HOOK_NAMES = new Set([
   "useAmbientCarousel",

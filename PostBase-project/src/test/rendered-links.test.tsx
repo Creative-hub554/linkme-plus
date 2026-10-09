@@ -487,7 +487,7 @@ describe("every link the chrome advertises", () => {
     const routes = servedRoutes();
     expect(routes.size, "no routes were discovered — the check would prove nothing").toBeGreaterThan(0);
 
-    // A plain render: no providers, no session, no menus — and the fourteen
+    // A plain render: no providers, no session, no menus — and the thirteen
     // links that are the reason this file exists.
     const { Footer } = await import("@/components/layout/footer");
     const footer = mountSurface(<Footer />, { providers: "none" });

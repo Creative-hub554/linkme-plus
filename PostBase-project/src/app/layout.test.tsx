@@ -29,6 +29,16 @@ vi.mock("@/components/providers/theme-provider", () => ({
   ThemeProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/components/providers/theme-sync", () => ({ ThemeSync: () => null }));
+// Marked rather than passed through: what this provider is for is the wiring
+// — one shared room connection *around* the chrome and the children — and the
+// real one renders no DOM of its own, so a rendered assertion could not tell
+// it was there. What it does (one socket for every consumer claiming it) is
+// its own test.
+vi.mock("@/components/providers/room-provider", () => ({
+  RoomProvider: ({ children }: { children: ReactNode }) => (
+    <div data-testid="room-provider">{children}</div>
+  ),
+}));
 vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children: ReactNode }) => children,
 }));
@@ -55,6 +65,12 @@ describe("the root layout", () => {
     expect(html).toContain('data-testid="bottom-nav"');
     expect(html).toContain('data-testid="footer"');
     expect(html).toContain('data-testid="chat-bubble"');
+    // The shared room connection wraps all of it — chrome and children
+    // alike — because every consumer of that room lives below here.
+    expect(html).toContain('data-testid="room-provider"');
+    expect(html.indexOf("room-provider")).toBeLessThan(html.indexOf('data-testid="main-nav"'));
+    expect(html.indexOf("room-provider")).toBeLessThan(html.indexOf("<p>page body</p>"));
+    expect(html.indexOf("room-provider")).toBeLessThan(html.indexOf('data-testid="chat-bubble"'));
   });
 
   it("applies the theme before first paint with the blocking init script", () => {

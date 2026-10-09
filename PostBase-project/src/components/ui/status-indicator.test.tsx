@@ -42,6 +42,16 @@ describe("StatusIndicator", () => {
     expect(offline).toContain("bg-gray-400");
   });
 
+  test("cuts the mark out of whatever it lands on with a ring in the page's colour", () => {
+    const html = renderToStaticMarkup(<StatusIndicator label="Online" tone="success" size="sm" />);
+    // On the mark itself rather than the wrapper: the dot is what sits half
+    // over a photograph, and the ring is the seam between the picture and the
+    // state. It is the background token rather than a fixed white so the seam
+    // flips with the theme — a white ring would glow on a dark screen.
+    expect(html).toMatch(/<span aria-hidden="true"[^>]*ring-2/);
+    expect(html).toMatch(/<span aria-hidden="true"[^>]*ring-background/);
+  });
+
   test("renders phrasing content, so it is valid inside a control", () => {
     // It sits inside conversation rows and notification items, which are
     // buttons: a `div` in there is invalid markup, and the browser's parser

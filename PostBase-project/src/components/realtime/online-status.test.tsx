@@ -66,4 +66,26 @@ describe("OnlineStatus", () => {
     // A coloured dot has no text, so leaving it exposed only adds noise.
     expect(html).toMatch(/<span aria-hidden="true"[^>]*rounded-full/);
   });
+
+  test("draws the verdict a list passes down rather than its own", () => {
+    // The list above asked once — through the same channel every presence
+    // surface reads — and hands the answer to each row. Its verdict wins over
+    // anything this indicator would have asked for itself, which is what keeps
+    // twenty rows to one connection and keeps them agreeing with the strip.
+    presence.online = false;
+    const html = renderToStaticMarkup(<OnlineStatus userId="someone" presence={true} />);
+    expect(html).toContain("Online");
+    expect(html).not.toContain("Offline");
+  });
+
+  test("says away for a verdict that has not arrived yet, rather than drawing nothing", () => {
+    // `null` is the channel's "not answered yet". A listing draws no status
+    // for that — it may never ask — but a lone indicator has never had an
+    // "unasked" sentence, and "Offline" is the words it has always said while
+    // waiting. The alternative this guards against is a row with no status at
+    // all, flickering in as the roster lands.
+    const html = renderToStaticMarkup(<OnlineStatus userId="someone" presence={null} />);
+    expect(html).toContain("Offline");
+    expect(html).not.toContain("Online");
+  });
 });

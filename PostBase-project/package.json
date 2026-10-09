@@ -23,7 +23,8 @@
     "mutation:guards": "node .freebuff/mutation-guards.mjs",
     "mutation:coverage": "node .freebuff/mutation-coverage.mjs",
     "mutation:preflight": "node .freebuff/mutation-preflight.mjs",
-    "skill:index": "node .freebuff/build-skill-index.mjs",    "lint": "npm run stages:lint && eslint .",
+    "skill:index": "node .freebuff/build-skill-index.mjs",
+    "lint": "npm run stages:lint && eslint .",
     "lint:ci": "npm run stages:lint && eslint . --max-warnings 0",
     "lint:baseline": "node .freebuff/lint-baseline.mjs",
     "typecheck": "tsc --noEmit",
@@ -91,6 +92,7 @@
     "@types/node": "^24.19.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitejs/plugin-rsc": "^0.5.35",
     "@vitest/coverage-v8": "^4.1.11",
@@ -101,6 +103,7 @@
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.28.1"
+    "wrangler": "^4.28.1",
+    "ws": "^8.22.0"
   }
 }

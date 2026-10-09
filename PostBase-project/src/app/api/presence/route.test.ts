@@ -93,6 +93,19 @@ describe("GET /api/presence", () => {
     const roster = await rosterFrom(GET, "GET");
     expect(roster.every((member) => member.online === false)).toBe(true);
   });
+
+  test("answers 500 when the roster cannot be read, and refuses by name", async () => {
+    // The plain read fails the same way the heartbeat does, and refuses the
+    // same way too: the route's own words, not a half roster and not the
+    // database's error handed to the visitor.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    fakeDb.failNextSelect(users, new Error("database unreachable"));
+
+    const response = await GET(request());
+    expect(response.status).toBe(500);
+    const payload = (await response.json()) as { error: string };
+    expect(payload.error).toBe("Failed to load who is online");
+  });
 });
 
 describe("POST /api/presence", () => {

@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
-import { blocks, conversations, conversationMembers, messages, users, profiles } from "@/lib/db/schema";
+import { blocks, conversations, conversationMembers, messages, reactions, users, profiles } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
-import { eq, and, desc, sql, count, gt } from "drizzle-orm";
+import { eq, and, desc, sql, count, gt, inArray } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
 import { blockedEitherWay } from "@/lib/db/blocks";
+import type { MessageReactionSummary } from "@/lib/chat-reactions";
 
 export async function GET(request: Request) {
   const { session, error } = await requireAuth(request);
@@ -58,12 +59,60 @@ export async function GET(request: Request) {
         .where(eq(messages.conversationId, conversationId))
         .orderBy(messages.createdAt);
 
-      // Get other member
+      // The reactions on these messages — one read for the whole thread,
+      // grouped here rather than in the client: the count a chip wears and
+      // whether the reader is part of it are arithmetic over rows only this
+      // route can read, and membership was checked above. A type the
+      // vocabulary does not know still counts (and the chip draws it by its
+      // stored name) — a row written before a type was retired must not
+      // vanish from the thread it belongs to.
+      const reactionRows =
+        msgs.length === 0
+          ? []
+          : await db
+              .select({
+                targetId: reactions.targetId,
+                userId: reactions.userId,
+                type: reactions.type,
+              })
+              .from(reactions)
+              .where(
+                and(
+                  eq(reactions.targetType, "message"),
+                  inArray(reactions.targetId, msgs.map((msg) => msg.id)),
+                ),
+              );
+      const reactionsByMessage = new Map<string, MessageReactionSummary[]>();
+      for (const row of reactionRows) {
+        const forMessage = reactionsByMessage.get(row.targetId) ?? [];
+        const existing = forMessage.find((entry) => entry.type === row.type);
+        if (existing) {
+          existing.count += 1;
+          existing.mine = existing.mine || row.userId === session.user.id;
+        } else {
+          forMessage.push({
+            type: row.type,
+            count: 1,
+            mine: row.userId === session.user.id,
+          });
+        }
+        reactionsByMessage.set(row.targetId, forMessage);
+      }
+      const messagesWithReactions = msgs.map((msg) => ({
+        ...msg,
+        reactions: reactionsByMessage.get(msg.id) ?? [],
+      }));
+
+      // Get other member — with the watermark of *their* reads: everything
+      // this member sent before it is a message they have opened the thread
+      // and seen, which is what turns a plain timestamp on the sender's side
+      // into a read receipt.
       const [otherMember] = await db
         .select({
           userId: conversationMembers.userId,
           name: profiles.displayName,
           avatarUrl: profiles.avatarUrl,
+          lastReadAt: conversationMembers.lastReadAt,
         })
         .from(conversationMembers)
         .innerJoin(profiles, eq(conversationMembers.userId, profiles.userId))
@@ -74,8 +123,11 @@ export async function GET(request: Request) {
           )
         );
 
-      // Mark as read
-      await db
+      // Mark as read — and take the new watermark back with it. The reader
+      // announces exactly this instant over the socket, so the counterpart
+      // compares against the server's clock, the same one that stamped the
+      // messages.
+      const [marked] = await db
         .update(conversationMembers)
         .set({ lastReadAt: new Date() })
         .where(
@@ -83,12 +135,14 @@ export async function GET(request: Request) {
             eq(conversationMembers.conversationId, conversationId),
             eq(conversationMembers.userId, session.user.id)
           )
-        );
+        )
+        .returning({ lastReadAt: conversationMembers.lastReadAt });
 
       return successResponse({
         conversation,
-        messages: msgs,
+        messages: messagesWithReactions,
         otherMember,
+        lastReadAt: marked?.lastReadAt ?? null,
       });
     }
 

@@ -16,7 +16,7 @@ interface TypingUser {
 
 export function TypingIndicator({ conversationId, className }: TypingIndicatorProps) {
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
-  const { lastMessage } = useWebSocket();
+  const { lastMessage, userId: selfId } = useWebSocket();
 
   useEffect(() => {
     if (!lastMessage || lastMessage.conversationId !== conversationId) return;
@@ -25,6 +25,10 @@ export function TypingIndicator({ conversationId, className }: TypingIndicatorPr
       case "typing": {
         const { userId, timestamp } = lastMessage;
         if (typeof userId !== "string" || typeof timestamp !== "number") break;
+        // Never the author's own: a surface announces on one socket and
+        // listens on another, so the hub's "every socket but the sending one"
+        // rule still delivers the typist's announcement to their own panel.
+        if (selfId && userId === selfId) break;
         setTypingUsers((prev) => {
           // Don't add duplicate users
           if (prev.some((u) => u.userId === userId)) {
@@ -54,7 +58,7 @@ export function TypingIndicator({ conversationId, className }: TypingIndicatorPr
         break;
       }
     }
-  }, [lastMessage, conversationId]);
+  }, [lastMessage, conversationId, selfId]);
 
   // Auto-remove stale typing indicators after 5 seconds
   useEffect(() => {

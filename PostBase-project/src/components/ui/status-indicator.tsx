@@ -48,6 +48,14 @@ const toneClasses: Record<StatusTone, string> = {
  * button. The dot is a span too, so a caller's `className` lands on the wrapper
  * exactly as it would on a hand-written dot's parent.
  *
+ * The mark wears a ring in the page's own colour, and that ring is the seam.
+ * The dot lands on avatars — half over a photograph — where a bare eight-pixel
+ * circle of green or grey has to hold against whatever the picture is doing
+ * underneath it, and the ring is what cuts the mark out of the photo. It is the
+ * `background` token rather than a fixed white so the seam follows the theme:
+ * white in light mode, the dark page colour in dark, instead of a white halo
+ * glowing around every dot on a dark screen.
+ *
  * The text stays muted whatever the tone: the colour belongs to the mark, and
  * colouring the sentence as well would be the same signal delivered twice.
  */
@@ -62,7 +70,10 @@ export function StatusIndicator({
     <span className={cn("inline-flex items-center gap-2", className)}>
       {/* Decorative: the words below carry the state either way, so exposing a
           span with no text only adds noise. */}
-      <span aria-hidden="true" className={cn("rounded-full", sizeClasses[size], toneClasses[tone])} />
+      <span
+        aria-hidden="true"
+        className={cn("rounded-full ring-2 ring-background", sizeClasses[size], toneClasses[tone])}
+      />
       <span className={cn("text-xs text-muted-foreground", !showText && "sr-only")}>{label}</span>
     </span>
   );
