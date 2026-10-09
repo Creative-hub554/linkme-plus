@@ -35,21 +35,23 @@ describe("mainNavItems", () => {
 });
 
 describe("socialNavItems", () => {
-  test("is the four surfaces under Social, in the order the strip draws them", () => {
-    expect(socialNavItems.map((item) => item.label)).toEqual([
-      "Feed",
-      "Groups",
-      "Pages",
-      "Messages",
-    ]);
+  test("is the one tab the strip draws, and only that", () => {
+    // The Groups, Pages and Messages tabs were removed from the strip at the
+    // reader's request. They are not coming back, and Feed is what is left —
+    // a regression that re-adds any of the three fails here.
+    expect(socialNavItems.map((item) => item.label)).toEqual(["Feed"]);
   });
 
-  test("covers exactly the paths Social stands for", () => {
-    // The strip's reach and the header's Social item have to be the same set: a
-    // path with a strip but no lit header, or the other way round, would be a
-    // reader being told two different things.
+  test("sits inside the paths Social still stands for", () => {
+    // The strip offers one tab, but the Social module still spans all four
+    // surfaces: a deep link into a conversation or a Page has to keep the
+    // header lit all the same, so the module may not be narrowed to match the
+    // tabs. What must hold is that nothing the strip offers falls outside it.
     const social = mainNavItems.find((item) => item.label === "Social");
-    expect(social?.matches).toEqual(socialNavItems.map((item) => item.href));
+    expect(social?.matches).toEqual(["/feed", "/groups", "/pages", "/messages"]);
+    for (const item of socialNavItems) {
+      expect(social?.matches).toContain(item.href);
+    }
   });
 });
 
