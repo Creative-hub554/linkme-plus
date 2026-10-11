@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { BoostManager } from "@/components/ads/boost-manager";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -315,6 +316,12 @@ export default function PageView() {
               );
             })
           )}
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="mt-6" aria-label="Boosted posts">
+          <BoostManager pageId={page.id} />
         </section>
       )}
 

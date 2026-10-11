@@ -1,5 +1,6 @@
 "use client";
 
+import { CampaignReviewQueue } from "@/components/admin/campaign-review-queue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -68,6 +69,7 @@ export default function AdminPage() {
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
         </TabsList>
 
         <TabsContent value="reports" className="mt-4">
@@ -148,6 +150,25 @@ export default function AdminPage() {
             <CardContent className="p-8 text-center">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
               <p className="text-sm text-muted-foreground">Content moderation tools coming soon</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/*
+          The one section that is not a placeholder, and the reason the tab
+          exists: a boosted post cannot run until somebody who is not the
+          advertiser has said it may, and this is where that happens.
+        */}
+        <TabsContent value="campaigns" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Boosted post campaigns</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Campaigns that have been paid for and are waiting for a decision from the platform.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <CampaignReviewQueue />
             </CardContent>
           </Card>
         </TabsContent>

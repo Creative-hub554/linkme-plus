@@ -247,3 +247,52 @@ describe("the post card's reaction", () => {
     );
   });
 });
+
+/**
+ * The same card, paid for.
+ *
+ * A boost buys placement and nothing else: the post renders as every other
+ * post does, with two additions the advertising rules ask for — it says it is
+ * Sponsored, and a reader can put it away. What the campaign also gets (the
+ * impression and click counts) is the server's business and is pinned against
+ * the route that counts them.
+ */
+describe("the post card's sponsored placement", () => {
+  test("says it is sponsored, offers the Page behind it, and can be put away", async () => {
+    stubFetch({});
+    const ui = mountSurface(
+      <PostCard
+        {...CARD}
+        sponsored={{
+          campaignId: "33333333-3333-4333-8333-333333333333",
+          pageUsername: "northside",
+          targetLocation: "Lisbon",
+        }}
+      />,
+      { providers: "tooltip" },
+    );
+
+    expect(ui.container.textContent).toContain("Sponsored");
+    expect(ui.container.textContent).toContain("· Lisbon");
+    expect(ui.container.querySelector('a[href="/pages/northside"]')).not.toBeNull();
+
+    const hide = [...ui.container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Hide",
+    ) as HTMLElement;
+    await ui.click(hide);
+
+    // Gone rather than greyed: the control is advertised as a way to put the
+    // placement away, and a placeholder is not away.
+    expect(ui.container.textContent).not.toContain("Colour study");
+  });
+
+  test("renders no placement at all on an ordinary post", () => {
+    stubFetch({});
+    const ui = mountSurface(<PostCard {...CARD} />, { providers: "tooltip" });
+
+    expect(ui.container.textContent).not.toContain("Sponsored");
+    expect([...ui.container.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Hide")).toBe(
+      false,
+    );
+  });
+});

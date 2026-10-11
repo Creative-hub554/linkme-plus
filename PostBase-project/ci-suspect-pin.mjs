@@ -59,7 +59,7 @@ export const files = {
   ".freebuff/apply-collect-baselines.mjs": "c804eb03816d8251a0932a9d4503208dcbc5d7a4",
   ".freebuff/build-contents.mjs": "5a3c1e4d3639ccf4ad345d128ff83dc163b73795",
   ".freebuff/ci-suspect-probe.mjs": "7f2aa40effbae1dd68aa0f9a06f8079d631d3a29",
-  ".freebuff/ci.mjs": "c0640648eda01f777e96852d0d048ca0e8109568",
+  ".freebuff/ci.mjs": "225a1dfe73cbf99faba21ea09775489c9d5c3475",
   ".freebuff/collect-apply.mjs": "2e12a5bbd12b165575da17cb76fa71a5e4660880",
   ".freebuff/collect-budget-baselines.mjs": "b2d757d381a325adc94e743084d763bc95f5aaeb",
   ".freebuff/collect-budget-soft.mjs": "1ba522fec3a00c11613fc50d8d45291df9768d44",

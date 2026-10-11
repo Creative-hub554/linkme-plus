@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,20 @@ interface PostCardProps {
   /** Live comment/reaction activity for this post, pushed over Realtime. */
   activity?: PostActivity;
   /**
+   * Set when a boosted campaign is paying for this post's place in the feed.
+   *
+   * The card marks it Sponsored, counts the view for the campaign, and offers
+   * the two controls every paid placement owes a reader: a way to the Page
+   * behind it, and a way to put it away. Nothing else about the post changes —
+   * a boost buys placement, and the same audience rule decided this post could
+   * be in the reader's feed at all.
+   */
+  sponsored?: {
+    campaignId: string;
+    pageUsername?: string | null;
+    targetLocation?: string | null;
+  };
+  /**
    * Set only for the reader's own posts. Its presence is what turns the card's
    * menu into delete instead of report — the page decides, because it is the
    * one that knows who is signed in and owns the list the card lives in.
@@ -124,7 +139,23 @@ const stickers = ["❤️", "😂", "🔥", "👏", "🎉", "😍"];
  * `onReactionSettled`'s written rows is how a confirmed write reaches a card's
  * colour, even mid-scroll.
  */
-export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false, onReactionSettled }: PostCardProps) {
+/**
+ * Tell the campaign it was seen, or that its page was opened.
+ *
+ * One function rather than a fetch in each place because the two calls are the
+ * same request with one word changed, and because a beacon that fails is not an
+ * error: a reader's feed is not where a campaign's counter problem belongs to
+ * surface.
+ */
+function reportBoostEvent(campaignId: string, type: "impression" | "click") {
+  void fetch("/api/boosts/events", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ campaignId, type }),
+  }).catch(() => {});
+}
+
+export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, sponsored, onDelete, onUpdate, edited = false, onReactionSettled }: PostCardProps) {
   // The reaction is the row's state the card holds in escrow, exactly as the
   // listing card's heart is: `useState` reads the prop once, and a parent whose
   // rows move under a still-mounted card leaves a stale react behind unless the
@@ -139,6 +170,25 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
+
+  // A paid placement owes the campaign a count and the reader a way out.
+  //
+  // The impression is reported once per mount — a re-render is not a second
+  // view — and both reports are fire-and-forget on purpose: this is a beacon
+  // fired from a reader's feed, and a failure the reader cannot act on is
+  // noise in their afternoon rather than an error they should see.
+  const impressionReported = useRef(false);
+  const [sponsoredHidden, setSponsoredHidden] = useState(false);
+
+  useEffect(() => {
+    if (!sponsored || impressionReported.current) return;
+    impressionReported.current = true;
+    reportBoostEvent(sponsored.campaignId, "impression");
+  }, [sponsored]);
+
+  const visitSponsoredPage = () => {
+    if (sponsored) reportBoostEvent(sponsored.campaignId, "click");
+  };
   const [commentItems, setCommentItems] = useState<CommentItem[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -365,6 +415,11 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
     window.setTimeout(() => setNotice(null), 1800);
   };
 
+  // Hid by the reader, the card is gone rather than greyed: the control is
+  // advertised as a way to put the placement away, and a placeholder is not
+  // away. Every hook above has run by here, so the early return is legal.
+  if (sponsored && sponsoredHidden) return null;
+
   return (
     <Card
       id={`post-${id}`}
@@ -372,6 +427,30 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
       className={cn("overflow-visible border-surface-border/90 shadow-sm transition-shadow", pending ? "opacity-70" : "hover:shadow-md")}
     >
       <CardContent className="p-4 sm:p-5">
+        {sponsored && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-surface-border/70 bg-surface-light-blue/50 px-3 py-1.5">
+            <p className="min-w-0 truncate text-[11px] text-muted-foreground">
+              <span className="font-semibold uppercase tracking-wider text-navy-700">Sponsored</span>
+              {sponsored.targetLocation ? ` · ${sponsored.targetLocation}` : ""}
+            </p>
+            <div className="flex shrink-0 items-center gap-3">
+              <Link
+                href={`/pages/${sponsored.pageUsername ?? ""}`}
+                onClick={visitSponsoredPage}
+                className="text-[11px] font-semibold text-brand-blue hover:underline"
+              >
+                Visit page
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSponsoredHidden(true)}
+                className="text-[11px] font-medium text-muted-foreground transition-colors hover:text-navy-800"
+              >
+                Hide
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10 shrink-0 ring-2 ring-brand-blue/10">
             <AvatarImage src={author.avatar} alt={`${author.name}'s profile picture`} />

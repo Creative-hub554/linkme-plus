@@ -1378,6 +1378,15 @@ const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => Reac
   "../components/ui/toggle-button.tsx#ToggleButton": (ToggleButton) => (
     <ToggleButton pressed={false}>Show</ToggleButton>
   ),
+  // The panel's moment is a prop, and prop-less `MODE_COPY[mode]` has no entry
+  // to read — it throws rather than rendering something for the audit to judge.
+  // Given the least a caller gives, what the audit then checks is the part that
+  // is the same for all three: that it is a polite status region with a name,
+  // rather than a dialog nothing may act on. The three labels and headlines are
+  // pinned against each other in the component's own test, where they differ.
+  "../components/auth/auth-transition-overlay.tsx#AuthTransitionOverlay": (AuthTransitionOverlay) => (
+    <AuthTransitionOverlay mode="login" />
+  ),
   "../components/ui/switch.tsx#Switch": (Switch) => <Switch aria-label="Enable dark mode" />,
   "../components/ui/input.tsx#Input": (Input) => <Input aria-label="Email address" />,
   "../components/ui/textarea.tsx#Textarea": (Textarea) => <Textarea aria-label="Your bio" />,
