@@ -597,6 +597,41 @@ export const shortVideoCovers = pgTable("short_video_covers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ─── Media archive ────────────────────────────────────────────
+//
+// One row per R2 object the hourly archive pass moved to Google Drive: the
+// key it left behind, the Drive file id it became, and the two URLs — the
+// public R2 URL that is about to stop existing and the Drive URL that
+// replaces it everywhere in this database.
+//
+// The row is the archive's durable memory, and two flows depend on it being
+// exact rather than merely informational:
+//
+// - A run that dies between recording an object and deleting it comes back
+//   to the row, finishes the rewrite, and deletes — without re-uploading.
+//   `r2_key` is therefore the primary key: an object is archived once.
+// - Deleting a post, Page, or avatar that points at Drive must also delete
+//   the Drive file, but only ever files *this app put there* — a URL a client
+//   handed us could belong to a stranger's Drive. `deleteStoredObjects`
+//   consults this table's `new_url` before removing anything, so this row is
+//   the allow-list that keeps a delete inside the app's own files.
+//
+// There is deliberately no deletion or status column: rows are written once
+// and kept as the provenance of every Drive-hosted URL the app serves.
+export const archivedObjects = pgTable("archived_objects", {
+  r2Key: text("r2_key").primaryKey(),
+  driveFileId: text("drive_file_id").notNull(),
+  oldUrl: text("old_url").notNull(),
+  newUrl: text("new_url").notNull(),
+  contentType: varchar("content_type", { length: 100 }),
+  // Bigint-backed columns elsewhere use the string form to stay exact; the
+  // upload caps (100 MB at the largest) put every object far inside integer
+  // range, and a number keeps the pass's size comparison plain arithmetic.
+  sizeBytes: integer("size_bytes").notNull(),
+  md5Hex: varchar("md5_hex", { length: 32 }),
+  archivedAt: timestamp("archived_at").defaultNow().notNull(),
+});
+
 // ─── Categories ─────────────────────────────────────────────────
 export const categories = pgTable("categories", {
   id: uuid("id").defaultRandom().primaryKey(),

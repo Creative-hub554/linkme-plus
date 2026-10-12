@@ -106,5 +106,5 @@ export const files = {
   "vite.config.ts": "463d258077c8a8388bbdecaf07ada0be428a2db0",
   "vitest.config.ts": "708823f6e0b2d2318aa0990087266eb79a51d39e",
   "vitest.mutation.config.ts": "8175e1110ca2ddc20b3d197b1108dbae5ed8d5c4",
-  "wrangler.jsonc": "6e156adc28562b3124f637db4fe41a1a8809956e",
+  "wrangler.jsonc": "b0fca79aa0a17bbb984d05f3d26db605441b568f",
 };

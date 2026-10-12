@@ -1,18 +1,44 @@
-import { describe, expect, it } from "vitest";
-import { keyBelongsToUser, keyFromPublicUrl, replacedObjectUrl } from "./r2";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { deleteStoredObjects, keyBelongsToUser, keyFromPublicUrl, replacedObjectUrl } from "./r2";
+
+/**
+ * `deleteStoredObjects`' Drive half asks the mapping table which Drive-shaped
+ * URLs are this app's own before deleting anything — so the table is faked at
+ * its module seam here, while the Drive client talks to a stubbed `fetch`.
+ * Only `db` is mocked; the allow-list decision itself is the real code.
+ */
+const archiveDb = vi.hoisted(() => ({
+  rows: [] as Array<{ newUrl: string; driveFileId: string }>,
+  failWith: null as Error | null,
+}));
+
+vi.mock("@/lib/db", () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () =>
+          archiveDb.failWith ? Promise.reject(archiveDb.failWith) : Promise.resolve(archiveDb.rows),
+      }),
+    }),
+  },
+}));
 
 /**
  * The two decisions that stand between a stored URL and a `DeleteObjectCommand`.
  *
  * Neither of these talks to storage, and that is the point of testing them here:
- * `deleteStoredObjects` cannot be exercised without a bucket or a mocked SDK, but
- * the question it asks before deleting anything is pure, and it is the question
- * that can actually destroy somebody's file. `keyFromPublicUrl` decides whether a
- * URL is one of ours at all — media rows hold whatever they were handed, and
- * seeded demo posts point at arbitrary external hosts, so a guessed key would
- * delete something unrelated to the app — while `replacedObjectUrl` decides
- * whether a write displaced anything, which is what a Page's photo and cover
- * replacement is built on.
+ * `deleteStoredObjects`' R2 half cannot be exercised without a bucket or a
+ * mocked SDK, but the question it asks before deleting anything is pure, and it
+ * is the question that can actually destroy somebody's file. `keyFromPublicUrl`
+ * decides whether a URL is one of ours at all — media rows hold whatever they
+ * were handed, and seeded demo posts point at arbitrary external hosts, so a
+ * guessed key would delete something unrelated to the app — while
+ * `replacedObjectUrl` decides whether a write displaced anything, which is what
+ * a Page's photo and cover replacement is built on.
+ *
+ * The Drive half of `deleteStoredObjects` *is* exercised directly, at the end
+ * of this file: it deletes only what the `archived_objects` mapping table
+ * vouches for, and never throws.
  *
  * `PUBLIC_URL` is `https://test.r2.dev` from `src/test/setup.ts` — read at module
  * load, which is why the fixture values below are that prefix rather than
@@ -120,5 +146,118 @@ describe("replacedObjectUrl", () => {
     // And the near-miss that is not equal, so the guard cannot pass by always
     // returning nothing.
     expect(replacedObjectUrl(same, `${OURS}/avatars/page-1/other.png`)).toBe(same);
+  });
+});
+
+/**
+ * The archive's other home: URLs the hourly pass wrote into rows point at
+ * Google Drive now, and deleting the row must delete the file there too — but
+ * only files this app put there. The mapping table is the allow-list, and the
+ * tests below are the ones that keep a pasted stranger's Drive link from ever
+ * becoming a delete on the operator's credentials.
+ */
+describe("deleteStoredObjects, the Drive half", () => {
+  const DRIVE_LH3 = "https://lh3.googleusercontent.com/d/abc123";
+
+  function configureDrive() {
+    vi.stubEnv("GDRIVE_CLIENT_ID", "client-id");
+    vi.stubEnv("GDRIVE_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("GDRIVE_REFRESH_TOKEN", "refresh-token");
+  }
+
+  /** A `fetch` that answers the token endpoint and Drive's delete endpoint. */
+  function stubDriveFetch() {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, init });
+        if (url.includes("oauth2.googleapis.com")) {
+          return Response.json({ access_token: "token", expires_in: 3600 });
+        }
+        if (url.startsWith("https://www.googleapis.com/drive/v3/files/")) {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }) as typeof fetch,
+    );
+    return calls;
+  }
+
+  beforeEach(() => {
+    archiveDb.rows = [];
+    archiveDb.failWith = null;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("deletes only the archived files the mapping table records", async () => {
+    configureDrive();
+    archiveDb.rows = [{ newUrl: DRIVE_LH3, driveFileId: "drive-77" }];
+    const calls = stubDriveFetch();
+
+    const deleted = await deleteStoredObjects([
+      DRIVE_LH3,
+      // The right shape but no row vouches for it — a client-injected URL
+      // must not become a delete of somebody else's file.
+      "https://lh3.googleusercontent.com/d/unrecorded",
+      // A stranger's download link, same rule.
+      "https://drive.google.com/uc?export=download&id=stranger",
+      // A plain foreign URL, skipped as it always was.
+      "https://cdn.example.com/photo.jpg",
+    ]);
+
+    expect(deleted).toEqual(["drive:drive-77"]);
+    const deletes = calls.filter((call) => call.url.startsWith("https://www.googleapis.com/drive/v3/files/"));
+    expect(deletes.map((call) => call.url)).toEqual([
+      "https://www.googleapis.com/drive/v3/files/drive-77",
+    ]);
+    expect(new Headers(deletes[0].init?.headers).get("Authorization")).toBe("Bearer token");
+  });
+
+  it("leaves archived URLs alone when Drive is not configured", async () => {
+    // No GDRIVE_* in the environment: the file stays where it is, and the
+    // request that deleted the row still succeeds — the warning is the whole
+    // acknowledgement.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls = stubDriveFetch();
+
+    const deleted = await deleteStoredObjects([DRIVE_LH3]);
+
+    expect(deleted).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("GDRIVE_* is not configured"));
+  });
+
+  it("fails toward not deleting when the mapping table cannot be read", async () => {
+    configureDrive();
+    archiveDb.failWith = new Error("db down");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls = stubDriveFetch();
+
+    const deleted = await deleteStoredObjects([DRIVE_LH3]);
+
+    expect(deleted).toEqual([]);
+    // No token was even fetched: an unreadable allow-list is no permission
+    // to delete anything.
+    expect(calls).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("left in place"), expect.any(Error));
+  });
+
+  it("keeps R2 deletes away from Drive even when Drive is configured", async () => {
+    configureDrive();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls = stubDriveFetch();
+
+    // The R2 half fails in this environment (no real bucket is configured) —
+    // logged, never thrown — and the assertion is about what Drive never sees.
+    await deleteStoredObjects([`${OURS}/posts/member-1/a.png`]);
+
+    expect(calls).toEqual([]);
   });
 });

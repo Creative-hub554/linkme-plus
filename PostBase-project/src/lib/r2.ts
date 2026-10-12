@@ -1,5 +1,14 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { inArray } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { archivedObjects } from "@/lib/db/schema";
+import {
+  archivedFileIdFromUrl,
+  createDriveClient,
+  driveConfigFromEnv,
+  type DriveClient,
+} from "@/lib/gdrive";
 
 const runtimeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
 const R2_ACCOUNT_ID = runtimeEnv.R2_ACCOUNT_ID || "";
@@ -215,19 +224,80 @@ export function replacedObjectUrl(
 }
 
 /**
+ * The Drive client used for deletes, rebuilt whenever the credentials change.
+ *
+ * Memoised because one avatar replacement can fire several deletes and a
+ * token fetch per delete would be its own traffic — and keyed on the
+ * credentials rather than "built once" because a test (and a future config
+ * reload) may swap the environment between calls.
+ */
+let cachedDriveDeletes: { key: string; client: DriveClient | null } | null = null;
+
+function driveClientForDeletes(): DriveClient | null {
+  const config = driveConfigFromEnv(runtimeEnv);
+  const key = config ? `${config.clientId}:${config.refreshToken}` : "";
+  if (!cachedDriveDeletes || cachedDriveDeletes.key !== key) {
+    cachedDriveDeletes = {
+      key,
+      // The transport is resolved per call rather than captured at
+      // construction: a caller patching the global `fetch` (a test, or the
+      // runtime itself) must not be dodged by a client holding the earlier
+      // reference.
+      client: config
+        ? createDriveClient(config, { fetchImpl: (input, init) => fetch(input, init) })
+        : null,
+    };
+  }
+  return cachedDriveDeletes.client;
+}
+
+/**
+ * The file ids behind a set of archived URLs — the mapping table's vote on
+ * which Drive-shaped URLs the app actually put there.
+ *
+ * Never throws: a database outage leaves the map empty, which fails toward
+ * *not* deleting, the direction this whole function errs in.
+ */
+async function findArchivedDriveIds(driveUrls: string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (driveUrls.length === 0) return found;
+  try {
+    const rows = await db
+      .select({ newUrl: archivedObjects.newUrl, driveFileId: archivedObjects.driveFileId })
+      .from(archivedObjects)
+      .where(inArray(archivedObjects.newUrl, driveUrls));
+    for (const row of rows) found.set(row.newUrl, row.driveFileId);
+  } catch (error) {
+    console.warn("Failed to look up archived media URLs; Drive files left in place:", error);
+  }
+  return found;
+}
+
+/**
  * Deletes the stored objects behind a list of media URLs.
  *
- * URLs that are not ours are skipped, and the function never throws: it runs
+ * Two homes, one contract. A URL that is one of our R2 public URLs is deleted
+ * from R2 by key. A URL that is one of the Drive URLs the archive wrote is
+ * deleted from Drive — but only when `archived_objects` records it, because
+ * the mapping table is the allow-list that keeps a delete inside this app's
+ * own files (a row may hold any URL at all; a Drive-shaped URL belonging to a
+ * stranger must never be deleted on our credentials).
+ *
+ * URLs that are neither are skipped, and the function never throws: it runs
  * after the row that referenced the object is already gone, where a storage
  * hiccup must not turn a successful delete into a failed request. A failure is
  * logged and left behind as cleanup rather than surfaced, and retrying is safe
- * because deleting an absent key succeeds. Returns the keys it removed.
+ * because deleting an absent object succeeds. Returns what it removed: R2
+ * keys, and `drive:<file id>` for the archived files.
  */
 export async function deleteStoredObjects(
   urls: Iterable<string | null | undefined>
 ): Promise<string[]> {
+  const requested = [
+    ...new Set([...urls].filter((url): url is string => typeof url === "string" && url.length > 0)),
+  ];
   const keys = [
-    ...new Set([...urls].map(keyFromPublicUrl).filter((key): key is string => key !== null)),
+    ...new Set(requested.map(keyFromPublicUrl).filter((key): key is string => key !== null)),
   ];
   const deleted: string[] = [];
 
@@ -239,6 +309,28 @@ export async function deleteStoredObjects(
       deleted.push(key);
     } catch (error) {
       console.warn(`Failed to delete stored object "${key}":`, error);
+    }
+  }
+
+  const driveUrls = requested.filter((url) => archivedFileIdFromUrl(url) !== null);
+  if (driveUrls.length > 0) {
+    const client = driveClientForDeletes();
+    if (!client) {
+      console.warn(
+        "Archived (Drive) media URLs reached deleteStoredObjects but GDRIVE_* is not configured; leaving the files in place",
+      );
+    } else {
+      const idByUrl = await findArchivedDriveIds(driveUrls);
+      for (const url of driveUrls) {
+        const fileId = idByUrl.get(url);
+        if (!fileId) continue;
+        try {
+          await client.deleteFile(fileId);
+          deleted.push(`drive:${fileId}`);
+        } catch (error) {
+          console.warn(`Failed to delete archived Drive file "${fileId}":`, error);
+        }
+      }
     }
   }
 

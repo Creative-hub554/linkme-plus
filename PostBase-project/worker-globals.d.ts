@@ -63,14 +63,43 @@ interface KVNamespace {
   delete(key: string): Promise<void>;
 }
 
+/** An object as `list` reports it — the archive pass's view of the bucket. */
+interface R2Object {
+  key: string;
+  size: number;
+  uploaded: Date;
+  /** The md5 hex for single-part uploads; composite (`<hex>-<parts>`) otherwise. */
+  etag?: string;
+  httpMetadata?: { contentType?: string };
+}
+
+/** An object as `get` returns it, streaming rather than buffered. */
+interface R2ObjectBody extends R2Object {
+  body: ReadableStream<Uint8Array>;
+}
+
+interface R2Objects {
+  objects: R2Object[];
+  truncated: boolean;
+  cursor?: string;
+}
+
 interface R2Bucket {
-  get(key: string): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
   put(key: string, value: unknown): Promise<unknown>;
   delete(key: string): Promise<void>;
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2Objects>;
 }
 
 interface Queue<T = unknown> {
   send(message: T): Promise<void>;
+}
+
+/** What a cron trigger hands the Worker's `scheduled` handler. */
+interface ScheduledController {
+  readonly cron: string;
+  readonly scheduledTime: number;
+  readonly type: "scheduled" | "cron" | "scheduled-event";
 }
 
 /** The two ends of a socket a Durable Object holds open. */

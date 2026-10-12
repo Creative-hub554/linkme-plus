@@ -15,6 +15,18 @@ interface __BaseEnv_Env {
 	R2_BUCKET_NAME: string;
 	R2_PUBLIC_URL: string;
 	TOKEN_VALUE: string;
+	// The media archive's settings, added beside the R2_* secrets above the
+	// same way (`wrangler types` regenerates bindings, not secrets): optional
+	// because the archive runs in a logged-and-skipped state until the three
+	// GDRIVE_* values are set, and because the tuning knobs all have defaults
+	// in the scheduled handler.
+	GDRIVE_CLIENT_ID?: string;
+	GDRIVE_CLIENT_SECRET?: string;
+	GDRIVE_REFRESH_TOKEN?: string;
+	GDRIVE_FOLDER_ID?: string;
+	ARCHIVE_GRACE_DAYS?: string;
+	ARCHIVE_BATCH_LIMIT?: string;
+	ARCHIVE_DRY_RUN?: string;
 	WEBSOCKET_ROOM: DurableObjectNamespace<import("./worker/index").WebSocketRoom>;
 }
 declare namespace Cloudflare {

@@ -1,5 +1,13 @@
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db";
+import { createDriveClient, driveConfigFromEnv } from "../src/lib/gdrive";
+import {
+  createBindingStorage,
+  createDbExec,
+  createDbStore,
+  runArchivePass,
+} from "../src/lib/media-archive";
+import { PUBLIC_URL } from "../src/lib/r2";
 import { authenticateWsUpgrade } from "../src/lib/realtime/ws-session";
 
 // The Durable Object class must be exported from the Worker entry for
@@ -50,6 +58,50 @@ const worker = {
     // module-level pool (see src/lib/db/index.ts).
     return runWithDb(() => handler.fetch(request, env, ctx));
   },
+
+  // The media archive's hourly pass (wrangler.jsonc's cron, the reason the
+  // trigger exists at all): move everything R2 has held for longer than the
+  // grace period to Google Drive, rewrite the database to point at it there,
+  // and leave the bucket holding only the app's last three days of uploads.
+  //
+  // The pass decides for itself what to do with a half-configured setup —
+  // no GDRIVE_* secrets means one log line and nothing moved — so deploying
+  // this handler is safe before the consent dance has been run.
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    const driveConfig = driveConfigFromEnv({
+      GDRIVE_CLIENT_ID: env.GDRIVE_CLIENT_ID,
+      GDRIVE_CLIENT_SECRET: env.GDRIVE_CLIENT_SECRET,
+      GDRIVE_REFRESH_TOKEN: env.GDRIVE_REFRESH_TOKEN,
+      GDRIVE_FOLDER_ID: env.GDRIVE_FOLDER_ID,
+    });
+
+    await runWithDb(() =>
+      runArchivePass({
+        storage: createBindingStorage(env.UPLOADS),
+        drive: driveConfig ? createDriveClient(driveConfig) : null,
+        store: createDbStore(),
+        exec: createDbExec(),
+        config: {
+          publicUrlBase: PUBLIC_URL,
+          graceDays: countFromEnv(env.ARCHIVE_GRACE_DAYS, 3),
+          // Ten objects an hour keeps the pass well inside a cron
+          // invocation's subrequest and CPU budgets even when every one of
+          // them is a 100 MB video; raise it in the secrets to drain a large
+          // backlog faster.
+          batchLimit: countFromEnv(env.ARCHIVE_BATCH_LIMIT, 10),
+          dryRun: env.ARCHIVE_DRY_RUN === "1" || env.ARCHIVE_DRY_RUN === "true",
+          now: new Date(),
+        },
+        log: (message) => console.log(message),
+      }),
+    );
+  },
 };
+
+/** A positive integer out of an env var, or the default when it is not one. */
+function countFromEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export default worker;
