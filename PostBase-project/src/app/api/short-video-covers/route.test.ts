@@ -16,6 +16,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Storage is the other side: the clip, the profile photo and every picture are
  * uploaded before any row is touched, so an upload that fails must leave no
  * profile write behind — the banner must not switch to a clip that is not there.
+ * And the reverse: when the profile write itself fails (or a later upload does),
+ * **every object the request already stored comes back out of the bucket** —
+ * nothing references them, and together they are megabytes of clip and photos.
  */
 vi.mock("@/lib/db", async () => {
   const { fakeDb } = await import("@/test/fake-db");
@@ -43,12 +46,13 @@ vi.mock("@/lib/r2", async (importOriginal) => {
     ...actual,
     assertStorageConfigured: vi.fn(),
     putObject: vi.fn(async () => {}),
+    deleteStoredObjects: vi.fn(async () => [] as string[]),
   };
 });
 
 import { POST } from "./route";
 import { profiles, shortVideoCovers } from "@/lib/db/schema";
-import { putObject } from "@/lib/r2";
+import { deleteStoredObjects, getPublicUrl, putObject } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence, expectGatedUpdate } from "@/test/expect-gated";
 
@@ -246,5 +250,56 @@ describe("POST /api/short-video-covers", () => {
     expect(await oversized.json()).toEqual({ error: "Pictures must be images under 10 MB" });
     expect(vi.mocked(putObject)).not.toHaveBeenCalled();
     expectGatedNone("writes");
+  });
+
+  it("takes every stored object back out when the profile write fails", async () => {
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+    fakeDb.failNextUpdate(profiles, new Error("database unavailable"));
+    try {
+      const response = await POST(
+        publishRequest({
+          photos: [
+            new File(["bytes"], "p0.png", { type: "image/png" }),
+            new File(["bytes"], "p1.png", { type: "image/png" }),
+          ],
+          backgroundVideo: new File(["bytes"], "bg.mp4", { type: "video/mp4" }),
+        }),
+      );
+
+      // The profile write is the publish; it failed, so the request did too.
+      expect(response.ok).toBe(false);
+      // The clip, the profile photo, both pictures and the background — every
+      // object this request stored, in the order they landed, and nothing
+      // else: the write never landed, so no row points at any of them.
+      const stored = vi.mocked(putObject).mock.calls.map(([key]) => getPublicUrl(key));
+      expect(stored).toHaveLength(5);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledWith(stored);
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
+  it("takes the clip already stored out when a later upload fails", async () => {
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+    // The first upload lands; the one after it does not.
+    vi.mocked(putObject)
+      .mockImplementationOnce(async () => {})
+      .mockRejectedValueOnce(new Error("network unreachable"));
+    try {
+      const response = await POST(publishRequest());
+
+      expect(response.ok).toBe(false);
+      // The clip that landed before the failure is already unreferenced — the
+      // response never went out — so it comes back out too, while the request
+      // still writes no profile behind it.
+      const [videoKey] = vi.mocked(putObject).mock.calls[0];
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledWith([getPublicUrl(videoKey)]);
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
   });
 });

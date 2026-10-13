@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * This is the wiring the live bucket probe used to stand in for: upload a photo,
  * check the previous object's URL is now 404. What matters here is not that a
  * delete happens but *which* URL is offered — the one the upload displaced, read
- * from the row before the write — and that an upload by a non-admin is refused
- * before the object is ever written.
+ * from the row before the write — or, when the row can never point at it (the
+ * Page vanished, or the update failed), the just-uploaded object itself, whose
+ * URL nothing else ever receives. Also pinned: an upload by a non-admin is
+ * refused before the object is ever written.
  *
  * The seams are the same as `../route.test.ts`: a scripted `@/lib/db`, an
  * `@/lib/auth` that answers with a session, and `@/lib/r2` with only its two
@@ -45,7 +47,7 @@ vi.mock("@/lib/r2", async (importOriginal) => {
 
 import { POST } from "./route";
 import { pages, pageRoles } from "@/lib/db/schema";
-import { assertStorageConfigured, deleteStoredObjects, putObject } from "@/lib/r2";
+import { assertStorageConfigured, deleteStoredObjects, getPublicUrl, putObject } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
@@ -190,7 +192,7 @@ describe("POST /api/pages/image", () => {
     expect(deletion()).not.toHaveBeenCalled();
   });
 
-  it("answers 404 when the Page vanished before the row could be written", async () => {
+  it("answers 404 when the Page vanished before the row could be written, taking the upload back out", async () => {
     fakeDb
       .selectReturns(pageRoles, [{ id: "role-1" }])
       .selectReturns(pages, [{ url: OLD_AVATAR }])
@@ -202,7 +204,11 @@ describe("POST /api/pages/image", () => {
     // Page is answered as not found rather than pretending the upload landed.
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Page not found" });
-    expect(deletion()).not.toHaveBeenCalled();
+    // The upload itself comes back out — nothing points at it and no response
+    // carried its URL — while the photo it read, never displaced, stays.
+    const [key] = vi.mocked(putObject).mock.calls[0];
+    expect(deletion()).toHaveBeenCalledTimes(1);
+    expect(deletion()).toHaveBeenCalledWith([getPublicUrl(key)]);
   });
 
   it("answers 503 when storage is not configured, before writing the object or the row", async () => {
@@ -219,7 +225,7 @@ describe("POST /api/pages/image", () => {
     expectGatedNone("writes");
   });
 
-  it("answers 500 when the row update fails, deleting nothing", async () => {
+  it("answers 500 when the row update fails, taking the upload back out", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
       .selectReturns(pageRoles, [{ id: "role-1" }])
@@ -230,7 +236,12 @@ describe("POST /api/pages/image", () => {
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: "Failed to upload that image" });
-      expect(deletion()).not.toHaveBeenCalled();
+      // The stored upload, and only it: the update never landed, so the Page
+      // still holds the photo it had, and the new object would be reachable at
+      // a URL nothing recorded.
+      const [key] = vi.mocked(putObject).mock.calls[0];
+      expect(deletion()).toHaveBeenCalledTimes(1);
+      expect(deletion()).toHaveBeenCalledWith([getPublicUrl(key)]);
       expectGatedNone("writes");
     } finally {
       silence.mockRestore();

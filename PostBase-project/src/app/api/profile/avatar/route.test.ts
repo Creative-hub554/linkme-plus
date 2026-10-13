@@ -9,7 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * if the database write cannot be made within five seconds it defers to Supabase
  * auth metadata rather than failing an upload R2 already accepted, and on that
  * path the old URL is still the one the profile points at, so its object is
- * **not** removed. These tests pin the URL that is stored and the column it is
+ * **not** removed — while a deferral whose metadata fallback fails too takes
+ * the just-stored upload back out, because nothing anywhere references it and
+ * no response ever handed the URL out. These tests pin the URL that is stored and the column it is
  * written to, the replaced object that is deleted, the empty-column case that
  * deletes nothing, the deferred-write case that also deletes nothing (a write
  * that never landed leaves the old URL in use), that a non-image is refused
@@ -60,7 +62,7 @@ vi.mock("@/lib/r2", async (importOriginal) => {
 
 import { POST } from "./route";
 import { profiles } from "@/lib/db/schema";
-import { assertStorageConfigured, deleteStoredObjects, putObject } from "@/lib/r2";
+import { assertStorageConfigured, deleteStoredObjects, getPublicUrl, putObject } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
@@ -138,7 +140,7 @@ describe("POST /api/profile/avatar", () => {
     }
   });
 
-  it("fails loudly when the deferred metadata write fails too, still removing nothing", async () => {
+  it("fails loudly when the deferred metadata write fails too, taking the unattached upload back out", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     supabase.updateUser.mockResolvedValueOnce({ error: new Error("metadata rejected") });
     try {
@@ -148,11 +150,19 @@ describe("POST /api/profile/avatar", () => {
 
       const response = await POST(uploadRequest(imageFile()));
 
-      // Both places the photo could be attached failed, so the member is told;
-      // but the old photo is still the one they are shown on reload until one of
-      // them succeeds, so it is not deleted on the way out either.
+      // Both places the photo could be attached failed, so the member is told.
       expect(response.status).toBe(500);
-      expect(vi.mocked(deleteStoredObjects)).not.toHaveBeenCalled();
+      expect(await response.json()).toEqual({
+        error: "Photo uploaded, but it could not be attached to your profile. Please retry shortly.",
+      });
+      // The object this request stored — which neither place took, and whose
+      // URL no response ever carried — comes back out of the bucket rather
+      // than staying as storage nothing points at. Exactly it: the old photo
+      // is still the profile's photo until one of the two writes succeeds, so
+      // it is not in the list.
+      const [key] = vi.mocked(putObject).mock.calls[0];
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledWith([getPublicUrl(key)]);
     } finally {
       silence.mockRestore();
     }

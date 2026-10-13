@@ -14,6 +14,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * write — a save with no new photos still replaces the old config, so this is
  * also the path that clears a photo-only animated cover. That is the largest
  * cleanup of the profile routes: a config can hold up to 24 objects.
+ *
+ * The other direction is pinned too: every photo is validated before the first
+ * is stored, and a save that fails with photos already in the bucket — a later
+ * upload, or the profile write — takes **every photo it stored** back out. A
+ * config that never landed points at none of them, while the replaced config's
+ * photos are still the ones in use.
  */
 vi.mock("@/lib/db", async () => {
   const { fakeDb } = await import("@/test/fake-db");
@@ -49,7 +55,7 @@ vi.mock("@/lib/r2", async (importOriginal) => {
 
 import { POST } from "./route";
 import { profiles } from "@/lib/db/schema";
-import { assertStorageConfigured, deleteStoredObjects, putObject } from "@/lib/r2";
+import { assertStorageConfigured, deleteStoredObjects, getPublicUrl, putObject } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
@@ -198,5 +204,46 @@ describe("POST /api/profile/cover-config", () => {
     // Nothing is uploaded and nothing is written.
     expect(putObject).not.toHaveBeenCalled();
     expectGatedNone("writes");
+  });
+
+  it("refuses a later photo that is invalid before storing any of them", async () => {
+    const notAnImage = new File(["notes"], "notes.txt", { type: "text/plain" });
+
+    const response = await POST(saveRequest(VALID_CONFIG, [imageFile("one.png"), notAnImage]));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "File type not allowed" });
+    // Validation runs whole before the first byte is stored: the good photo
+    // ahead of the bad one must not be left in the bucket with no pointer.
+    expect(putObject).not.toHaveBeenCalled();
+    expect(vi.mocked(deleteStoredObjects)).not.toHaveBeenCalled();
+    expectGatedNone("writes");
+  });
+
+  it("takes every photo it stored back out when the profile write fails", async () => {
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+    fakeDb
+      .selectReturns(profiles, [
+        { coverConfig: { templateId: "old-template", photos: [OLD_PHOTO_ONE, OLD_PHOTO_TWO] } },
+      ])
+      .failNextUpdate(profiles, new Error("database unavailable"));
+    try {
+      const response = await POST(
+        saveRequest(VALID_CONFIG, [imageFile("one.png"), imageFile("two.png")]),
+      );
+
+      expect(response.status).toBe(500);
+      // Every photo this request stored, in the order they landed — and only
+      // those. The config never landed, so the replaced config's photos are
+      // still the ones the profile points at; the new ones would answer at
+      // URLs nothing records.
+      const stored = vi.mocked(putObject).mock.calls.map(([key]) => getPublicUrl(key));
+      expect(stored).toHaveLength(2);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledWith(stored);
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
   });
 });
