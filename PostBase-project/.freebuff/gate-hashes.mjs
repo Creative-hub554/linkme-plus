@@ -53,7 +53,7 @@ export const watches = [
 ];
 
 export const files = {
-  "../.github/workflows/ci.yml": "06f6abb57e96a162cfd254f01e7787c8dc421028",
+  "../.github/workflows/ci.yml": "75decc9a3a196b759f52401e2f691e8194dab697",
   "../.github/workflows/collect-apply.yml": "176bc86ef5c5741a5296a3bb2393fff8108fe06a",
   "../.github/workflows/nightly.yml": "a79f7e9583278f84e7ae15c566d7bbd8188c72b4",
   ".freebuff/apply-collect-baselines.mjs": "c804eb03816d8251a0932a9d4503208dcbc5d7a4",
@@ -96,7 +96,7 @@ export const files = {
   ".freebuff/scaffold-sweep.mjs": "d57fa0fd6e56cca1ad5d6da12ecd54b2c3442e38",
   ".freebuff/stage-order.json": "db851a8db5470b8d72e00a6443723d2a0adc98ac",
   ".freebuff/whole-write.mjs": "09b2940f3e7c667e9df9fe673c0f01e9e38e1954",
-  ".github/workflows/ci.yml": "e22310129e5c97794f5592bd034e8290ba567673",
+  ".github/workflows/ci.yml": "722ff3bb78d558c257fc83475c2d631b6db1e433",
   ".github/workflows/collect-apply.yml": "daf4b2bdd25d9e98924ee21587c928d5d644ee83",
   ".github/workflows/nightly.yml": "0a7939f3cc49e7406983e3494fd91e24e5a37e45",
   "eslint.config.mjs": "bd761c6281906b47654ca74f935ab3d0485a73c3",
@@ -104,7 +104,7 @@ export const files = {
   "postcss.config.mjs": "8f8be689e9af58f80351df6e6b551146822f42a4",
   "tsconfig.json": "a076ee85950d91fb2bca6d0eb34a9b01f3f496a2",
   "vite.config.ts": "463d258077c8a8388bbdecaf07ada0be428a2db0",
-  "vitest.config.ts": "708823f6e0b2d2318aa0990087266eb79a51d39e",
+  "vitest.config.ts": "7b2f81c193d7f6000bc13ed4a52e9a420efe1ac0",
   "vitest.mutation.config.ts": "8175e1110ca2ddc20b3d197b1108dbae5ed8d5c4",
-  "wrangler.jsonc": "b0fca79aa0a17bbb984d05f3d26db605441b568f",
+  "wrangler.jsonc": "09edd99010d2143e0283e8036982ab1a618fdd79",
 };
