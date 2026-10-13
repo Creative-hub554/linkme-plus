@@ -7,7 +7,12 @@ import {
   createDbStore,
   runArchivePass,
 } from "../src/lib/media-archive";
-import { PUBLIC_URL } from "../src/lib/r2";
+import {
+  createEvictionStorage,
+  createEvictionStore,
+  runEvictionPass,
+} from "../src/lib/media-eviction";
+import { getFolderForPurpose, PUBLIC_URL } from "../src/lib/r2";
 import { authenticateWsUpgrade } from "../src/lib/realtime/ws-session";
 
 // The Durable Object class must be exported from the Worker entry for
@@ -59,14 +64,22 @@ const worker = {
     return runWithDb(() => handler.fetch(request, env, ctx));
   },
 
-  // The media archive's hourly pass (wrangler.jsonc's cron, the reason the
-  // trigger exists at all): move everything R2 has held for longer than the
-  // grace period to Google Drive, rewrite the database to point at it there,
-  // and leave the bucket holding only the app's last three days of uploads.
+  // The media cron (wrangler.jsonc's `17 * * *`), two passes in order:
   //
-  // The pass decides for itself what to do with a half-configured setup —
-  // no GDRIVE_* secrets means one log line and nothing moved — so deploying
-  // this handler is safe before the consent dance has been run.
+  // 1. **Eviction** reclaims uploads no post or comment ever referenced —
+  //    the files a client uploaded and then never published. It runs first
+  //    because its grace window is the shorter one: an orphan deleted here
+  //    never reaches the archive, which would otherwise ship it to Drive and
+  //    keep it there forever.
+  // 2. **The archive** moves everything R2 has held for longer than its grace
+  //    period to Google Drive, rewrites the database to point at it there,
+  //    and leaves the bucket holding only the app's last three days of
+  //    uploads.
+  //
+  // Each pass decides for itself what to do with a half-configured setup —
+  // no GDRIVE_* secrets means one log line and nothing moved, no
+  // R2_PUBLIC_URL means the eviction pass declines — so deploying this
+  // handler is safe before the consent dance has been run.
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
     const driveConfig = driveConfigFromEnv({
       GDRIVE_CLIENT_ID: env.GDRIVE_CLIENT_ID,
@@ -75,8 +88,29 @@ const worker = {
       GDRIVE_FOLDER_ID: env.GDRIVE_FOLDER_ID,
     });
 
-    await runWithDb(() =>
-      runArchivePass({
+    await runWithDb(async () => {
+      await runEvictionPass({
+        storage: createEvictionStorage(env.UPLOADS),
+        store: createEvictionStore(),
+        config: {
+          publicUrlBase: PUBLIC_URL,
+          // The same folder `/api/posts/media` and a presigned post upload
+          // write to, so the pass and the upload routes cannot drift apart.
+          prefix: `${getFolderForPurpose("post")}/`,
+          // 24 hours is a generous publish window for an upload, and it must
+          // stay below ARCHIVE_GRACE_DAYS (3) or orphans reach Drive first,
+          // where this pass can no longer see them.
+          graceHours: countFromEnv(env.EVICT_GRACE_HOURS, 24),
+          // Deletes are one call each — far cheaper than the archive's ~15
+          // Drive calls per file — so this batch can be larger.
+          batchLimit: countFromEnv(env.EVICT_BATCH_LIMIT, 50),
+          dryRun: env.EVICT_DRY_RUN === "1" || env.EVICT_DRY_RUN === "true",
+          now: new Date(),
+        },
+        log: (message) => console.log(message),
+      });
+
+      return runArchivePass({
         storage: createBindingStorage(env.UPLOADS),
         drive: driveConfig ? createDriveClient(driveConfig) : null,
         store: createDbStore(),
@@ -93,8 +127,8 @@ const worker = {
           now: new Date(),
         },
         log: (message) => console.log(message),
-      }),
-    );
+      });
+    });
   },
 };
 

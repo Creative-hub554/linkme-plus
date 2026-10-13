@@ -195,7 +195,7 @@ export interface ArchivedPair {
   newUrl: string;
 }
 
-function quoteIdent(name: string): string {
+export function quoteIdent(name: string): string {
   // The names come from the two constant tables above — code, not input — so
   // doubling embedded quotes is all the quoting these identifiers need.
   return `"${name.replaceAll('"', '""')}"`;

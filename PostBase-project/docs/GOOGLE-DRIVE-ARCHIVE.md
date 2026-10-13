@@ -15,6 +15,14 @@ or two — with a per-run batch limit, so "drain" means "a few hours", not
 | Hot | R2 (`linkme-plus-uploads`) | `R2_PUBLIC_URL` | first 3 days of an object's life, then only until the next hourly pass |
 | Cold | Google Drive (your account) | `lh3.googleusercontent.com` / `drive.google.com` links | indefinitely |
 
+R2 is also where uploads *land* — before any row points at them, since the
+post or comment that references a file is created by a later request. The
+same hourly cron therefore runs two passes, in this order: **eviction**
+deletes uploads nothing ever referenced (see
+[Eviction: the other direction](#eviction-the-other-direction)), and then
+the archive moves everything old enough that remains to Drive. This document
+is mostly about the second one.
+
 The moving parts, in the order a pass runs them:
 
 - `src/lib/gdrive.ts` — refresh-token auth, Drive's resumable upload protocol,
@@ -22,13 +30,19 @@ The moving parts, in the order a pass runs them:
 - `src/lib/media-archive.ts` — the pass itself: list → age → upload → verify →
   record → rewrite → delete, plus the batched SQL that rewrites every column
   that may hold an old URL.
+- `src/lib/media-eviction.ts` — the eviction pass: list the post folder →
+  age → skip archive-owned keys → prove each candidate unreferenced against
+  the same column list the archive rewrites → delete the orphans. It runs
+  first, so an orphan is deleted rather than shipped to Drive and kept there.
 - `archived_objects` (table, migration `0014`) — one row per moved object: the
   R2 key, the Drive file id, and both URLs. This row is the archive's memory:
   it lets a crashed run resume without re-uploading, and it is the allow-list
-  `deleteStoredObjects` consults before removing anything from Drive.
+  `deleteStoredObjects` consults before removing anything from Drive. It is
+  also eviction's *deny*-list: a key with a mapping row is never evicted.
 - `worker/index.ts` `scheduled()` + the `17 * * *` cron in `wrangler.jsonc` —
-  the hourly trigger. It runs even before Drive is configured, does one log
-  line, and stops.
+  the hourly trigger, running eviction then the archive. Each pass decides
+  for itself what a half-configured setup means: no Drive secrets is one log
+  line and nothing moved, no `R2_PUBLIC_URL` is the eviction pass declining.
 
 ## One-time setup
 
@@ -127,6 +141,49 @@ Deleting content after it is archived keeps working because
 before, and Drive URLs are deleted **only when `archived_objects` records
 them** — a Drive-shaped URL a client put in a row (a stranger's public file)
 is never touched, because the mapping table is the allow-list.
+
+## Eviction: the other direction
+
+Uploads are public URLs before they are rows: `/api/uploads` and
+`/api/posts/media` answer immediately, and the post or comment that
+references the file is created by a *later* request. When that request never
+comes — abandoned composer, lost tab, publish that failed client-side — the
+object is stranded in the bucket. Left alone, the archive would eventually
+move it to Drive and keep it there forever. The eviction pass reclaims those
+orphans, and runs first in the same cron so a stray upload is deleted rather
+than archived.
+
+One pass, and the order is the safety argument:
+
+1. **List** the post folder — the prefix comes from `getFolderForPurpose("post")`,
+   the same helper the upload routes use, so the pass cannot drift from the
+   routes it cleans up after.
+2. **Age** the objects past `EVICT_GRACE_HOURS` (24 by default) — the window
+   a slow publisher gets between uploading a photo and creating the post that
+   claims it.
+3. **Skip** anything `archived_objects` maps: the archive owns those keys and
+   its resume path may still be about to rewrite rows pointing at them.
+4. **Prove each candidate unreferenced** against the same column list the
+   archive rewrites (`ARCHIVE_REWRITE_TARGETS`): no `post_media` or
+   `comment_media` row, no URL pasted in a post's, comment's or message's
+   text. Reusing that list is the point — a URL-holding column added later
+   protects objects from eviction automatically, and `media-archive.test.ts`
+   guards the list against schema drift.
+5. **Delete** the proven orphans, oldest first, under `EVICT_BATCH_LIMIT`.
+
+The pass **fails closed**: if the listing, the ownership lookup, or the
+reference check errors, nothing is deleted that hour — an unknown reference
+state reads as "referenced". False keeps are possible and safe (the `like`
+predicates over-match; a URL pasted anywhere keeps its object), and a false
+delete is exactly what the ordering rules out.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `EVICT_GRACE_HOURS` | `24` | hours an unreferenced upload survives; **must stay below `ARCHIVE_GRACE_DAYS`** (3 days) or orphans reach Drive before this pass sees them |
+| `EVICT_BATCH_LIMIT` | `50` | objects checked-and-deleted per hourly pass — deletes are one call each, so this can exceed the archive's much costlier batch |
+| `EVICT_DRY_RUN` | off | `1`/`true`: list and log the keys a real run would delete, touch nothing |
+
+No Drive credentials are involved: eviction only lists and deletes in R2.
 
 ## Quotas and known costs
 

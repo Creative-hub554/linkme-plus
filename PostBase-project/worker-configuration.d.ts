@@ -27,6 +27,13 @@ interface __BaseEnv_Env {
 	ARCHIVE_GRACE_DAYS?: string;
 	ARCHIVE_BATCH_LIMIT?: string;
 	ARCHIVE_DRY_RUN?: string;
+	// The eviction pass's settings, beside the archive's the same way —
+	// optional, with defaults in the scheduled handler. EVICT_GRACE_HOURS
+	// must stay below ARCHIVE_GRACE_DAYS or orphans are archived before they
+	// can be evicted.
+	EVICT_GRACE_HOURS?: string;
+	EVICT_BATCH_LIMIT?: string;
+	EVICT_DRY_RUN?: string;
 	WEBSOCKET_ROOM: DurableObjectNamespace<import("./worker/index").WebSocketRoom>;
 }
 declare namespace Cloudflare {
