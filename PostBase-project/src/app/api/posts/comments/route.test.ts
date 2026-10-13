@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * "my row or nobody's" rule the post route uses. What can be pinned without a
  * database is that the author is the session's, that a missing post or empty
  * content is refused before any write, that removal sets `deleted_at` and does
- * not remove the row, and that an update matching nothing is a `404` with no
- * hard delete behind it. The paginated envelope is pinned too, because its
+ * not remove the row, that the photos a deleted comment carried stop resolving
+ * through the thread while exactly their URLs are reclaimed from storage, and
+ * that an update matching nothing is a `404` with no hard delete behind it. The paginated envelope is pinned too, because its
  * `total` is the number the reader sees above the list.
  *
  * The fake `@/lib/db` does not *evaluate* `where`, so the route's answer to an
@@ -75,12 +76,18 @@ const POST_ID = "22222222-2222-4222-8222-222222222222";
 const COMMENT_ID = "55555555-5555-4555-8555-555555555555";
 const PARENT_ID = "66666666-6666-4666-8666-666666666666";
 
+/** A comment that survives the delete below — its own photo must keep resolving. */
+const SURVIVOR_ID = "77777777-7777-4777-8777-777777777777";
+
 /** The test bucket's public base — `R2_PUBLIC_URL` in `src/test/setup.ts`. */
 const PUBLIC = "https://test.r2.dev";
 
 /** A photo URL under the caller's own folder — the shape a valid one has. */
 const MY_PHOTO = `${PUBLIC}/posts/author-1/1700000000000-abc1a.png`;
 const MY_PHOTO_TWO = `${PUBLIC}/posts/author-1/1700000000001-abc2b.png`;
+
+/** Another member's photo — the thread must keep serving it after the delete. */
+const SURVIVOR_PHOTO = `${PUBLIC}/posts/member-2/1700000000002-ccc3c.png`;
 
 const deletion = () => vi.mocked(deleteStoredObjects);
 
@@ -395,6 +402,58 @@ describe("DELETE /api/posts/comments", () => {
     expect(deletion()).toHaveBeenCalledWith([MY_PHOTO, MY_PHOTO_TWO]);
     // The reclaim is a storage concern, not a database one.
     expectGatedNone("deletes");
+  });
+
+  it("stops serving a deleted comment's photos, and reclaims exactly their URLs", async () => {
+    // The delete: the ownership update matches, then the photo rows are read —
+    // the soft delete leaves them in place, and `comment_media.url` is the only
+    // record of what belonged to the comment.
+    fakeDb
+      .updateReturns(comments, [{ id: COMMENT_ID }])
+      .selectReturns(commentMedia, [{ url: MY_PHOTO }, { url: MY_PHOTO_TWO }]);
+
+    const removed = await DELETE(
+      new Request(`http://localhost/api/posts/comments?id=${COMMENT_ID}`, { method: "DELETE" }),
+    );
+
+    expect(removed.status).toBe(200);
+    // Exactly these two URLs, in one call — no other file rides along, and no
+    // second call reaches for anything beyond them.
+    expect(deletion()).toHaveBeenCalledTimes(1);
+    expect(deletion()).toHaveBeenCalledWith([MY_PHOTO, MY_PHOTO_TWO]);
+    // The read the reclaim was built from was keyed to this comment alone.
+    expectGatedRead(commentMedia, { params: [COMMENT_ID] });
+
+    // The thread afterwards — what a real database answers once the soft delete
+    // has landed: the deleted row dropped, a survivor in its place, and only
+    // the survivor's photo looked up.
+    fakeDb
+      .selectReturns(posts, [{ id: POST_ID }])
+      .selectReturns(comments, [{ id: SURVIVOR_ID, content: "Still standing" }])
+      .selectReturns(comments, [{ total: 1 }])
+      .selectReturns(commentMedia, [
+        { commentId: SURVIVOR_ID, url: SURVIVOR_PHOTO, altText: null, type: "image/png" },
+      ]);
+
+    const thread = await GET(
+      new Request(`http://localhost/api/posts/comments?postId=${POST_ID}`, { method: "GET" }),
+    );
+
+    expect(thread.status).toBe(200);
+    const served = JSON.stringify(await thread.json());
+    // The deleted comment is gone from the thread, and its photo URLs with it —
+    // neither can be resolved through the API any more.
+    expect(served).not.toContain(COMMENT_ID);
+    expect(served).not.toContain(MY_PHOTO);
+    expect(served).not.toContain(MY_PHOTO_TWO);
+    // …while the survivor's own photo still resolves through the same read.
+    expect(served).toContain(SURVIVOR_PHOTO);
+    // The row read carries the soft-delete predicate — what drops the comment,
+    // and every photo it carried, on a database the fake stands in for.
+    expectGatedRead(comments, { nth: 0, where: ['"deleted_at" IS NULL'] });
+    // The photo lookup names only the survivor: the deleted comment's id never
+    // reaches it, so its URLs can never be served from the thread again.
+    expectGatedRead(commentMedia, { nth: 1, params: [SURVIVOR_ID] });
   });
 });
 

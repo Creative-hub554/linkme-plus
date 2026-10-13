@@ -35,6 +35,16 @@ interface CommentItem {
   content: string;
   createdAt?: string;
   /**
+   * The viewer's own reaction on this comment — the type under the thread's
+   * heart (`"like"`, `null` when none), as the comments read answers it. A
+   * thread is loaded fresh every open, and its open thread lives under cards
+   * the virtualized feed remounts freely: the row the thread re-seeds from
+   * answers the reaction, so the confirmed heart survives the remount.
+   */
+  viewerReaction?: string | null;
+  /** How many reactions the comment holds, as the read answered it. */
+  reactionCount?: number;
+  /**
    * The author, whose `id` is what tells the reader this is their own comment.
    * The delete control below is drawn only for the reader's own comments, so
    * the comparison needs the id rather than the name — two members may share a
@@ -246,6 +256,9 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   };
   const [commentItems, setCommentItems] = useState<CommentItem[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  // One comment's reaction write in flight at a time — a press while another
+  // is settling would double a count that has not caught up to its row yet.
+  const [commentWriteId, setCommentWriteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reactionLoading, setReactionLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -446,6 +459,64 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
       window.setTimeout(() => setNotice(null), 2200);
     } finally {
       setReactionLoading(false);
+    }
+  };
+  /**
+   * One press under a comment, through the same `/api/posts/reactions` write
+   * the posts' hearts use — the target type is what changes.
+   *
+   * The count moves from what the row itself answered — the comment's own
+   * read carried both the viewer's type and the total, and the settle below
+   * keeps the pressed state as the row holds it, so a thread reloaded after
+   * any part of this — remount, reopen, repaint — shows the server's truth
+   * and count, never an optimistic state mistaken for the row's.
+   */
+  const toggleCommentReaction = async (comment: CommentItem) => {
+    if (commentWriteId || pending) return;
+    const wasActive = comment.viewerReaction === "like";
+    const previousReaction = comment.viewerReaction ?? null;
+    const previousCount = comment.reactionCount ?? 0;
+    // One reaction per person: adding one moves the count, removing yours
+    // takes one back — the same arithmetic the posts' hearts hold.
+    const delta = wasActive ? -1 : 1;
+    setCommentItems((items) =>
+      items.map((item) =>
+        item.id === comment.id
+          ? { ...item, viewerReaction: wasActive ? null : "like", reactionCount: previousCount + delta }
+          : item,
+      ),
+    );
+    setCommentWriteId(comment.id);
+    try {
+      const response = await fetch("/api/posts/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: "comment", targetId: comment.id, type: "like" }),
+      });
+      if (!response.ok) throw new Error("Reaction failed");
+      const payload = await response.json();
+      const settled = payload.type ?? null;
+      setCommentItems((items) =>
+        items.map((item) =>
+          item.id === comment.id
+            ? { ...item, viewerReaction: settled, reactionCount: previousCount + delta }
+            : item,
+        ),
+      );
+    } catch {
+      // The rollback puts the row back where the read found it — the same
+      // state a fresh thread load would have answered.
+      setCommentItems((items) =>
+        items.map((item) =>
+          item.id === comment.id
+            ? { ...item, viewerReaction: previousReaction, reactionCount: previousCount }
+            : item,
+        ),
+      );
+      setNotice("Reaction could not be saved.");
+      window.setTimeout(() => setNotice(null), 2200);
+    } finally {
+      setCommentWriteId(null);
     }
   };
 
@@ -677,7 +748,7 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
             {notice && <p role="status" className="mt-2 text-xs font-medium text-brand-blue">{notice}</p>}
 
             {commentsOpen && <div className="mt-3 space-y-3 border-t border-surface-border pt-3">
-              {commentsLoading ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading comments...</div> : commentItems.length > 0 ? <div className="max-h-52 space-y-3 overflow-y-auto">{commentItems.map((comment) => <div key={comment.id} className="flex gap-2"><Avatar className="h-7 w-7 shrink-0"><AvatarImage src={comment.author?.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{comment.author?.name?.[0] || "U"}</AvatarFallback></Avatar><div className="min-w-0 rounded-xl bg-surface-light-blue px-3 py-2"><div className="flex items-start justify-between gap-2"><p className="min-w-0 text-[11px] font-semibold text-navy-800">{comment.author?.name || comment.author?.username || "Member"}</p>{viewerId && comment.author?.id === viewerId && <Button variant="ghost" size="icon" aria-label="Delete comment" className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive" disabled={commentDeleting} onClick={() => setCommentDeleteTarget(comment)}><Trash2 className="h-3 w-3" /></Button>}</div>{comment.content && <p className="text-xs leading-5 text-navy-700">{comment.content}</p>}{(comment.media?.length ?? 0) > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Photos in this comment">{comment.media!.map((photo) => (<img key={photo.url} src={photo.url} alt={photo.altText || "Photo attached to comment"} loading="lazy" className="h-20 w-20 rounded-md border border-surface-border bg-ink-800 object-cover" />))}</div>}</div></div>)}</div> : <p className="text-xs text-muted-foreground">No comments yet. Start the conversation.</p>}
+              {commentsLoading ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading comments...</div> : commentItems.length > 0 ? <div className="max-h-52 space-y-3 overflow-y-auto">{commentItems.map((comment) => <div key={comment.id} className="flex gap-2"><Avatar className="h-7 w-7 shrink-0"><AvatarImage src={comment.author?.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{comment.author?.name?.[0] || "U"}</AvatarFallback></Avatar><div className="min-w-0 rounded-xl bg-surface-light-blue px-3 py-2"><div className="flex items-start justify-between gap-2"><p className="min-w-0 text-[11px] font-semibold text-navy-800">{comment.author?.name || comment.author?.username || "Member"}</p>{viewerId && <button type="button" aria-label={`like reaction${(comment.reactionCount ?? 0) > 0 ? `, ${(comment.reactionCount ?? 0)} ${(comment.reactionCount ?? 0) === 1 ? "reaction" : "reactions"}` : ""} — ${comment.viewerReaction === "like" ? "remove your" : "add your"} reaction`} aria-pressed={comment.viewerReaction === "like"} disabled={commentWriteId === comment.id} onClick={() => void toggleCommentReaction(comment)} className={`flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] transition-colors disabled:opacity-50 ${comment.viewerReaction === "like" ? "text-rose-600" : "text-muted-foreground hover:text-rose-600"}`}><Heart className="h-3 w-3" fill={comment.viewerReaction === "like" ? "currentColor" : "none"} />{(comment.reactionCount ?? 0) > 0 && <span>{comment.reactionCount}</span>}</button>}{viewerId && comment.author?.id === viewerId && <Button variant="ghost" size="icon" aria-label="Delete comment" className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive" disabled={commentDeleting} onClick={() => setCommentDeleteTarget(comment)}><Trash2 className="h-3 w-3" /></Button>}</div>{comment.content && <p className="text-xs leading-5 text-navy-700">{comment.content}</p>}{(comment.media?.length ?? 0) > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Photos in this comment">{comment.media!.map((photo) => (<img key={photo.url} src={photo.url} alt={photo.altText || "Photo attached to comment"} loading="lazy" className="h-20 w-20 rounded-md border border-surface-border bg-ink-800 object-cover" />))}</div>}</div></div>)}</div> : <p className="text-xs text-muted-foreground">No comments yet. Start the conversation.</p>}
               <div className="space-y-2">{commentPhotos.length > 0 && <div className="flex flex-wrap gap-2" role="list" aria-label="Photos attached to this comment">{commentPhotos.map((photo, index) => (<div key={`${photo.file.name}-${index}`} role="listitem" className="relative">{photo.preview ? <img src={photo.preview} alt={`Attached photo ${index + 1}`} className="h-16 w-16 rounded-md border border-surface-border object-cover" /> : <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-surface-light-blue px-1 text-center text-[9px] leading-tight">{photo.file.name}</span>}<button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => setCommentPhotos((photos) => photos.filter((_, position) => position !== index))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-navy-800 text-xs font-bold text-white shadow">×</button></div>))}</div>}<div className="flex items-center gap-2"><input ref={commentPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onCommentPhotosPicked} /><IconButton size="sm" label="Attach photos to comment" onClick={() => commentPhotoInputRef.current?.click()} disabled={submitting || pending || commentPhotos.length >= MAX_COMMENT_PHOTOS}><ImagePlus className="h-4 w-4" /></IconButton><input aria-label="Write a comment" value={commentText} onChange={(event) => setCommentText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitComment(); }} placeholder="Write a comment..." className="h-10 min-w-0 flex-1 rounded-full border border-surface-border bg-card px-4 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20" /><Button type="button" size="icon" aria-label="Send comment" onClick={() => void submitComment()} disabled={(commentText.trim().length === 0 && commentPhotos.length === 0) || submitting}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div></div>
             </div>}
           </div>

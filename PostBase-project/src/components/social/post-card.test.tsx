@@ -706,3 +706,115 @@ describe("deleting the reader's own comment", () => {
     expect(document.body.textContent).not.toContain("Delete this comment?");
   });
 });
+
+describe("the comment thread's heart", () => {
+  const LIKED_ID = "a1111111-1111-4111-8111-111111111111";
+  const QUIET_ID = "a2222222-2222-4222-8222-222222222222";
+
+  /**
+   * A thread exactly as the comments read hands it over: every comment carries
+   * the viewer's own reaction type and the total beside it, per row — the two
+   * fields whose absence used to erase a confirmed heart on a remounted card.
+   */
+  const threadRows = [
+    {
+      id: LIKED_ID,
+      content: "A warm reply.",
+      author: { id: "someone-else", name: "Sam Rivera", username: "samr" },
+      viewerReaction: "like",
+      reactionCount: 3,
+    },
+    {
+      id: QUIET_ID,
+      content: "A quiet reply.",
+      author: { id: "someone-else", name: "Rowan Vale", username: "rowan" },
+      viewerReaction: null,
+      reactionCount: 0,
+    },
+  ];
+
+  function reactionEndpoints(reactionReply: StubEndpoint = () => ({ reacted: true, type: "like" })) {
+    return {
+      "/api/posts/comments": () => ({ data: threadRows }),
+      "/api/posts/reactions": reactionReply,
+    };
+  }
+
+  /** Mounts the card, opens its thread, and waits for both comments to land. */
+  async function openHeartThread(reactionReply?: StubEndpoint, signedIn: string | null = "reader-1") {
+    auth.userId = signedIn;
+    const requests = stubFetch(reactionEndpoints(reactionReply) as never);
+    const ui = mountSurface(<PostCard {...CARD} comments={2} />);
+    await ui.click(ui.byName("Comment on post"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("A warm reply.") === true,
+      { description: "the loaded thread" },
+    );
+    return { ui, requests };
+  }
+
+  test("opens wearing the like the read answered, typed and counted per row", async () => {
+    const { ui } = await openHeartThread();
+
+    // The row's type is the thread's truth: seeded liked, and the count is the
+    // total the read carried — not a state re-derived from a missing field.
+    const liked = ui.byName("like reaction, 3 reactions — remove your reaction");
+    expect(liked.getAttribute("aria-pressed")).toBe("true");
+    expect(liked.textContent).toBe("3");
+
+    const quiet = ui.byName("like reaction — add your reaction");
+    expect(quiet.getAttribute("aria-pressed")).toBe("false");
+    expect(quiet.textContent).toBe("");
+  });
+
+  test("sends the comment as the target and settles on the server's answer", async () => {
+    const { ui, requests } = await openHeartThread();
+
+    await ui.click(ui.byName("like reaction — add your reaction"));
+    await ui.waitFor(
+      () => requests.calls.some((call) => call.method === "POST" && call.pathname === "/api/posts/reactions"),
+      { description: "the comment reaction request" },
+    );
+
+    const save = requests.calls.find(
+      (call) => call.method === "POST" && call.pathname === "/api/posts/reactions",
+    );
+    // The target type names the comment, not the post the card holds — the
+    // same write route, one target type more.
+    expect(save?.body).toEqual({ targetType: "comment", targetId: QUIET_ID, type: "like" });
+
+    // The quiet row's button is named uniquely once its count lands: the
+    // settled heart is its own, not the seeded liked row's.
+    await ui.waitFor(() => {
+      const seeded = ui.container.querySelector('[aria-label="like reaction, 3 reactions — remove your reaction"]');
+      return Array.from(ui.container.querySelectorAll('[aria-label="like reaction, 1 reaction — remove your reaction"]'))
+        .some((button) => button !== seeded && button.getAttribute("aria-pressed") === "true");
+    }, {
+      description: "the settled heart on the quiet comment",
+    });
+  });
+
+  test("puts the heart and its count back where the read found them when the write fails", async () => {
+    const { ui, requests } = await openHeartThread(() =>
+      new Response(JSON.stringify({ error: "Nope" }), { status: 500 }),
+    );
+
+    await ui.click(ui.byName("like reaction, 3 reactions — remove your reaction"));
+
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Reaction could not be saved.") === true,
+      { description: "the failure notice" },
+    );
+    expect(requests.calls.some((call) => call.method === "POST")).toBe(true);
+    // Optimistic, then rolled back: the row ends exactly where the read left it.
+    const rolled = ui.byName("like reaction, 3 reactions — remove your reaction");
+    expect(rolled.getAttribute("aria-pressed")).toBe("true");
+    expect(rolled.textContent).toBe("3");
+  });
+
+  test("is offered on no comment when there is no signed-in reader", async () => {
+    const { ui } = await openHeartThread(undefined, null);
+
+    expect(ui.container.querySelectorAll('[aria-label^="like reaction"]').length).toBe(0);
+  });
+});

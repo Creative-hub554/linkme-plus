@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { comments, commentMedia, posts, users, profiles } from "@/lib/db/schema";
+import { comments, commentMedia, posts, reactions, users, profiles } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse, paginatedResponse } from "@/lib/api-helpers";
 import { eq, desc, and, inArray, sql, count } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
@@ -93,6 +93,24 @@ export async function GET(request: Request) {
     content: comments.content,
     parentId: comments.parentId,
     createdAt: comments.createdAt,
+    // The viewer's own reaction on this comment — read as the type it is, the
+    // same seam the posts read answers — beside the count the thread shows.
+    // A thread is served fresh every time it opens, and its reader may have
+    // scrolled the owning card out of the window and back: the thread it
+    // re-seeds from answered the row, so the heart under a comment survives
+    // the remount rather than being re-derived from nothing. The outer
+    // reference is spelled out for the same reason the posts counts are — a
+    // lone-table select drops the qualifier a bare column name needs to
+    // reach the outer row.
+    viewerReaction: sql<string | null>`(
+      select r.type from ${reactions} as r
+      where r.target_type = 'comment' and r.target_id = "comments"."id"
+        and r.user_id = ${session.user.id}
+    )`,
+    reactionCount: sql<number>`(
+      select count(*)::int from ${reactions} as r
+      where r.target_type = 'comment' and r.target_id = "comments"."id"
+    )`,
     author: {
       id: users.id,
       name: sql<string | null>`coalesce(${profiles.displayName}, ${users.username})`,
