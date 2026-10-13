@@ -309,6 +309,67 @@ describe("POST /api/posts/comments", () => {
     expectGatedNone("reads");
     expectGatedNone("writes");
   });
+
+  it("refuses a photo entry that is not an object, and one that names no file", async () => {
+    // Every entry the list carries must be a photo object with a URL in it: a
+    // bare value is not a photo, and an entry that names no file is nothing
+    // the storage layer could ever have taken. Both are refused before
+    // anything is read or written.
+    const notAnObject = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [null] }),
+    );
+    const noUrl = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [{ type: "image/png" }] }),
+    );
+    const emptyUrl = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [{ url: "" }] }),
+    );
+
+    expect(notAnObject.status).toBe(400);
+    expect(await notAnObject.json()).toEqual({ error: "Each photo must be an object with a URL" });
+    expect(noUrl.status).toBe(400);
+    expect(await noUrl.json()).toEqual({ error: "Each photo needs a URL" });
+    expect(emptyUrl.status).toBe(400);
+    expect(await emptyUrl.json()).toEqual({ error: "Each photo needs a URL" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a photo whose type or alt text is not text, and alt text past the cap", async () => {
+    // The fields a photo carries beside its URL are declared text — a number
+    // or a boolean typed as a photo's kind is refused as-is — and alt text is
+    // capped at 255 characters, the same cap the comment's own content keeps.
+    const badType = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, type: 7, altText: "Sunset" }],
+      }),
+    );
+    const badAltText = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, altText: 42 }],
+      }),
+    );
+    const longAltText = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, altText: "x".repeat(256) }],
+      }),
+    );
+
+    expect(badType.status).toBe(400);
+    expect(await badType.json()).toEqual({ error: "Each photo's type must be text" });
+    expect(badAltText.status).toBe(400);
+    expect(await badAltText.json()).toEqual({ error: "Each photo's alt text must be text or null" });
+    expect(longAltText.status).toBe(400);
+    expect(await longAltText.json()).toEqual({ error: "Alt text is limited to 255 characters" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
 });
 
 describe("DELETE /api/posts/comments", () => {

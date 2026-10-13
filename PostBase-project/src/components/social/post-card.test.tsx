@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useState } from "react";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
-import { stubFetch, type StubEndpoint } from "@/test/stub-fetch";
-import { PostCard } from "./post-card";
+import { stubFetch, type StubEndpoint, type StubRequest } from "@/test/stub-fetch";
+import { PostCard, type PostActivity } from "./post-card";
 
 /**
  * The signed-in reader, held as a mutable so a case can sign in as the comment's
@@ -792,6 +792,65 @@ describe("the comment thread's heart", () => {
     }, {
       description: "the settled heart on the quiet comment",
     });
+  });
+
+  test("wears the freshly hydrated row's server truth when a comment arrives over realtime", async () => {
+    // A stranger's comment lands in an open thread as an id broadcast, and the
+    // card hydrates that one id through the ids read — not the thread read the
+    // open thread came from. Its answer is the fresh row's seeding, so it is
+    // answered with a heart the rows in the thread do not hold: the fresh
+    // comment painting pressed with its count can only come from that read's
+    // per-row answer, never from state re-derived inside the card.
+    const FRESH_ID = "a3333333-3333-4333-8333-333333333333";
+
+    const freshRow = {
+      id: FRESH_ID,
+      content: "Arrived between repaints.",
+      author: { id: "someone-else", name: "Iris Kim", username: "irisk" },
+      viewerReaction: "like",
+      reactionCount: 2,
+    };
+
+    /* The feed's half of the contract: a broadcast arrives as a new `activity`
+       while the thread is open — the only window the card acts in. */
+    function BroadcastRow() {
+      const [activity, setActivity] = useState<PostActivity | undefined>(undefined);
+      return (
+        <div>
+          <PostCard {...CARD} activity={activity} />
+          <button type="button" aria-label="Broadcast comment" onClick={() => setActivity({ seq: 9, commentAddedId: FRESH_ID })}>
+            Broadcast comment
+          </button>
+        </div>
+      );
+    }
+
+    const requests = stubFetch({
+      "/api/posts/comments": (request: StubRequest) =>
+        request.query.get("ids")
+          ? { data: [freshRow] }
+          : { data: threadRows, pagination: { total: 2, page: 1, limit: 10, totalPages: 1, hasMore: false } },
+    } as never);
+    const ui = mountSurface(<BroadcastRow />);
+    await ui.click(ui.byName("Comment on post"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("A warm reply.") === true,
+      { description: "the open thread" },
+    );
+
+    await ui.click(ui.byName("Broadcast comment"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Arrived between repaints.") === true,
+      { description: "the realtime comment's arrival" },
+    );
+
+    // The fresh row painted wearing exactly what the ids read answered —
+    // pressed, and with its count beside it, per row.
+    const fresh = ui.byName("like reaction, 2 reactions — remove your reaction");
+    expect(fresh.getAttribute("aria-pressed")).toBe("true");
+    expect(fresh.textContent).toBe("2");
+    // And the arrival really went through the per-id read to get there.
+    expect(requests.calls.some((call) => call.query.get("ids") === FRESH_ID)).toBe(true);
   });
 
   test("puts the heart and its count back where the read found them when the write fails", async () => {
