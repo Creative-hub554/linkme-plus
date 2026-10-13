@@ -81,7 +81,7 @@ export const files = {
   ".freebuff/mutation-coverage.mjs": "282a71b0d568a447e77854d05eb1362b2e49140c",
   ".freebuff/mutation-example.mjs": "440dd90c68aba69008e15d9187f85b0e24251375",
   ".freebuff/mutation-fifth.mjs": "f775d95ca4d01d0e495ca67fa60d2b4c36f49c66",
-  ".freebuff/mutation-guards.mjs": "91982f8a11d0f05a618aa375bed8ada4aeab0a54",
+  ".freebuff/mutation-guards.mjs": "bad90f33ab60a920ea87f07777d4a63d79c53e9b",
   ".freebuff/mutation-lock.mjs": "1f01e790916d0e81131ed2f50adbd0760855bb86",
   ".freebuff/mutation-preflight.mjs": "4ece45b95591c97673561f590f0522176ae3ef24",
   ".freebuff/mutation-vocabulary.mjs": "7004f409d501b855e205dff62214a643dee23a27",
