@@ -259,6 +259,70 @@ describe("the post card's reaction", () => {
       { description: "the heart the repainted row re-lit" },
     );
   });
+
+  test("wears a row's confirmed type on the mount that comes back after a remount", async () => {
+    /**
+     * The remount: the virtualized feed unmounts a card the moment it scrolls
+     * out of the window, and the remount seeds its state from the row. Rows
+     * from `/api/posts` now answer the viewer's reaction as the type it *is*,
+     * so the remount shows what the server still holds — including a sticker,
+     * which no boolean row can name (the boolean would re-derive it into
+     * nothing, on every scroll-out of a reacted card).
+     */
+    stubFetch({});
+    const ui = mountSurface(<PostCard {...CARD} liked={false} reaction="🔥" />);
+
+    expect(ui.container.querySelector('button[aria-label="Remove reaction"]')).not.toBeNull();
+    expect(ui.container.querySelector('button[aria-label="React to post"]')).toBeNull();
+  });
+
+  test("adopts a type-carrying row whole, stickers and all", async () => {
+    /**
+     * A row that speaks the reaction's type is adopted as it is: the repaint
+     * of the card's own confirmed write carries the same type back, so there
+     * is nothing to guard, and a repaint the card did not cause — another
+     * viewer's activity settled into the row, a reconciliation — is exactly
+     * the state to take. Either way the read-back is the truth, never a
+     * re-derivation through a boolean.
+     */
+    stubFetch({});
+    function TypedRow() {
+      const [row, setRow] = useState<{ liked: boolean; reaction: string | null }>({
+        liked: false,
+        reaction: null,
+      });
+      return (
+        <div>
+          <button
+            type="button"
+            aria-label="repaint the row's type"
+            onClick={() => setRow({ liked: false, reaction: "🔥" })}
+          />
+          <PostCard
+            {...CARD}
+            liked={row.liked}
+            reaction={row.reaction}
+            onReactionSettled={(type) => setRow({ liked: type === "like", reaction: type })}
+          />
+        </div>
+      );
+    }
+    const ui = mountSurface(<TypedRow />);
+
+    await ui.waitFor(
+      () => ui.container.querySelector('button[aria-label="React to post"]') !== null,
+      { description: "the un-reacted row painted" },
+    );
+
+    await ui.click(ui.byName("repaint the row's type"));
+
+    // The row's 🔥 is what the card wears — not one re-derived from the
+    // boolean flip the old shape would have produced.
+    await ui.waitFor(
+      () => ui.container.querySelector('button[aria-label="Remove reaction"]') !== null,
+      { description: "the sticker the typed row lit" },
+    );
+  });
 });
 
 /**

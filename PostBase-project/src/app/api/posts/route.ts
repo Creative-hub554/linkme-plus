@@ -145,6 +145,21 @@ export async function GET(request: Request) {
             select count(*)::int from ${reactions} as r
             where r.target_type = 'post' and r.target_id = "posts"."id"
           )`,
+          // The viewer's own reaction on this post — read as the row it *is*,
+          // the type the card wears, not the boolean shadow a row used to be
+          // re-derived into. A feed card is remounted freely (the virtualized
+          // list unmounts a card whenever it scrolls out of the window), and
+          // the remount seeds its state from the row: one that only says
+          // liked/unliked cannot name a sticker, so a confirmed 🔥 would come
+          // back as nothing. With the type on the row, the remount shows the
+          // server's truth. The outer reference is spelled out for the same
+          // reason the counts above are — a lone-table select drops the
+          // qualifier a bare column name needs to reach the outer row.
+          viewerReaction: sql<string | null>`(
+            select r.type from ${reactions} as r
+            where r.target_type = 'post' and r.target_id = "posts"."id"
+              and r.user_id = ${session.user.id}
+          )`,
           author: {
             id: users.id,
             // A missing profile row must never hide a published post. Fall back
@@ -199,8 +214,13 @@ export async function GET(request: Request) {
         mediaByPostId.set(item.postId, postMediaItems);
       }
 
+      // The boolean beside the type, derived in the same mapping rather than
+      // a second subquery: any consumer still taking the flag gets it, and
+      // it is the same rule a confirmed write settles a row with (`type ===
+      // "like"`), so a fresh read and a written row always agree.
       const postsWithMedia = result.map(({ createdAtKey: _key, ...post }) => ({
         ...post,
+        viewerLiked: post.viewerReaction === "like",
         media: mediaByPostId.get(post.id) || [],
       }));
 

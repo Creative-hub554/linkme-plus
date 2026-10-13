@@ -41,10 +41,14 @@ interface PagePost {
   reactionCount?: number;
   media?: PagePostMedia[];
   /**
-   * The viewer's own reaction, once a write confirms. Same shape as the
-   * group's rows: the read answers totals, the confirmed write writes the
-   * row, and the repainted card re-derives from the row.
+   * The viewer's own reaction — the type (`"like"` or a sticker, `null` when
+   * none) beside its boolean shadow. Same shape as the group's rows, and for
+   * the same reason: the read is `/api/posts` and answers the type per row,
+   * so a remounted card seeds the sticker the server keeps instead of
+   * re-deriving `like`-or-nothing from the boolean. The confirmed write
+   * writes the same shape, and the repainted card re-derives from the row.
    */
+  viewerReaction?: string | null;
   viewerLiked?: boolean;
 }
 
@@ -299,6 +303,7 @@ export default function PageView() {
                   time={formatPostTime(post.createdAt)}
                   likes={post.reactionCount ?? 0}
                   liked={post.viewerLiked}
+                  reaction={post.viewerReaction}
                   comments={post.commentCount ?? 0}
                   shares={0}
                   visibility={post.visibility ?? undefined}
@@ -308,7 +313,9 @@ export default function PageView() {
                     // written into the row the card reads its heart from.
                     setPosts((current) =>
                       current.map((row) =>
-                        row.id === post.id ? { ...row, viewerLiked: type === "like" } : row,
+                        row.id === post.id
+                          ? { ...row, viewerReaction: type, viewerLiked: type === "like" }
+                          : row,
                       ),
                     );
                   }}

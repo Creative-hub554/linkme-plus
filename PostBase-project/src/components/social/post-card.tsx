@@ -84,6 +84,16 @@ interface PostCardProps {
   comments: number;
   shares: number;
   liked?: boolean;
+  /**
+   * The row's confirmed reaction *type*, as the read answered it — `"like"` or
+   * a sticker, `null` when the viewer has none, and undefined when the parent's
+   * rows do not carry a type at all (the boolean fallback below is for those).
+   * Rows from `/api/posts` answer it per post, so a card remounted while
+   * scrolling — the virtualized feed unmounts a card the moment it leaves the
+   * window, and the remount seeds from the row — wears the reaction the server
+   * still holds, including a sticker a boolean could never name.
+   */
+  reaction?: string | null;
   saved?: boolean;
   visibility?: "public" | "followers" | "private" | string | null;
   /**
@@ -191,16 +201,20 @@ function reportBoostEvent(campaignId: string, type: "impression" | "click") {
   }).catch(() => {});
 }
 
-export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, sponsored, onDelete, onUpdate, edited = false, onReactionSettled }: PostCardProps) {
+export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, reaction: rowReaction, saved: initialSaved = false, visibility, groupName, pending = false, activity, sponsored, onDelete, onUpdate, edited = false, onReactionSettled }: PostCardProps) {
   // The reaction is the row's state the card holds in escrow, exactly as the
-  // listing card's heart is: `useState` reads the prop once, and a parent whose
+  // listing card's heart is: `useState` reads the props once, and a parent whose
   // rows move under a still-mounted card leaves a stale react behind unless the
   // row's new state reaches the card. The parent does that by calling
   // `onReactionSettled` — through which the row is written — and the card below
   // then adopts the new state on the parent's re-render (the card's own press
   // is in flight meanwhile, guarded by `reactionLoading`).
   const [liked, setLiked] = useState(initialLiked);
-  const [reaction, setReaction] = useState<string | null>(initialLiked ? "like" : null);
+  const [reaction, setReaction] = useState<string | null>(
+    // A row that carries the type seeds the card from it directly; one that
+    // carries only the boolean re-derives `like`-or-nothing, as it always did.
+    rowReaction !== undefined ? rowReaction : initialLiked ? "like" : null,
+  );
   const [saved, setSaved] = useState(initialSaved);
   const [commentCount, bumpComments] = useReconciledCount(initialComments);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -271,11 +285,30 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   });
   useEffect(() => {
     if (reactionLoadingRef.current) return;
+    // A row that speaks the reaction's *type* is adopted whole, and needs no
+    // echo-guard: the repaint of this card's own confirmed write carries the
+    // same type the confirmation settled, so adopting it is a no-op at worst,
+    // and a repaint the card did not cause is exactly the row to follow — a
+    // 🔥 stays a 🔣 through both paths, where a boolean row could only
+    // re-derive it back to nothing.
+    if (rowReaction !== undefined) {
+      setReaction(rowReaction);
+      setLiked(rowReaction === "like");
+      return;
+    }
+    // Boolean-only rows keep the echo-guard: what the last confirmed write
+    // settled, as the row will hold it. A repaint that matches this is the
+    // echo of this card's own write arriving through the parent — and adopting
+    // an echo could only downgrade the card, because the row's boolean
+    // (`viewerLiked: type === "like"`) carries strictly less than the
+    // confirmation the card already holds: re-deriving the reaction *type*
+    // from that boolean would clobber a confirmed 🔥 into nothing. So an
+    // echo is skipped, and any repaint the card did not cause is adopted.
     const confirmed = confirmedReactionRef.current;
     if (confirmed.liked === initialLiked && confirmed.reaction !== null) return;
     setReaction(initialLiked ? "like" : null);
     setLiked(initialLiked);
-  }, [initialLiked]);
+  }, [initialLiked, rowReaction]);
 
   // Both counters follow one rule: the feed's number is authoritative, and an
   // optimistic local change is held until the authoritative number catches up.

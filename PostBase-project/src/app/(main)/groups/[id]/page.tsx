@@ -36,11 +36,15 @@ interface GroupPost {
   media?: GroupPostMedia[];
   author?: { name?: string | null; username?: string | null; avatarUrl?: string | null };
   /**
-   * The viewer's own reaction, once a write confirms. The group read answers
-   * totals, not viewer state, so this starts unset and is written by the
-   * confirmed-write seam — which is what keeps a repainted card's colour on
-   * written truth rather than on a press the card is holding.
+   * The viewer's own reaction — the type (`"like"` or a sticker, `null` when
+   * none) beside its boolean shadow. The group read is `/api/posts`, which
+   * answers the type per row now, and a card remounted (this page's cards
+   * scroll out of view and back) seeds from what the row still holds: a
+   * boolean alone would re-derive a confirmed sticker into nothing.
+   * Confirmed writes land the same shape here through the confirmed-write
+   * seam, which is what keeps a repainted card's colour on written truth.
    */
+  viewerReaction?: string | null;
   viewerLiked?: boolean;
 }
 
@@ -284,6 +288,7 @@ export default function GroupView() {
           time={formatPostTime(post.createdAt)}
           likes={post.reactionCount ?? 0}
           liked={post.viewerLiked}
+          reaction={post.viewerReaction}
           comments={post.commentCount ?? 0}
           shares={0}
           visibility={post.visibility ?? undefined}
@@ -294,7 +299,9 @@ export default function GroupView() {
             // card that stays mounted re-derives its heart on the repaint.
             setPosts((current) =>
               current.map((row) =>
-                row.id === post.id ? { ...row, viewerLiked: type === "like" } : row,
+                row.id === post.id
+                  ? { ...row, viewerReaction: type, viewerLiked: type === "like" }
+                  : row,
               ),
             );
           }}
