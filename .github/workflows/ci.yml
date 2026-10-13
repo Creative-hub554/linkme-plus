@@ -268,6 +268,38 @@ jobs:
   # run agreed the recorded number is looser than the tree needs. That is why the
   # job is not confined to pull requests: the default branch needs the confirmed
   # version of the same judgment, and the fix still rides the proposal comment.
+
+  # The anon key's reach into the database, checked from the attacker's side. That key
+  # is not a credential — it is `NEXT_PUBLIC_SUPABASE_ANON_KEY`, published to every
+  # visitor by the build — so "the anon key can read this table" means "any visitor
+  # with devtools can read it". `sql/rls-lockdown.sql` closed the surface; nothing in
+  # this repository stops it reopening (a later `grant ... to anon`, a dashboard
+  # toggle, a migration that re-widens a default privilege, a table created before the
+  # lockdown narrowed one) — which is exactly the class of change no test in the tree
+  # can see. So this asks the Data API itself, one read-only GET per relation, and
+  # fails when anything answers. It refuses rather than passes on any answer it cannot
+  # judge, including a bad key: every probe fails the same way a closed door does, and
+  # a gate that counted those would pass on an answer it never got.
+  #
+  # The two values are the app's own published pair, taken from the repository
+  # variables of the same names — public by definition, and a variable keeps them out
+  # of this file. A run that has neither refuses loudly, so the gate cannot disappear
+  # by being unconfigured.
+  exposure:
+    name: Anon surface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: PostBase-project/package-lock.json
+      - run: npm ci
+      - run: npm run exposure:check
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://selorshhkdpydjtypgfq.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
   collect-propose:
     name: Collect-budget proposal
     runs-on: ubuntu-latest
