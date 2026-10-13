@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   CHECKOUT,
@@ -149,6 +149,10 @@ describe("dirtyWrites", () => {
     // directories would be a second place to keep in step with `.gitignore`.
     const ignored = path.join(CHECKOUT, ".temp", `.leak-watch-ignored-${process.pid}.mjs`);
     try {
+      // The directory is gitignored and so untracked: it exists in a session's
+      // checkout by habit, and in a fresh clone not at all. Creating it is the
+      // test's own business — the guard judges the write, not the scaffolding.
+      mkdirSync(path.dirname(ignored), { recursive: true });
       writeFileSync(ignored, "export const probe = 1;\n", "utf8");
       expect(dirtyWrites([ignored])).toEqual([]);
     } finally {
