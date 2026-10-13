@@ -29,6 +29,16 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // The write tripwire's recording half, loaded into every worker before Vitest's
+    // own module graph exists. A named `node:fs` import is bound from the builtin's
+    // namespace, which Node materialises once per process with the functions it will
+    // keep, so a patch installed later — from a setup file, say — cannot reach it;
+    // the leaked fixture this guards against was written through exactly such an
+    // import. See `src/test/leak-watch-preload.mjs` for the seam and
+    // `src/test/leak-watch.ts` for what is judged with it; the wiring is pinned by
+    // `src/test/leak-watch.test.ts`, because a preload that quietly did not load
+    // would leave every run looking like a quiet tree.
+    execArgv: ["--import", new URL("./src/test/leak-watch-preload.mjs", import.meta.url).href],
     // The coverage gate mutation check edits those scripts in place while it runs,
     // so it must not share this parallel run with the tests that read them — see
     // `vitest.mutation.config.ts` and `npm run mutation:coverage`. `configDefaults`
