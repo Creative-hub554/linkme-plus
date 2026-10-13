@@ -91,7 +91,16 @@ export async function POST(request: Request) {
         if (metadataError) {
           throw new Error("Photo uploaded, but it could not be attached to your profile. Please retry shortly.");
         }
-      } catch (metadataFailure) { throw metadataFailure; }
+      } catch (metadataFailure) {
+        // Neither the row nor the metadata took the URL, and this response
+        // never hands it out — the object would answer at a path nothing
+        // records, so it comes straight back out rather than sitting in the
+        // bucket unreferenced. The photo it was about to displace is not in
+        // that list: the profile still points at the old photo until one of
+        // the two writes lands, and a retry stores afresh under a new key.
+        await deleteStoredObjects([avatarUrl]);
+        throw metadataFailure;
+      }
     }
 
     // The replaced photo is unreferenced now, so it comes out of the bucket.
