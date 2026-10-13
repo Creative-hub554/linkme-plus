@@ -49,7 +49,10 @@ export async function GET(request: Request) {
       .limit(20);
 
     return successResponse({ inventory, movements });
-  } catch (err) { throw err; }
+  } catch (err) {
+    console.error("Get inventory error:", err);
+    return errorResponse("Failed to fetch inventory", 500);
+  }
 }
 
 export async function POST(request: Request) {
