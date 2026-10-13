@@ -1,18 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart, MessageCircle, Share2, Bookmark, Play, SmilePlus, Send, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, Play, SmilePlus, Send, Loader2, ImagePlus, Trash2 } from "lucide-react";
 import { AudienceIcon } from "@/components/social/audience-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { audienceLabel, isPostAudience } from "@/lib/post-audiences";
 import { cn } from "@/lib/utils";
 import { ReportPostDialog } from "@/components/social/report-post-dialog";
 import { PostOptionsMenu } from "@/components/social/post-options-menu";
+import { uploadPostAttachment } from "@/lib/publish-post";
 import type { PostEdit } from "@/components/social/post-edit-dialog";
+import { useAuth } from "@/components/auth-provider";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Author {
   name: string;
@@ -24,7 +34,33 @@ interface CommentItem {
   id: string;
   content: string;
   createdAt?: string;
-  author?: { name?: string | null; username?: string | null; avatarUrl?: string | null };
+  /**
+   * The author, whose `id` is what tells the reader this is their own comment.
+   * The delete control below is drawn only for the reader's own comments, so
+   * the comparison needs the id rather than the name — two members may share a
+   * display name, and a name is not an identity.
+   */
+  author?: { id?: string | null; name?: string | null; username?: string | null; avatarUrl?: string | null };
+  /** Photos attached to the comment, in pick order; a text-only comment has none. */
+  media?: Array<{ url: string; altText?: string | null; type?: string }>;
+}
+
+/** How many photos one comment may carry — this side of the server's cap. */
+const MAX_COMMENT_PHOTOS = 4;
+
+/**
+ * A data URL for a picked photo, so its chip can show the image before the
+ * comment is sent. A `FileReader` rather than `URL.createObjectURL`: blob URLs
+ * do not exist in the test environment, and a preview that vanishes there
+ * would take the whole attach flow with it.
+ */
+function readPhotoPreview(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Live activity the feed pushed for this post. */
@@ -170,6 +206,11 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
+  // Photos chosen for the next comment. Held as the `File` itself (uploaded
+  // at submit, so a `blob:` preview URL can never reach the server) beside a
+  // data-URL preview for the chip.
+  const [commentPhotos, setCommentPhotos] = useState<Array<{ file: File; preview: string }>>([]);
+  const commentPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // A paid placement owes the campaign a count and the reader a way out.
   //
@@ -194,6 +235,14 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   const [submitting, setSubmitting] = useState(false);
   const [reactionLoading, setReactionLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The signed-in reader, whose id is what marks a comment in the thread as
+  // their own — the sole condition under which the delete control is drawn.
+  const { user: viewer } = useAuth();
+  const viewerId = viewer?.id ?? null;
+  // The comment the reader asked to delete, held open under its confirmation
+  // dialog until they confirm or cancel, plus whether its request is in flight.
+  const [commentDeleteTarget, setCommentDeleteTarget] = useState<CommentItem | null>(null);
+  const [commentDeleting, setCommentDeleting] = useState(false);
 
   // The row's confirmed reaction type reaches the card through the parent's
   // re-render; while one of this card's own writes is in flight, what it is
@@ -367,24 +416,54 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
     }
   };
 
+  /** Chooses photos for the next comment, up to the cap, and previews each. */
+  const onCommentPhotosPicked = (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(event.target.files ?? []);
+    // Cleared so picking the same file again still fires a change event.
+    event.target.value = "";
+    if (picked.length === 0) return;
+    const added = picked
+      .slice(0, Math.max(0, MAX_COMMENT_PHOTOS - commentPhotos.length))
+      .map((file) => ({ file, preview: "" }));
+    if (added.length === 0) return;
+    setCommentPhotos([...commentPhotos, ...added]);
+    for (const entry of added) {
+      void readPhotoPreview(entry.file).then((preview) => {
+        setCommentPhotos((photos) =>
+          photos.map((photo) => (photo.file === entry.file ? { ...photo, preview } : photo)),
+        );
+      });
+    }
+  };
+
   const submitComment = async () => {
     const content = commentText.trim();
-    if (!content || submitting || pending) return;
+    // Text or a photo makes a comment — the same rule the server states.
+    if ((!content && commentPhotos.length === 0) || submitting || pending) return;
     setSubmitting(true);
     // Counted before the request: our own comment is broadcast back to us as an
     // absolute total, and bumping first is what keeps that from double-counting.
     bumpComments(1);
     try {
+      // The files are stored first, like the composer publishes a post: the
+      // server records the URL that comes back, never the preview in this
+      // browser — a `blob:` URL would be dead for everyone after a reload.
+      const media: Array<{ url: string; type: string; altText: string }> = [];
+      for (const photo of commentPhotos) {
+        const uploaded = await uploadPostAttachment(photo.file);
+        media.push({ url: uploaded.url, type: uploaded.type, altText: "Comment photo" });
+      }
       const response = await fetch("/api/posts/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: id, content }),
+        body: JSON.stringify({ postId: id, content, media }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Comment failed");
       const created = payload.comment;
       setCommentItems((items) => [created, ...items]);
       setCommentText("");
+      setCommentPhotos([]);
       // The insert response is the raw row, so resolve the author before it can
       // render as an anonymous "Member".
       const [hydrated] = await fetchComments([created?.id].filter(Boolean));
@@ -393,12 +472,56 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
           items.map((item) => (item.id === hydrated.id ? hydrated : item)),
         );
       }
-    } catch {
+    } catch (error) {
       bumpComments(-1);
-      setNotice("Comment could not be posted.");
+      // The upload's own message is written for the author ("we couldn't
+      // reach the server…") — show it when it exists, the generic line when
+      // the failure carried none.
+      const message = error instanceof Error && error.message ? error.message : "Comment could not be posted.";
+      setNotice(message);
       window.setTimeout(() => setNotice(null), 2200);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /**
+   * Removes the reader's own comment from the thread.
+   *
+   * Optimistic, like a post deletion: the comment leaves the thread the moment
+   * the request does, because a confirmation has already been given and making
+   * the reader watch a spinner on their own undoable action is worse than
+   * showing the result. A failure puts the comment back, in its old place among
+   * the loaded ones, and says so in the card's own notice — the count is
+   * restored with it, so a failed delete leaves the card exactly as it was.
+   *
+   * The server soft-deletes the row and reclaims the comment's photos from
+   * storage; the Realtime `comment_removed_id` the broadcast carries is the
+   * same removal arriving a beat later for the other viewers, and a no-op here
+   * because the item is already gone.
+   */
+  const deleteComment = async (comment: CommentItem) => {
+    if (commentDeleting) return;
+    setCommentDeleting(true);
+    // The order the thread was in, so a rollback restores it rather than
+    // appending the comment back at the top where it never was.
+    const previous = commentItems;
+    setCommentItems((items) => items.filter((item) => item.id !== comment.id));
+    bumpComments(-1);
+    try {
+      const response = await fetch(
+        `/api/posts/comments?id=${encodeURIComponent(comment.id)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error("Delete failed");
+    } catch {
+      setCommentItems(previous);
+      bumpComments(1);
+      setNotice("Comment could not be deleted. It's still here.");
+      window.setTimeout(() => setNotice(null), 2200);
+    } finally {
+      setCommentDeleting(false);
+      setCommentDeleteTarget(null);
     }
   };
 
@@ -521,12 +644,47 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
             {notice && <p role="status" className="mt-2 text-xs font-medium text-brand-blue">{notice}</p>}
 
             {commentsOpen && <div className="mt-3 space-y-3 border-t border-surface-border pt-3">
-              {commentsLoading ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading comments...</div> : commentItems.length > 0 ? <div className="max-h-52 space-y-3 overflow-y-auto">{commentItems.map((comment) => <div key={comment.id} className="flex gap-2"><Avatar className="h-7 w-7 shrink-0"><AvatarImage src={comment.author?.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{comment.author?.name?.[0] || "U"}</AvatarFallback></Avatar><div className="min-w-0 rounded-xl bg-surface-light-blue px-3 py-2"><p className="text-[11px] font-semibold text-navy-800">{comment.author?.name || comment.author?.username || "Member"}</p><p className="text-xs leading-5 text-navy-700">{comment.content}</p></div></div>)}</div> : <p className="text-xs text-muted-foreground">No comments yet. Start the conversation.</p>}
-              <div className="flex items-center gap-2"><input aria-label="Write a comment" value={commentText} onChange={(event) => setCommentText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitComment(); }} placeholder="Write a comment..." className="h-10 min-w-0 flex-1 rounded-full border border-surface-border bg-card px-4 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20" /><Button type="button" size="icon" aria-label="Send comment" onClick={() => void submitComment()} disabled={!commentText.trim() || submitting}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+              {commentsLoading ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading comments...</div> : commentItems.length > 0 ? <div className="max-h-52 space-y-3 overflow-y-auto">{commentItems.map((comment) => <div key={comment.id} className="flex gap-2"><Avatar className="h-7 w-7 shrink-0"><AvatarImage src={comment.author?.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{comment.author?.name?.[0] || "U"}</AvatarFallback></Avatar><div className="min-w-0 rounded-xl bg-surface-light-blue px-3 py-2"><div className="flex items-start justify-between gap-2"><p className="min-w-0 text-[11px] font-semibold text-navy-800">{comment.author?.name || comment.author?.username || "Member"}</p>{viewerId && comment.author?.id === viewerId && <Button variant="ghost" size="icon" aria-label="Delete comment" className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive" disabled={commentDeleting} onClick={() => setCommentDeleteTarget(comment)}><Trash2 className="h-3 w-3" /></Button>}</div>{comment.content && <p className="text-xs leading-5 text-navy-700">{comment.content}</p>}{(comment.media?.length ?? 0) > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Photos in this comment">{comment.media!.map((photo) => (<img key={photo.url} src={photo.url} alt={photo.altText || "Photo attached to comment"} loading="lazy" className="h-20 w-20 rounded-md border border-surface-border bg-ink-800 object-cover" />))}</div>}</div></div>)}</div> : <p className="text-xs text-muted-foreground">No comments yet. Start the conversation.</p>}
+              <div className="space-y-2">{commentPhotos.length > 0 && <div className="flex flex-wrap gap-2" role="list" aria-label="Photos attached to this comment">{commentPhotos.map((photo, index) => (<div key={`${photo.file.name}-${index}`} role="listitem" className="relative">{photo.preview ? <img src={photo.preview} alt={`Attached photo ${index + 1}`} className="h-16 w-16 rounded-md border border-surface-border object-cover" /> : <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-surface-light-blue px-1 text-center text-[9px] leading-tight">{photo.file.name}</span>}<button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => setCommentPhotos((photos) => photos.filter((_, position) => position !== index))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-navy-800 text-xs font-bold text-white shadow">×</button></div>))}</div>}<div className="flex items-center gap-2"><input ref={commentPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onCommentPhotosPicked} /><IconButton size="sm" label="Attach photos to comment" onClick={() => commentPhotoInputRef.current?.click()} disabled={submitting || pending || commentPhotos.length >= MAX_COMMENT_PHOTOS}><ImagePlus className="h-4 w-4" /></IconButton><input aria-label="Write a comment" value={commentText} onChange={(event) => setCommentText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitComment(); }} placeholder="Write a comment..." className="h-10 min-w-0 flex-1 rounded-full border border-surface-border bg-card px-4 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20" /><Button type="button" size="icon" aria-label="Send comment" onClick={() => void submitComment()} disabled={(commentText.trim().length === 0 && commentPhotos.length === 0) || submitting}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div></div>
             </div>}
           </div>
         </div>
       </CardContent>
+
+      {/* Deleting a comment cannot be undone, and the request removes its photos
+          from storage with it — so the same confirmation the post's own delete
+          asks for, held open until the request settles so a second click cannot
+          fire a delete that is already away. */}
+      <Dialog
+        open={commentDeleteTarget !== null}
+        onOpenChange={(nextOpen) => {
+          // Dismissable (Escape, an overlay click) only while nothing is in
+          // flight — the same hold the post's own delete dialog keeps.
+          if (!nextOpen && !commentDeleting) setCommentDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this comment?</DialogTitle>
+            <DialogDescription>
+              This can&apos;t be undone. Any photo in the comment is removed with it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCommentDeleteTarget(null)} disabled={commentDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => commentDeleteTarget && void deleteComment(commentDeleteTarget)}
+              disabled={commentDeleting}
+            >
+              {commentDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete comment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

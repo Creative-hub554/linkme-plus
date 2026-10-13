@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgEnum,
+  index,
 } from "drizzle-orm/pg-core";
 import { postAudiences } from "@/lib/post-audiences";
 // Type-only, and erased at build time: the accent's allowed values are the ones
@@ -175,6 +176,42 @@ export const comments = pgTable("comments", {
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ─── Comment media ───────────────────────────────────────────────
+//
+// Photos attached to a comment: one row per image so a comment can carry
+// several, in the order the commenter picked them. The shape is
+// `post_media` minus the processing status — nothing processes a comment's
+// photo, it is stored and served exactly as uploaded.
+//
+// Two things the rest of the codebase leans on:
+//
+// - `url` holds a public R2 URL, so the media archive's guard test requires
+//   the column to be listed in ARCHIVE_REWRITE_TARGETS. A row the rewrite
+//   pass misses would keep pointing at an object the pass is about to delete
+//   — a broken image the archive created inside a comment thread.
+// - The cascade: a comment is soft-deleted for the thread's sake, but when a
+//   row is finally hard-deleted (a cascading post delete) its photos go with
+//   it rather than leaking storage.
+export const commentMedia = pgTable(
+  "comment_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => comments.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    altText: varchar("alt_text", { length: 255 }),
+    type: varchar("type", { length: 20 }).notNull(),
+    order: integer("order").default(0),
+  },
+  (table) => [
+    // Every thread load reads its comments' photos by comment id, and
+    // Postgres does not index foreign keys on its own — an unindexed one
+    // turns that read (and the cascade above) into a scan.
+    index("comment_media_comment_id_idx").on(table.commentId),
+  ],
+);
 
 export const reactions = pgTable("reactions", {
   id: uuid("id").defaultRandom().primaryKey(),

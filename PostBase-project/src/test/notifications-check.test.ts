@@ -3,10 +3,13 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
+  MODELLED_TYPES,
   QUERIES,
+  beyondRowFindings,
   danglingFindings,
   foundedFindings,
   impliedFindings,
+  isJudgedRepeat,
 } from "../../.freebuff/notifications-check.mjs";
 
 /**
@@ -75,6 +78,89 @@ describe("the seeded-notification check's statements", () => {
     for (const [name, text] of Object.entries(QUERIES)) {
       expect({ name, interpolated: text.includes("${") }).toEqual({ name, interpolated: false });
     }
+  });
+
+  it("counts the rows behind every type the app can raise", () => {
+    // A repeat is a count, so the statement has to say what it counts for each
+    // kind of bell. A type added to `MODELLED_TYPES` without a branch here would
+    // read every key of it as holding zero rows behind it — the count silently
+    // zero, which is the one shape this check must never report as a pass.
+    for (const type of MODELLED_TYPES) {
+      expect({ type, branched: QUERIES.beyondRows.includes(`when '${type}' then`) }).toEqual({
+        type,
+        branched: true,
+      });
+    }
+    for (const table of ["public.follows", "public.reactions", "public.comments"]) {
+      expect({ table, read: QUERIES.beyondRows.includes(table) }).toEqual({ table, read: true });
+    }
+  });
+
+  it("reads the whole table, so a repeat is caught without the adoption's rows", () => {
+    // The reason this invariant is not scoped like the other four: a repeat left
+    // by a killed seed run the adoption never wrote a row for. Scoping the count
+    // by the seed's id prefixes would put that state back outside the check, so
+    // the statement may name no prefix at all.
+    expect(QUERIES.beyondRows).not.toMatch(/id::text\s+like\s+'c/);
+    // While the four statements that are about the adoption still are scoped by
+    // one — the difference is the point of the assertion above, not an accident.
+    expect(QUERIES.implied).toMatch(/id::text\s+like\s+'c/);
+  });
+});
+
+describe("the keys held above their rows", () => {
+  /** One row of the `BELLS_BEYOND_ROWS` query, as the script's own judge reads it. */
+  const held = (overrides: Record<string, unknown> = {}) => ({
+    type: "comment",
+    user_id: "member-1",
+    source_user_id: "member-2",
+    target_id: "post-1",
+    held: 2,
+    behind: 1,
+    seed_owned: true,
+    ...overrides,
+  });
+
+  it("calls a repeat the seed's own, with rows behind it, a defect", () => {
+    // The state a restore re-firing the trigger leaves: the recursion the seed's
+    // reconciliation exists for, so the check has to name it.
+    expect(isJudgedRepeat(held())).toBe(true);
+    expect(beyondRowFindings([held({ held: 3 })])).toEqual([
+      expect.objectContaining({
+        invariant: "inbox-repeats",
+        key: "comment member-1 member-2 post-1",
+      }),
+    ]);
+  });
+
+  it("names both counts in the finding, because which bell goes is the seed's to decide", () => {
+    const [finding] = beyondRowFindings([held({ held: 2, behind: 1 })]);
+    expect(finding.detail).toContain("2 bells for 1 row(s) behind the key");
+  });
+
+  it("leaves a key with no rows behind it alone, whatever its actor", () => {
+    // An engagement that was undone: the app never deletes a notification, so the
+    // bell is history the seed keeps — and the check must not call it a defect, or
+    // its advice (`npm run db:seed`) would not converge.
+    expect(isJudgedRepeat(held({ behind: 0 }))).toBe(false);
+    expect(beyondRowFindings([held({ behind: 0 })])).toEqual([]);
+  });
+
+  it("leaves a real account's second event alone", () => {
+    // A viewer can follow, unfollow and follow again and mean both — two bells for
+    // one row is then honest, and only a demo member's activity makes the count
+    // exact, since a member has no credentials to act a second time with.
+    expect(isJudgedRepeat(held({ seed_owned: false, user_id: "host-1" }))).toBe(false);
+    expect(beyondRowFindings([held({ seed_owned: false })])).toEqual([]);
+  });
+
+  it("reads one key as one finding, because the statement groups by key", () => {
+    // The statement answers *which* keys are over, one row per key, so the reading
+    // is a mapping rather than a dedupe. Without the grouping a key with three
+    // bells would arrive as three rows and the report would name one repeat twice
+    // — the reading is only as clean as that `group by`.
+    expect(QUERIES.beyondRows).toContain("group by n.type, n.user_id, n.source_user_id, n.target_id");
+    expect(beyondRowFindings([held()])).toHaveLength(1);
   });
 });
 

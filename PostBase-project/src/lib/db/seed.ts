@@ -627,11 +627,17 @@ async function writeSeededEdge<Row extends Record<string, unknown>>(edge: Seeded
 }
 
 /**
- * The key a comment bell repeats on: who was told, who commented, and on what.
- * Read as a string so a bell can be held against the comments behind it.
+ * The key a bell repeats on: who was told, who acted, which kind of engagement,
+ * and on what. Read as a string so a bell can be held against the rows behind
+ * it, and typed through so the same key is built the same way on both sides of
+ * that comparison.
  */
-const commentBellKey = (bell: { userId: string; sourceUserId: string | null; targetId: string | null }) =>
-  `${bell.userId}\u0000${bell.sourceUserId}\u0000${bell.targetId}`;
+const bellKey = (bell: {
+  type: string;
+  userId: string;
+  sourceUserId: string | null;
+  targetId: string | null;
+}) => `${bell.userId}\u0000${bell.sourceUserId}\u0000${bell.type}\u0000${bell.targetId}`;
 
 async function seed() {
   console.log("Seeding LinkMe+ application data...");
@@ -1252,43 +1258,58 @@ async function seed() {
     restoredNotifications = restored.length;
   }
 
-  // Restoring an edge re-fires the engagement trigger, and the trigger dedupes
-  // only a reaction — so a repaired follow can leave two bells for one pair, and
-  // the app never deletes either. Making the seed's rows the only rows is part of
-  // the repair: for a follow or reaction key the earliest row stays and a later
-  // duplicate of it goes. Comments are deliberately out of *that* sweep: two
-  // comments by one member on one post are two events, and the same key twice is
-  // correct, so a keep-the-earliest rule would delete an event rather than a
-  // duplicate.
-  const dropped = await db.execute(sql`
-    delete from notifications
-    where id in (
-      select id from (
-        select id, row_number() over (
-          partition by user_id, source_user_id, type, target_id
-          order by created_at, id
-        ) as position
-        from notifications
-        where type in ('follow', 'reaction') and source_user_id is not null
-      ) ranked
-      where position > 1
-    )
-    returning 1
-  `);
-
-  // Comments need the same repair by a different rule: restoring one re-fires the
-  // comment trigger, so its bell is raised a second time while the first one is
-  // still there. "Which bells did *this* run raise?" would answer that only while
-  // the run survives to ask — one killed between the restore and this point leaves
-  // the repeat behind, indistinguishable from history on the next run — so the
-  // invariant is the count instead: a comment key holds no more bells than there
-  // are comments behind it, oldest first, and the surplus goes. That is exact where
-  // it is applied, because a demo member has no credentials and so a key whose
-  // commenter is one of them is nobody else's; it heals a repeat whichever run left
-  // it; and on a database with no member comments, or with no bells for them, it
-  // removes nothing.
+  // ── Every bell held to the rows behind it ─────────────────────────
+  // Restoring an edge re-fires the engagement trigger, and the app never deletes
+  // a notification — so a repaired follow, reaction or comment can leave two
+  // bells for one piece of engagement. One invariant answers for all of them: a
+  // notification key holds no more bells than the rows behind it, oldest first,
+  // and the surplus goes. It is stated once rather than as a sweep per type, and
+  // the rows are read from the three tables `notify_engagement` fires on
+  // (comments, reactions, follows), so what is reconciled is every kind of bell
+  // the app can raise — a fourth table with a trigger on it would be a line here,
+  // not a second rule beside this one.
+  //
+  // The count is exact only where the activity is the seed's own, so that is the
+  // only place the rule is applied: a demo member has no credentials, so a
+  // comment or a reaction by one is nobody else's, and so is a follow with a
+  // member at either end. A key outside that set is not read at all — which is
+  // the point rather than caution, because the app never deletes a notification:
+  // a viewer who unfollows or un-reacts leaves a bell whose engagement is gone,
+  // and a rule that counted such a key down to zero would delete history.
   const memberIds = new Set(members.map((member) => member.id));
-  const commentsBehind = new Map<string, number>();
+
+  const bellsBehind = new Map<string, number>();
+
+  /** The rows one key has behind it: every row is a bell the trigger raised for it. */
+  const countBehind = (
+    bell: { type: string; userId: string; sourceUserId: string; targetId: string },
+    rows = 1,
+  ) => bellsBehind.set(bellKey(bell), (bellsBehind.get(bellKey(bell)) ?? 0) + rows);
+
+  // A follow key is one pair, and the pair is one row, so it holds at most one bell.
+  for (const row of await db
+    .select({ followerId: follows.followerId, followingId: follows.followingId })
+    .from(follows)) {
+    if (!memberIds.has(row.followerId) && !memberIds.has(row.followingId)) continue;
+    countBehind({
+      type: "follow",
+      userId: row.followingId,
+      sourceUserId: row.followerId,
+      targetId: row.followingId,
+    });
+  }
+
+  // Only a reaction to a post notifies, and the post's author is who is told.
+  for (const row of await db
+    .select({ userId: reactions.userId, targetId: reactions.targetId, authorId: posts.authorId })
+    .from(reactions)
+    .innerJoin(posts, eq(posts.id, reactions.targetId))
+    .where(eq(reactions.targetType, "post"))) {
+    if (!memberIds.has(row.userId) || row.authorId === row.userId) continue;
+    countBehind({ type: "reaction", userId: row.authorId, sourceUserId: row.userId, targetId: row.targetId });
+  }
+
+  // A comment key holds one bell per comment behind it, soft-deleted rows out.
   for (const row of await db
     .select({
       userId: posts.authorId,
@@ -1300,36 +1321,41 @@ async function seed() {
     .innerJoin(posts, eq(posts.id, comments.postId))
     .where(isNull(comments.deletedAt))
     .groupBy(posts.authorId, comments.authorId, comments.postId)) {
-    // Nobody is notified about their own comment, so that row implies no bell and is
-    // not a count to hold an inbox to.
+    // Nobody is notified about their own comment, so that row implies no bell and
+    // is not a count to hold an inbox to.
     if (row.userId === row.sourceUserId || !memberIds.has(row.sourceUserId)) continue;
-    commentsBehind.set(commentBellKey(row), row.behind);
+    countBehind(
+      { type: "comment", userId: row.userId, sourceUserId: row.sourceUserId, targetId: row.targetId },
+      row.behind,
+    );
   }
 
-  const commentBells = await db
+  const held = new Map<string, number>();
+  const surplus: string[] = [];
+  for (const bell of await db
     .select({
       id: notifications.id,
       userId: notifications.userId,
       sourceUserId: notifications.sourceUserId,
+      type: notifications.type,
       targetId: notifications.targetId,
     })
     .from(notifications)
-    .where(eq(notifications.type, "comment"))
-    .orderBy(notifications.createdAt, notifications.id);
-  const heldForComment = new Map<string, number>();
-  const surplus: string[] = [];
-  for (const bell of commentBells) {
-    const key = commentBellKey(bell);
-    const position = (heldForComment.get(key) ?? 0) + 1;
-    heldForComment.set(key, position);
-    const behind = commentsBehind.get(key);
-    if (behind !== undefined && position > behind) surplus.push(bell.id);
+    .orderBy(notifications.createdAt, notifications.id)) {
+    const key = bellKey(bell);
+    const behind = bellsBehind.get(key);
+    // No row behind the key: the engagement may have been undone since, and a bell
+    // the app raised for it is history rather than a repeat.
+    if (behind === undefined) continue;
+    const position = (held.get(key) ?? 0) + 1;
+    held.set(key, position);
+    if (position > behind) surplus.push(bell.id);
   }
   if (surplus.length > 0) {
     await db.delete(notifications).where(inArray(notifications.id, surplus));
   }
 
-  dedupedNotifications = dropped.length + surplus.length;
+  dedupedNotifications = surplus.length;
 
   console.log("");
   console.log("✓ Seeded demo data");

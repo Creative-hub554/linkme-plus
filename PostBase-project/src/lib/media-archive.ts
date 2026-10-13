@@ -153,6 +153,7 @@ export const ARCHIVE_REWRITE_TARGETS: readonly RewriteTarget[] = [
   { table: "companies", column: "logo_url", kind: "text" },
   // The media tables themselves
   { table: "post_media", column: "url", kind: "text" },
+  { table: "comment_media", column: "url", kind: "text" },
   { table: "listing_media", column: "url", kind: "text" },
   { table: "product_variants", column: "image_url", kind: "text" },
   { table: "job_applications", column: "cv_url", kind: "text" },

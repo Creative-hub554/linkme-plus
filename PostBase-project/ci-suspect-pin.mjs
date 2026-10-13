@@ -76,7 +76,7 @@ export const files = {
   ".freebuff/coverage-strikes.mjs": "d57cb5a6ad4db910ba0235cb1607d8fccaf7ebea",
   ".freebuff/coverage-thresholds.mjs": "cdcd700dc4dea46d3e3cff2c0d4f2270e54bbb78",
   ".freebuff/gate-collect-baselines.mjs": "395b7628aa9c72ea866880f56054a50d1bbd5015",
-  ".freebuff/gate-drift.mjs": "73e96b2d9352a1c03d7ed9389caca58412d094b3",
+  ".freebuff/gate-drift.mjs": "b711e635cc1389de82376586504f44eb6139620a",
   ".freebuff/import-closure.mjs": "0c013ff33489db8ab7d04222d8e41b84114f9359",
   ".freebuff/lint-baseline.mjs": "4985328e061d42d0d975ab0a905bd631d9772dcc",
   ".freebuff/mutation-coverage.mjs": "282a71b0d568a447e77854d05eb1362b2e49140c",

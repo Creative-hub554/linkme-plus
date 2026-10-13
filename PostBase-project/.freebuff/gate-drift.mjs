@@ -35,6 +35,13 @@
  *   - the other stage scripts and their builders (`build-contents.mjs`,
  *     `runbook-contents.mjs`, `lint-baseline.mjs`, `preview-preflight.mjs`), each of
  *     which is the entire enforcement of its stage;
+ *   - the inbox invariant check (`notifications-check.mjs`) — the whole of `npm run
+ *     notifications:check`, which holds every seeded inbox to the notification its
+ *     engagement implies and to the count invariant the seed's reconciliation promises —
+ *     a rule of one because it belongs to no stage, and the one checker here whose
+ *     *scope* is part of its verdict: a widened exemption or an id prefix quietly
+ *     reintroduced into its count would leave the check green over the state it exists to
+ *     report, and only the pin can say so;
  *   - the redactor and the nightly report renderer (`redact.mjs`, `nightly-report.mjs`),
  *     which decide what a published report is allowed to say — a report that hides a
  *     failure is a gate that failed quietly;
@@ -300,6 +307,17 @@ export const DEFAULT_WATCHES = [
   { dir: ".freebuff", pattern: "^scaffold-sweep\\.mjs$" },
   // The other scripts a gate stage is made of, and the builders they read.
   { dir: ".freebuff", pattern: "^(build-contents|runbook-contents|lint-baseline|preview-preflight)\\.mjs$" },
+  // The inbox invariant check, a rule of one for the reason the save-guard and the scaffold
+  // are: no stage runs it — it *is* `npm run notifications:check` — so there is no family
+  // for it to inherit, and the other scripts beside it here are the ones a stage spawns.
+  // It decides a verdict rather than doing an errand: it reads the live database and holds
+  // the seeded inboxes to the notification their engagement implies and to the count
+  // invariant the seed's reconciliation promises. The suite beside it pins those readings
+  // over fixtures, and could not catch the loosening this pin exists for — a rule narrowed
+  // to the adoption's id prefixes again, or an exemption widened to cover a real account's
+  // second event, would keep every fixture case green while the check answered the wrong
+  // question about the table. Nothing else reads the file, so nothing else would move.
+  { dir: ".freebuff", pattern: "^notifications-check\\.mjs$" },
   // The collect-budget ratchet: its recorder, proposer, applier and recorded numbers.
   { dir: ".freebuff", pattern: "^(collect-.*|.*-collect-baselines)\\.mjs$" },
   // What the suite and the isolated mutation run measure, and what they exclude.
