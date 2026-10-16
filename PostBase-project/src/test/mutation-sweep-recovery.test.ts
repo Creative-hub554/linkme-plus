@@ -581,6 +581,17 @@ describe("mutation sweep anchor drift", () => {
       kind: "broken",
       detail: "its anchor occurs 0 time(s), expected exactly 1",
     });
+    // …and the refusal carries the same run-wide reading a plain run's payload carries:
+    // the recorded baseline's un-struck count. This payload is emitted before the section
+    // that once declared `baselinePath` as a `const`, so a reordering that put the read
+    // back there would throw in the refusal's own `try` and silently drop the key — the
+    // run page would then never warn on a refusal night while warning on a plain one.
+    const recorded = JSON.parse(
+      readFileSync(path.join(projectRoot, ".freebuff", "mutation-baseline.json"), "utf8"),
+    ) as { unstruck?: unknown[] };
+    expect(payload.unstruckBaseline).toEqual(
+      Array.isArray(recorded.unstruck) ? recorded.unstruck.length : undefined,
+    );
   });
 
   it("--anchors reads every strike and runs nothing, passing a tree where they all fit", () => {

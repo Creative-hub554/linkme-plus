@@ -16,10 +16,11 @@ import { TypingIndicator } from "@/components/realtime/typing-indicator";
  */
 const mocks = vi.hoisted(() => ({
   lastMessage: null as Record<string, unknown> | null,
+  userId: undefined as string | undefined,
 }));
 
 vi.mock("@/hooks/use-websocket", () => ({
-  useWebSocket: () => ({ lastMessage: mocks.lastMessage }),
+  useWebSocket: () => ({ lastMessage: mocks.lastMessage, userId: mocks.userId }),
 }));
 
 const CONVERSATION = "conversation-1";
@@ -41,6 +42,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mocks.lastMessage = null;
+  mocks.userId = undefined;
 });
 
 describe("TypingIndicator", () => {
@@ -52,6 +54,19 @@ describe("TypingIndicator", () => {
   test("says someone is typing for a single reader", async () => {
     const ui = await say({ type: "typing", conversationId: CONVERSATION, userId: "u2", timestamp: Date.now() });
     expect(ui.container.textContent).toContain("Someone is typing");
+  });
+
+  test("never says it about the reader's own typing, however loudly it arrives", async () => {
+    // A surface announces on one socket and listens on another, so the hub's
+    // "every socket but the sending one" rule still delivers the typist's
+    // frames back to their own panel — the component is where that is refused.
+    mocks.userId = "u1";
+
+    const own = await say({ type: "typing", conversationId: CONVERSATION, userId: "u1", timestamp: Date.now() });
+    expect(own.container.textContent).toBe("");
+
+    const someoneElse = await say({ type: "typing", conversationId: CONVERSATION, userId: "u2", timestamp: Date.now() });
+    expect(someoneElse.container.textContent).toContain("Someone is typing");
   });
 
   test("ignores a typing message for another conversation", async () => {

@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The messages route: the conversation list and reading one, and sending.
  *
- * `GET` is read as the order it touches tables: a list reads `conversations`, a
- * single conversation reads it, checks membership, then reads `messages` and
- * marks the member read. A conversation the caller is not in is a `403`; one
- * that is not there is a `404`.
+ * `GET` is read as the order it touches tables: a list reads `conversations`,
+ * then per conversation its other member, its last message, and its unread
+ * count — a count gated on the sender and the last read, so the reader's own
+ * words never come back as their own unread, and summed into the total the
+ * badge wears. A single conversation reads `conversations`, checks membership,
+ * then reads `messages` and marks the member read. A conversation the caller
+ * is not in is a `403`; one that is not there is a `404`.
  *
  * `POST` is where a block matters, and it is pinned in both directions: the
  * recipient id must be a uuid (it is bound into the block lookup), a card
@@ -32,9 +35,10 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { GET, POST } from "./route";
-import { blocks, conversationMembers, conversations, messages } from "@/lib/db/schema";
+import { blocks, conversationMembers, conversations, messages, reactions } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
+
 
 const RECIPIENT_ID = "22222222-2222-4222-8222-222222222222";
 const CONVERSATION_ID = "33333333-3333-4333-8333-333333333333";
@@ -75,8 +79,80 @@ describe("GET /api/messages", () => {
     const response = await GET(read(""));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ conversations: [] });
+    expect(await response.json()).toEqual({ conversations: [], unreadCount: 0 });
     expectGatedSequence("reads", ["conversations"]);
+  });
+
+  it("counts each conversation's unread messages, gated on sender and last read", async () => {
+    const lastMessage = {
+      id: MESSAGE_ID,
+      conversationId: CONVERSATION_ID,
+      senderId: RECIPIENT_ID,
+      content: "hello",
+      readAt: null,
+      createdAt: "2026-01-02T00:00:00Z",
+    };
+    const OTHER_CONVERSATION_ID = "66666666-6666-4666-8666-666666666666";
+    // A `Date`, as the driver hands it back — the last-read gate is a
+    // timestamp comparison, not text.
+    const OPENED_AT = new Date("2026-01-01T12:00:00Z");
+    // The two conversations are read inside one `Promise.all`, so their
+    // queries interleave: each member lookup, then each last message, then
+    // each count. The fake answers per table in the order the route asks, so
+    // `messages` is scripted as last, last, count, count.
+    fakeDb
+      .selectReturns(conversations, [
+        { id: CONVERSATION_ID, createdAt: "2026-01-01T00:00:00Z", lastReadAt: OPENED_AT },
+        // Never opened: every message from somebody else is unread.
+        { id: OTHER_CONVERSATION_ID, createdAt: "2026-01-01T00:00:00Z", lastReadAt: null },
+      ])
+      .selectReturns(conversationMembers, [{ userId: RECIPIENT_ID, name: "Bob", avatarUrl: null }])
+      .selectReturns(conversationMembers, [{ userId: RECIPIENT_ID, name: "Bob", avatarUrl: null }])
+      .selectReturns(messages, [lastMessage])
+      .selectReturns(messages, [lastMessage])
+      .selectReturns(messages, [{ unread: 2 }])
+      .selectReturns(messages, [{ unread: 0 }]);
+
+    const response = await GET(read(""));
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      conversations: Array<{ unreadCount?: number }>;
+      unreadCount: number;
+    };
+    expect(payload.conversations.map((conversation) => conversation.unreadCount)).toEqual([2, 0]);
+    // The badge's number is the sum of the rows the panel lists, so the two
+    // can never disagree.
+    expect(payload.unreadCount).toBe(2);
+
+    // Per conversation: the other member, the last message, then the count.
+    expectGatedSequence("reads", [
+      "conversations",
+      "conversation_members",
+      "conversation_members",
+      "messages",
+      "messages",
+      "messages",
+      "messages",
+    ]);
+
+    // The count is not "messages in this conversation": it is found by its
+    // own predicate — a read of `messages` gated on the sender, which every
+    // one of them is, because sending does not move `lastReadAt` and a
+    // member's own words must not count as their own unread. The first is
+    // additionally gated on the last read; the second, never opened, is not.
+    const countReads = fakeDb.reads
+      .map((table, index) => ({
+        table,
+        where: fakeDb.selectWheres[index],
+        params: fakeDb.selectParams[index],
+      }))
+      .filter((read) => read.table === "messages" && read.where.includes("sender_id"));
+    expect(countReads).toHaveLength(2);
+    expect(countReads[0].where).toContain("created_at");
+    expect(countReads[1].where).not.toContain("created_at");
+    expect(countReads[0].params).toContain("sender-1");
+    expect(countReads[1].params).toContain("sender-1");
   });
 
   it("answers 404 for a conversation that is not there", async () => {
@@ -108,29 +184,80 @@ describe("GET /api/messages", () => {
       createdAt: "2026-01-02T00:00:00Z",
       sender: { name: "Sender", avatarUrl: null },
     };
+    // The watermark this very request writes, handed back by the update so the
+    // reader can announce *that* instant over the socket rather than one its
+    // own clock invented.
+    const MARKED_AT = new Date("2026-01-02T08:00:00Z");
     fakeDb
       .selectReturns(conversations, [{ id: CONVERSATION_ID, createdAt: "2026-01-01T00:00:00Z" }])
       .selectReturns(conversationMembers, [{ conversationId: CONVERSATION_ID, userId: "sender-1" }])
       .selectReturns(messages, [message])
-      .selectReturns(conversationMembers, [{ userId: RECIPIENT_ID, name: "Bob", avatarUrl: null }]);
+      .selectReturns(reactions, [])
+      .selectReturns(conversationMembers, [{ userId: RECIPIENT_ID, name: "Bob", avatarUrl: null, lastReadAt: null }])
+      .updateReturns(conversationMembers, [{ lastReadAt: MARKED_AT }]);
 
     const response = await GET(read(`?id=${CONVERSATION_ID}`));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       conversation: { id: CONVERSATION_ID, createdAt: "2026-01-01T00:00:00Z" },
-      messages: [message],
-      otherMember: { userId: RECIPIENT_ID, name: "Bob", avatarUrl: null },
+      // A thread with no reactions on it still carries the (empty) list beside
+      // each message — the chip row is drawn from the payload, never guessed.
+      messages: [{ ...message, reactions: [] }],
+      // The counterpart's watermark rides along: everything this member sent
+      // before it has been seen by them — a receipt, straight from the row.
+      otherMember: { userId: RECIPIENT_ID, name: "Bob", avatarUrl: null, lastReadAt: null },
+      // …and the reader's own new watermark, for the socket to announce.
+      lastReadAt: MARKED_AT.toISOString(),
     });
-    // The read is marked so the unread badge clears.
+    // The read is marked so the unread badge clears — and the reactions ride
+    // one read between the messages and the rest.
     expectGatedSequence("reads", [
       "conversations",
       "conversation_members",
       "messages",
+      "reactions",
       "conversation_members",
     ]);
     expectGatedSequence("writes", [
       { table: "conversation_members", values: { lastReadAt: expect.any(Date) } },
+    ]);
+  });
+
+  it("counts each message's reactions and marks the reader's own", async () => {
+    const message = {
+      id: MESSAGE_ID,
+      content: "hello",
+      senderId: RECIPIENT_ID,
+      readAt: null,
+      createdAt: "2026-01-02T00:00:00Z",
+      sender: { name: "Bob", avatarUrl: null },
+    };
+    fakeDb
+      .selectReturns(conversations, [{ id: CONVERSATION_ID, createdAt: "2026-01-01T00:00:00Z" }])
+      .selectReturns(conversationMembers, [{ conversationId: CONVERSATION_ID, userId: "sender-1" }])
+      .selectReturns(messages, [message])
+      // Three rows on the one message: two hearts (one of them the reader's)
+      // and a fire nobody in particular… which is to say, not the reader's.
+      .selectReturns(reactions, [
+        { targetId: MESSAGE_ID, userId: RECIPIENT_ID, type: "heart" },
+        { targetId: MESSAGE_ID, userId: "sender-1", type: "heart" },
+        { targetId: MESSAGE_ID, userId: RECIPIENT_ID, type: "fire" },
+      ])
+      .selectReturns(conversationMembers, [{ userId: RECIPIENT_ID, name: "Bob", avatarUrl: null, lastReadAt: null }])
+      .updateReturns(conversationMembers, [{ lastReadAt: null }]);
+
+    const response = await GET(read(`?id=${CONVERSATION_ID}`));
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      messages: Array<{ reactions: unknown }>;
+    };
+    expect(payload.messages[0].reactions).toEqual([
+      // Grouped by type, in first-seen order, with whether the reader is part
+      // of each count — the chip's ring and its press's outcome, decided here.
+      { type: "heart", count: 2, mine: true },
+      { type: "fire", count: 1, mine: false },
     ]);
   });
 

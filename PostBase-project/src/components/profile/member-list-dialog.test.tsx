@@ -22,6 +22,79 @@ vi.mock("@/components/social/follow-button", () => ({
   ),
 }));
 
+/**
+ * Presence rides along on the same two doubles the strip's test uses: a
+ * session, so the roster is asked for rather than skipped, and a hand-driven
+ * `WebSocket`, because the real one would dial a server the suite never serves
+ * and report its failure asynchronously, some time after the test has finished.
+ */
+const mocks = vi.hoisted(() => ({ signedIn: true }));
+
+vi.mock("@/lib/auth-client", () => ({
+  useSession: () => ({
+    session: mocks.signedIn ? { user: { id: "member-1" } } : null,
+    loading: false,
+  }),
+}));
+
+/** The fake socket, with the events the test drives as real methods. */
+class FakeWebSocket {
+  static OPEN = 1;
+  static instances: FakeWebSocket[] = [];
+
+  url: string;
+  readyState = 0;
+  sent: string[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: ((error: unknown) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeWebSocket.instances.push(this);
+  }
+
+  send(data: string) {
+    this.sent.push(data);
+  }
+
+  /** A clean teardown's close: silent, or the hook would reconnect into the next test. */
+  close() {
+    this.readyState = 3;
+  }
+
+  // --- what the test drives ---
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.();
+  }
+
+  message(payload: unknown) {
+    this.onmessage?.({ data: JSON.stringify(payload) });
+  }
+
+  /** The socket the current mount opened — one dialog, one connection. */
+  static get current(): FakeWebSocket {
+    const socket = FakeWebSocket.instances.at(-1);
+    if (!socket) throw new Error("no socket was opened");
+    return socket;
+  }
+}
+
+/** The roster as the route answers it: every member flagged either way. */
+function rosterResponse(members: Array<{ userId: string; online: boolean }>) {
+  return {
+    users: members.map((member) => ({
+      userId: member.userId,
+      displayName: null,
+      avatarUrl: null,
+      online: member.online,
+    })),
+  };
+}
+
 const members = [
   {
     id: "u1",
@@ -78,6 +151,9 @@ afterEach(() => {
 beforeEach(() => {
   // A dialog is portalled onto the body, but each test mounts its own and the
   // leak check clears it; nothing else in this file leaves a document behind.
+  mocks.signedIn = true;
+  FakeWebSocket.instances = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
 });
 
 describe("MemberListDialog", () => {
@@ -256,5 +332,93 @@ describe("MemberListDialog", () => {
     await ui.press(document.body, "Escape");
     await ui.waitFor(() => onOpenChange.mock.calls.length > 0, { description: "the close request" });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  describe("presence", () => {
+    test("draws who is here beside each name once the roster answers", async () => {
+      const requests = stubFetch({
+        "/api/users/follow": page(members, null),
+        "/api/presence": rosterResponse([
+          { userId: "u1", online: false },
+          { userId: "u2", online: true },
+        ]),
+      });
+      const { ui } = renderDialog();
+
+      await ui.waitFor(
+        () => rowNamed("Theo Wu")?.textContent?.includes("Online") ?? false,
+        { description: "the roster's verdict to arrive" },
+      );
+      expect(requests.calls.some((call) => call.pathname === "/api/presence")).toBe(true);
+      expect(rowNamed("Theo Wu")?.textContent).not.toContain("Offline");
+      expect(rowNamed("Maya Chen")?.textContent).toContain("Offline");
+    });
+
+    test("claims nothing about presence before anything has been asked", async () => {
+      // The follow list answers; presence answers with nothing to say (the
+      // undeclared path falls back to an empty body). Until a roster or a
+      // socket has actually spoken, a row is a name — not somebody drawn as
+      // away because the ask had not happened yet.
+      const requests = stubFetch({ "/api/users/follow": page(members, null) });
+      const { ui } = renderDialog();
+
+      await ui.waitFor(() => rowNamed("Theo Wu") !== null, { description: "the first page" });
+      // The claim is an absence — that the roster's answer drew *no* verdict —
+      // and there is no arrival to wait for; the sleep lets the answer be
+      // processed so "still nothing drawn" is read after it rather than before.
+      await ui.settle(); // settle-on-purpose: an absence, not an arrival
+
+      expect(requests.calls.some((call) => call.pathname === "/api/presence")).toBe(true);
+      expect(document.body.textContent).not.toContain("Online");
+      expect(document.body.textContent).not.toContain("Offline");
+    });
+
+    test("takes the socket's verdict over the roster's flags, both ways", async () => {
+      stubFetch({
+        "/api/users/follow": page(members, null),
+        "/api/presence": rosterResponse([
+          { userId: "u1", online: true },
+          { userId: "u2", online: false },
+        ]),
+      });
+      const { ui } = renderDialog();
+      await ui.waitFor(
+        () => rowNamed("Maya Chen")?.textContent?.includes("Online") ?? false,
+        { description: "the roster's verdict to arrive" },
+      );
+
+      // The roster has it backwards from the socket's point of view: Theo is
+      // here, Maya is not. While the socket answers it wins in both directions —
+      // a connection is a fact, a flag is a memory of the last beat.
+      await act(async () => {
+        FakeWebSocket.current.open();
+        FakeWebSocket.current.message({ type: "presence:snapshot", userIds: ["u2"] });
+      });
+
+      await ui.waitFor(
+        () => rowNamed("Theo Wu")?.textContent?.includes("Online") ?? false,
+        { description: "the snapshot to take effect" },
+      );
+      expect(rowNamed("Maya Chen")?.textContent).not.toContain("Online");
+      expect(rowNamed("Maya Chen")?.textContent).toContain("Offline");
+    });
+
+    test("does not ask about presence or dial for a visitor", async () => {
+      mocks.signedIn = false;
+      const requests = stubFetch({ "/api/users/follow": page(members, null) });
+      const { ui } = renderDialog();
+
+      // No sleep before these either: with no session the hook decides at
+      // mount — the roster effect returns before fetching and the socket gets
+      // its disabled flag — so by the time the rows are up there is nothing
+      // async left that could still dial.
+      await ui.waitFor(() => rowNamed("Theo Wu") !== null, { description: "the first page" });
+
+      // The API would answer a visitor 401, so the visitor's browser does not
+      // ask — and the hook does not dial either, for the same reason.
+      expect(requests.calls.filter((call) => call.pathname === "/api/presence")).toHaveLength(0);
+      expect(FakeWebSocket.instances).toHaveLength(0);
+      expect(document.body.textContent).not.toContain("Online");
+    });
   });
 });

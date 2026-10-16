@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-03T04:40:48.529Z",
+  "generatedAt": "2026-10-09T02:58:58.550Z",
   "note": "Gaps the mutation sweep must not open: survivors it may not exceed, and detector rules no limb strike reaches, which may not grow. Regenerate with: node .freebuff/mutation-guards.mjs --write-baseline",
   "survivors": [],
   "unstruck": [
@@ -174,10 +174,6 @@
     {
       "where": "const BUNDLER_INLINED_NAMES",
       "code": "const BUNDLER_INLINED_NAMES = new Set([\"NODE_ENV\"]);"
-    },
-    {
-      "where": "isPublicEnvName",
-      "code": "return name.startsWith(PUBLIC_ENV_PREFIX) || BUNDLER_INLINED_NAMES.has(name);"
     },
     {
       "where": "const ENV_NAME",

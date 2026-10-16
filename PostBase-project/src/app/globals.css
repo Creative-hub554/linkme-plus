@@ -401,5 +401,40 @@ button, a, input, textarea, select {
 .auth-transition-glow { animation: auth-transition-glow 3.5s ease-in-out infinite; }
 .auth-transition-glow-delay { animation-delay: -1.7s; }
 
+/*
+ * The platform transition: the veil a section change is covered by. Two fades
+ * and a bar across the top edge. The bar's 620ms is the sum of the two phases
+ * the component's own timers hold — 360ms raised plus 260ms leaving — so it
+ * crosses once and lands as the veil finishes fading, and neither keeps running
+ * over a page that has already settled.
+ *
+ * The bar is keyed on the *parent's* phase class rather than on its own class:
+ * a class of its own would run its animation once, at mount, while nothing was
+ * on screen, and never again. Both rules state the same animation so that the
+ * handover from raised to leaving continues the one run instead of restarting
+ * it — only a change of `animation-name` restarts a running animation.
+ */
+@keyframes platform-transition-raise {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes platform-transition-leave {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes platform-transition-sweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(360%); }
+}
+
+.platform-transition-raise { animation: platform-transition-raise 180ms ease-out both; }
+.platform-transition-leave { animation: platform-transition-leave 260ms ease-in both; }
+.platform-transition-raise .platform-transition-sweep,
+.platform-transition-leave .platform-transition-sweep {
+  animation: platform-transition-sweep 620ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FollowButton } from "@/components/social/follow-button";
+import { StatusIndicator } from "@/components/ui/status-indicator";
+import { usePresenceFlags } from "@/hooks/use-presence-flags";
 import { RefreshCw, Users } from "lucide-react";
 
 export type MemberListMode = "followers" | "following";
@@ -83,6 +85,16 @@ export function MemberListDialog({
    * rendered next to "No followers yet" while that fetch is in flight.
    */
   const [pendingAdd, setPendingAdd] = useState<string | null>(null);
+
+  /**
+   * Who in the open list is here right now — asked once for the whole list
+   * rather than per row: `OnlineStatus` opens a presence socket of its own, and
+   * twenty rows would be twenty connections for one answer. The verdict comes
+   * back `null` until something has actually been asked (or the ask failed),
+   * and a row with no verdict draws no status rather than claiming the member
+   * is away.
+   */
+  const { isOnline } = usePresenceFlags(open);
 
   const title = mode === "followers" ? "Followers" : "Following";
   // "Following of Maya Chen" is not a sentence anyone would write.
@@ -284,11 +296,12 @@ export function MemberListDialog({
             <ul className="divide-y divide-surface-border">
               {members.map((member) => {
                 const isViewer = Boolean(viewerId) && member.id === viewerId;
+                const online = isOnline(member.id);
                 return (
                   <li key={member.id} className="flex items-center gap-3 px-5 py-3">
                     <Link
                       href={`/profile?user=${encodeURIComponent(member.id)}`}
-                      className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="relative flex min-w-0 flex-1 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Avatar className="h-10 w-10">
                         {member.avatarUrl && <AvatarImage src={member.avatarUrl} alt="" />}
@@ -297,6 +310,27 @@ export function MemberListDialog({
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-navy-800">
                           {member.displayName}
+                          {/* The mark sits on the profile icon — the avatar's
+                              lower-right corner — because that is where a reader
+                              looks for who is here, and the words ride along in
+                              the markup wherever the dot is drawn. The indicator
+                              stays *after the name* in the DOM and only moves
+                              visually: the coordinates are absolute against the
+                              link (the nearest positioned ancestor), not the
+                              truncating name span, so the reading order stays
+                              "Maya Chen Offline" rather than an orphaned status
+                              leading the row — and the anchor holds whichever of
+                              the two children (the h-10 avatar or the text block)
+                              is the taller one, since both are centered in the
+                              link. */}
+                          {online !== null && (
+                            <StatusIndicator
+                              className="absolute left-[34px] top-1/2 translate-y-[13px]"
+                              label={online ? "Online" : "Offline"}
+                              tone={online ? "success" : "neutral"}
+                              size="sm"
+                            />
+                          )}
                           {isViewer && <span className="ml-1 text-xs text-muted-foreground">· You</span>}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">

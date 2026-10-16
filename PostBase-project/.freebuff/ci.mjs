@@ -336,7 +336,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { redactInput, redactInputs, redactText } from "./redact.mjs";
 import { fileURLToPath } from "node:url";
 // The collect-time reporter leaves its soft-gate warnings in a sidecar whose
@@ -1050,7 +1050,21 @@ function wrapperOnlyFailure(child, report) {
 }
 
 function runTest() {
-  const reportPath = join(ROOT, ".freebuff", ".ci-vitest-report.json");
+  // The verdict is read out of this one file, so the file belongs to this runner alone.
+  // Every instance wrote and unlinked the same fixed name, and a second `ci.mjs` — a gate
+  // started while another was still going, or an `--only=test` beside a full run — wins or
+  // loses that race without knowing it: the instance that loses reads no report at all (the
+  // other unlinked it in `oneTestRun` before spawning) or reads the other run's, so a stage
+  // goes red over a suite it never ran, carrying someone else's failures — or someone else's
+  // clean pass. A pid names one live instance, and `.temp` is gitignored, so a killed run's
+  // leftover can be neither committed nor pinned — no watch rule names that directory, which
+  // is what keeps it from becoming a gate file. It is *not* outside the tree a key is built
+  // from, and saying otherwise would be the tempting mistake here: `.temp` is not in
+  // CACHE_SKIP_DIRS, and the lint stage's `mjs` sweep already holds whatever scratch scripts a
+  // session leaves there, so a `.mjs` in this directory re-keys lint. A report is a `.json`,
+  // which no stage's globs match, so this one re-keys nothing.
+  const reportPath = join(ROOT, ".temp", `.ci-vitest-report-${process.pid}.json`);
+  mkdirSync(dirname(reportPath), { recursive: true });
   // The collect-time reporter drops soft-gate warnings and the run report beside
   // the suite's own; the paths are the stage's, the clearing is each attempt's.
   const softPath = join(ROOT, ".freebuff", SOFT_GATE_FILE);
@@ -1583,6 +1597,47 @@ function sourceFiles(dir = ROOT, out = []) {
     }
   }
   return out;
+}
+
+/**
+ * The directories a watch rule names *above* the project root — today the repository's own
+ * `.github/workflows`, whose workflows are the ones GitHub reads.
+ *
+ * `sourceFiles` walks the project tree, and a tree walk has nowhere to go but down from
+ * where it starts: a file the pin holds because a rule named `../.github/workflows` was
+ * never in the list, so no stage's key covered it and `--changed-only` never selected the
+ * stage that checks it. A mirror edit then left the drift stage answered from a recorded
+ * pass over a tree it had not read. The rule is the declaration of what exists, so the run
+ * asks it rather than keeping a second list of the directories outside the root: a rule
+ * added there is in the list the moment it is declared. A directory that is not there is
+ * skipped rather than scanned, because the alarm's own refusal for a rule it cannot read is
+ * the answer to that, and this list is about which files a key can name.
+ */
+function ruleDirsOutsideRoot(watches = DEFAULT_WATCHES) {
+  const dirs = new Set();
+  for (const rule of watches) {
+    const dir = resolve(ROOT, rule.dir);
+    if (!relative(ROOT, dir).startsWith("..")) continue;
+    if (existsSync(dir)) dirs.add(dir);
+  }
+  return [...dirs];
+}
+
+/**
+ * Every file a key this run builds can name: the project tree, plus the files in each
+ * directory a watch rule names above it.
+ *
+ * This is the list keys, `--changed-only` and the coverage refusal are all read against, so
+ * a file missing from it is a file nothing measures — the same hole, reached the other way
+ * round. One list, built once, is what keeps those three from disagreeing about which files
+ * the run can see.
+ */
+function keyedFiles() {
+  const files = new Set(sourceFiles());
+  for (const dir of ruleDirsOutsideRoot()) {
+    for (const file of sourceFiles(dir)) files.add(file);
+  }
+  return [...files];
 }
 
 // Each file is read once per run however many stages' globs name it.
@@ -4311,7 +4366,7 @@ const selectedTotal = selected.length + excluded.length;
 // expired), and reasoned. The list is empty, which is what the sentence above is for.
 const cacheEnabled = !process.argv.includes("--no-cache");
 const cache = cacheEnabled ? loadCache() : { version: CACHE_VERSION, stages: {} };
-const cacheFiles = cacheEnabled ? sourceFiles() : null;
+const cacheFiles = cacheEnabled ? keyedFiles() : null;
 const globalKey = cacheFiles === null ? "" : hashPaths(inputFiles(cacheFiles, GLOBAL_FORCE));
 
 /** A stage's cache key, or `null` when its inputs cannot name what it reads. */

@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Heart, MapPin } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /** A uuid is a key, not a word: a category that still looks like one is an id nobody resolved. */
@@ -41,8 +41,18 @@ export function ListingCard({
   liked: initialLiked = false,
   onSavedChange,
 }: ListingCardProps) {
+  // The heart is the row's state the card holds in escrow: `useState` reads the
+  // prop once, and while the card stays mounted — same key, stable identity —
+  // the parent's rows can move under it without the heart hearing. So while a
+  // write is in flight the card keeps what it is writing (its deferred
+  // confirmation is still landing), and whenever the row's own data moves —
+  // parent rows repainted, same card still mounted — the heart adopts it.
   const [liked, setLiked] = useState(initialLiked);
   const saving = useRef(false);
+  useEffect(() => {
+    if (saving.current) return;
+    setLiked(initialLiked);
+  }, [initialLiked]);
 
   /**
    * The heart persists: a press writes the state it asks for through the

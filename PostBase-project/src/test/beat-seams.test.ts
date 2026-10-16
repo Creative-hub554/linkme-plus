@@ -212,8 +212,8 @@ describe("the surfaces", () => {
     );
     const withCarousel = replaceOnce(
       withImport,
-      "  const { lastMessage } = useWebSocket();\n",
-      "  const { lastMessage } = useWebSocket();\n" +
+      "  const { lastMessage, userId: selfId } = useWebSocket();\n",
+      "  const { lastMessage, userId: selfId } = useWebSocket();\n" +
         "  const { beats } = useAmbientCarousel(3, { cadenceMs: 1000 });\n",
     );
 

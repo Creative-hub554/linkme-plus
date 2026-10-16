@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
 import { stubFetch, type StubEndpoint } from "@/test/stub-fetch";
@@ -266,5 +267,55 @@ describe("the heart's saved toggle", () => {
       { description: "the save to be confirmed" },
     );
     expect(answers).toEqual([false, true]);
+  });
+
+  test("recants the row's own flag when the parent repaints it — the mounted card does not wait on a refetch", async () => {
+    // The state a row repaints under is the one `useState(initialLiked)` once
+    // dropped: the prop reads once on the mount and the card keeps the
+    // mount-day figure while the parent's rows move under it. So the case is
+    // mounted like the pages mount it — the card inside a parent whose own
+    // state repaints the `liked` prop in place — and the heart reads the
+    // repainted row, not the press's history.
+    function ShelfRow() {
+      const [liked, setLiked] = useState(false);
+      return (
+        <ListingCard
+          id={SAVED_LISTING_ID}
+          title="Vintage camera"
+          price={240}
+          seller={{ name: "Maya Chen" }}
+          liked={liked}
+          onSavedChange={(saved) => setLiked(saved)}
+        />
+      );
+    }
+    const requests = stubFetch({
+      "/api/marketplace/saved": (request) => ({ saved: request.method === "POST" }),
+    });
+    const ui = mountSurface(
+      <ShelfRow />,
+    );
+
+    await ui.click(ui.byName("Save listing"));
+    await ui.waitFor(() => requests.calls.some((call) => call.method === "POST"), {
+      description: "the save request",
+    });
+
+    // The press lit the heart and the parent's confirmation (which the
+    // component read as its prop) rewrote it; the same card must hold the
+    // written state without a second read of the row.
+    await ui.waitFor(
+      () => ui.container.querySelector('button[aria-label="Remove from saved"]') !== null,
+      { description: "the heart the confirmation re-lit" },
+    );
+
+    // And the reverse: when the parent's rows are rewritten under the card
+    // with no press of this card's own, the card adopts the rewritten state —
+    // the state its heart would have shown had it been mounted at the row.
+    await ui.click(ui.byName("Remove from saved"));
+    await ui.waitFor(
+      () => ui.container.querySelector('button[aria-label="Save listing"]') !== null,
+      { description: "the heart the parent's repaint un-lit" },
+    );
   });
 });

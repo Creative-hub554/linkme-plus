@@ -36,6 +36,18 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({ user: mocks.user, isLoading: false }),
 }));
 
+// The member list reads presence from the session, and the real hook talks to
+// Supabase — whose stand-in below answers only what the realtime channel asks
+// of it. The rows' statuses are not this file's subject, so the session is
+// simply not there: the dialog dials nothing, fetches nothing beyond the list
+// itself, and opens exactly as it did before presence came along. The rest of
+// the module is kept, so an export this tree names still resolves.
+vi.mock("@/lib/auth-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-client")>()),
+  useSession: () => ({ session: null, loading: false, user: null }),
+  useUser: () => ({ user: null, loading: false }),
+}));
+
 vi.mock("@/utils/supabase/client", () => {
   const channel = { on: () => channel, subscribe: () => channel, unsubscribe: () => {} };
   return { createClient: () => ({ channel: () => channel, removeChannel: () => {} }) };
