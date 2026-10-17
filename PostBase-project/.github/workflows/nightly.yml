@@ -60,6 +60,17 @@ jobs:
       # ahead of the JSON and break the parse — while stdout carries exactly the
       # one report object and stderr (the runner's progress) goes to the log.
       - name: Run the full CI gate
+        # The verification queue's own alarm, keyed on the one secret it needs:
+        # when the repository defines NIGHTLY_QUEUE_DATABASE_URL, the suite's
+        # queue-alarm test runs against that connection and the night goes red
+        # on the pending applications a reviewer is now owed (48h default;
+        # QUEUE_ALARM_MAX_HOURS overrides). Without the secret the flag stays
+        # off — the alarm pages nobody and never pretends green about a queue
+        # it cannot read. The runbook's "The verification queue's nightly
+        # alarm" section holds the case for a read-only connection.
+        env:
+          QUEUE_ALARM: ${{ secrets.NIGHTLY_QUEUE_DATABASE_URL != '' && '1' || '0' }}
+          DATABASE_URL: ${{ secrets.NIGHTLY_QUEUE_DATABASE_URL }}
         run: |
           mkdir -p .ci
           npm run --silent ci -- --json --skip=preflight > .ci/report.json 2> .ci/ci.log

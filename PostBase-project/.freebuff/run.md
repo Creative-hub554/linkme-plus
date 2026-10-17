@@ -63,6 +63,7 @@
 - [A write's `where` is recorded too, so a soft delete's ownership is assertable](#a-writes-where-is-recorded-too-so-a-soft-deletes-ownership-is-assertable)
 - [The coverage-gap list, and how to reproduce it](#the-coverage-gap-list-and-how-to-reproduce-it)
 - [Chat reactions](#chat-reactions)
+- [The verification queue's nightly alarm](#the-verification-queues-nightly-alarm)
 
 ## Editing this runbook
 
@@ -1184,3 +1185,11 @@ The check that would have caught the nameless mobile menu button — an icon-onl
 
 - **2026-10-13 — ci verdict: 2 passed, 1 failed, 7 skipped, 1 unchanged, 0 reused, 0 excluded (11 selected); failed: test.** typecheck PASS, lint baseline PASS, vitest suite FAIL.
   rendered-links coverage: chrome — the footer 13, the signed-in header 5, the opened account menu 5, the opened mobile panel 3, the opened notification panel 2, the bottom nav 3, the Social strip 1, the signed-out header 5, the signed-out mobile panel 4, the signed-out bottom nav 2 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.
+## The verification queue's nightly alarm
+
+- **Why:** verification is never self-awarded — an application sits `pending` until an administrator decides it — so a queue nobody is watching is the one state the admin surface cannot rescue by itself. The nightly gate is where someone is watching: the suite's queue-alarm test (`src/test/verification-queue-alarm.test.ts`, held against the pure arithmetic in `src/lib/verification-queue.ts`) fails the night when a pending application has waited past its review window, and the gate run's red — its summary, its run-page annotation, its nightly-report artifact — is the paging. Nothing sends an email; the gate going red is the house's alarm channel, the same channel a failing stage or a mutant survivor uses.
+- **What it judges:** the pending applications joined to their owners' handles, read through `DATABASE_URL`. An application is *owed* once it is strictly past the review window — **48 hours by default**; `QUEUE_ALARM_MAX_HOURS=<hours>` moves it. The failure message is the paging text: how many applications are owed, the oldest one's handle and wait, where the queue is (`/admin` → Verification), and the grant command for the case where nobody holds the `admin` role yet (`npm run admin:grant -- <email>`). The exact-48h boundary is inside the window; 47.999h and 48h are not owed, 48.0001h is.
+- **The wiring and the secret:** the nightly gate step (`.github/workflows/nightly.yml`'s `Run the full CI gate`) reads `QUEUE_ALARM` from `secrets.NIGHTLY_QUEUE_DATABASE_URL != '' && '1' || '0'` and `DATABASE_URL` from the same secret. Define `NIGHTLY_QUEUE_DATABASE_URL` in the repository's Actions secrets and the alarm runs every night against it; leave it undefined and the alarm is a skip — it pages nobody and never pretends green about a queue it cannot read. **Use a read-only, least-privilege connection as the secret's value:** the alarm only `select`s `verification_requests` joined to `users` — it never writes — so a DSN that can only read is exactly enough, and the secret stays out of the DSN the seed and the smoke pipeline use for scratch work.
+- **Refusals rather than false green:** `QUEUE_ALARM=1` without `DATABASE_URL` is refused by an always-on assertion (a misconfigured flag must not read as a pass), and `QUEUE_ALARM_MAX_HOURS` that is not a positive number is refused rather than trusted. Both name the fix in their red.
+- **The pin note:** `nightly.yml` is a pinned gate file, so this addition leaves its hash unrecorded until the next deliberate `npm run gates:pin` — the same one the landing plan (`docs/plan-staging-rework-landing.md`) already owes for the three drifted configs. Nothing else was pinned: the new suite file sits inside the ordinary `test` stage, and no stage table, script seam, or cache key changed — the alarm rides the suite the nightly already runs.
+
