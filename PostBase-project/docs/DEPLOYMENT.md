@@ -68,6 +68,7 @@ Required variables:
 
 ```bash
 npm run db:push
+npm run db:seed
 ```
 
 ## Development
@@ -77,6 +78,24 @@ npm run dev
 ```
 
 Visit http://localhost:3000
+
+### Verifying the API against a scratch Postgres branch
+
+One command stands up a disposable Postgres in Docker, applies the full
+migration set (per file, recorded so it is rerunnable), seeds the demo data,
+and runs the live-Postgres smokes — the moderation flow through the real
+handlers, the rendered moderation dashboard, and the reports board — against
+that branch. Run it whenever the migrations, the seed, or the admin surface
+change; it cleans up after itself, so it is safe to repeat against one
+branch:
+
+```bash
+npm run smoke:postgres
+```
+
+Requires Docker. When you are done with the branch, tear it down:
+
+`docker rm -f linkme-smoke-pg`
 
 ## Production Deployment
 
