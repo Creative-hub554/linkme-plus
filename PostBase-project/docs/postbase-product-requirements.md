@@ -141,9 +141,15 @@ AI operates only in the **Social/Feed**, **Marketplace**, and **Jobs** modules. 
 - Maintain audit logs for administrator actions, campaign approval/rejection, payment/refund actions, and material moderation events.
 - Publish community standards, marketplace policy, advertising policy, privacy policy, and terms of service before launch.
 
+### Account verification
+
+- A member can request a verified badge by submitting one to five public HTTPS links that establish their identity or public presence — never identity documents — and the links are visible only to the member who submitted them and to reviewing administrators.
+- Verification is never self-awarded: an application sits pending under review and resolves only through the status vocabulary pending, approved, and rejected. An administrator's approval sets the public badge; a rejection does not; both record the reviewer, the optional review note, and an audit log entry.
+- A member has at most one pending application at a time: a second submission is refused while one is under review, and a rejected applicant may resubmit updated links.
+
 ## 5. Essential Data Entities
 
-`User`, `Profile`, `Follow`, `Post`, `PostMedia`, `Comment`, `Reaction`, `SavedItem`, `Notification`, `Conversation`, `Message`, `Page`, `PageRole`, `Group`, `GroupMember`, `MarketplaceListing`, `ProductVariant`, `InventoryItem`, `InventoryMovement`, `Storefront`, `Job`, `Company`, `JobApplication`, `AdvertisementCampaign`, `AdvertisementCreative`, `AdvertisementPlacement`, `AdvertisementBooking`, `AdvertisementMetric`, `PromotedListingCampaign`, `BoostedPostCampaign`, `Report`, `ModerationAction`, `Payment`, and `AuditLog`.
+`User`, `Profile`, `Follow`, `Post`, `PostMedia`, `Comment`, `Reaction`, `SavedItem`, `Notification`, `Conversation`, `Message`, `Page`, `PageRole`, `Group`, `GroupMember`, `MarketplaceListing`, `ProductVariant`, `InventoryItem`, `InventoryMovement`, `Storefront`, `Job`, `Company`, `JobApplication`, `AdvertisementCampaign`, `AdvertisementCreative`, `AdvertisementPlacement`, `AdvertisementBooking`, `AdvertisementMetric`, `PromotedListingCampaign`, `BoostedPostCampaign`, `Report`, `ModerationAction`, `VerificationRequest`, `Payment`, and `AuditLog`.
 
 ## 6. Non-Functional Requirements
 
@@ -187,4 +193,5 @@ AI operates only in the **Social/Feed**, **Marketplace**, and **Jobs** modules. 
 - An advertiser can select an available banner slot, upload compliant creative, submit payment, receive approval/rejection, and see booked campaign dates.
 - An approved active banner appears only in its booked placement, has a Sponsored label, links safely to its destination, honours frequency limits, and records impressions/clicks.
 - A page administrator can boost an eligible page post; after payment and approval, it is served as a clearly labelled Sponsored post to the selected audience and reports reach, engagement, spend, and campaign dates.
+- A member can submit a verification application with public links; only an administrator can review the queue, approve or reject the application with an optional note, and approval is what sets the member's public verified badge, audited at the decision.
 - An administrator can review a reported item or banner, take action, and create an auditable record.

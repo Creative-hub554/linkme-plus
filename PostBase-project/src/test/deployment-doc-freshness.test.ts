@@ -41,6 +41,11 @@ const DOC_NEEDLES: Record<string, string> = {
   dbPushForce: "npm run db:push --force",
   dbSeedScript: "npm run db:seed",
   smokePostgresScript: "npm run smoke:postgres",
+  // The reviewer queue's one operational prerequisite: a grant that only the
+  // owner's machine can perform.
+  adminGrantScript: "npm run admin:grant --",
+  adminGrantList: "npm run admin:grant -- --list",
+  adminGrantRevoke: "npm run admin:grant -- --revoke",
   cleanScript: "npm run clean",
   npmInstall: "npm install",
   envCopy: "cp .env.example .env.local",

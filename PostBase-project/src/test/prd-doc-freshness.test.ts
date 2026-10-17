@@ -25,6 +25,7 @@ import { expectDocSelfHeld, expectHeld, readSource } from "./doc-freshness";
 const doc = readSource("docs/postbase-product-requirements.md");
 const schema = readSource("src/lib/db/schema.ts");
 const adsPage = readSource("src/app/(static)/ads/page.tsx");
+const memberVerificationRoute = readSource("src/app/api/verification-requests/route.ts");
 
 /** The PRD's quotable strings, and the doc-side form every rule first assumes. */
 const DOC_NEEDLES: Record<string, string> = {
@@ -36,8 +37,22 @@ const DOC_NEEDLES: Record<string, string> = {
   campaignStatuses:
     "draft, pending payment, pending review, approved, scheduled, active, paused, rejected, completed, cancelled, refunded",
   entitiesParagraph:
-    "`User`, `Profile`, `Follow`, `Post`, `PostMedia`, `Comment`, `Reaction`, `SavedItem`, `Notification`, `Conversation`, `Message`, `Page`, `PageRole`, `Group`, `GroupMember`, `MarketplaceListing`, `ProductVariant`, `InventoryItem`, `InventoryMovement`, `Storefront`, `Job`, `Company`, `JobApplication`, `AdvertisementCampaign`, `AdvertisementCreative`, `AdvertisementPlacement`, `AdvertisementBooking`, `AdvertisementMetric`, `PromotedListingCampaign`, `BoostedPostCampaign`, `Report`, `ModerationAction`, `Payment`, and `AuditLog`",
+    "`User`, `Profile`, `Follow`, `Post`, `PostMedia`, `Comment`, `Reaction`, `SavedItem`, `Notification`, `Conversation`, `Message`, `Page`, `PageRole`, `Group`, `GroupMember`, `MarketplaceListing`, `ProductVariant`, `InventoryItem`, `InventoryMovement`, `Storefront`, `Job`, `Company`, `JobApplication`, `AdvertisementCampaign`, `AdvertisementCreative`, `AdvertisementPlacement`, `AdvertisementBooking`, `AdvertisementMetric`, `PromotedListingCampaign`, `BoostedPostCampaign`, `Report`, `ModerationAction`, `VerificationRequest`, `Payment`, and `AuditLog`",
+  // The verification feature's quotable contract, held where the code states
+  // each piece: the link vocabulary is the member route's own error text, the
+  // lifecycle is the schema's own status enum, and the one-application rule is
+  // the partial index's name.
+  verificationLinks: "one to five public HTTPS links",
+  verificationStatuses: "pending, approved, and rejected",
 };
+
+/**
+ * Two verification nouns the PRD states in prose but no string of it quotes:
+ * the route's refusal of a second submission, and the partial index the schema
+ * enforces it with. Each is held against the artifact that carries it.
+ */
+const ONE_PENDING_INDEX = "verification_requests_one_pending_per_user_idx";
+const ONE_PENDING_REFUSAL = "A verification request is already under review";
 
 /** Each PRD entity the schema models, and the table that models it. */
 const ENTITY_MAP: Record<string, string> = {
@@ -72,6 +87,7 @@ const ENTITY_MAP: Record<string, string> = {
   BoostedPostCampaign: "boosted_post_campaigns",
   Report: "reports",
   ModerationAction: "moderation_actions",
+  VerificationRequest: "verification_requests",
   AuditLog: "audit_logs",
 };
 
@@ -121,8 +137,35 @@ describe("the product requirements doc against the app it describes", () => {
     // mapping records — a dropped or renamed table is a contract change and goes
     // through the doc in the same commit.
     for (const [entity, table] of Object.entries(ENTITY_MAP)) {
-      expectHeld(`pgTable("${table}"`, schema, `schema: ${entity} → ${table}`);
+      // Whitespace-tolerant on purpose: some tables declare their name on its
+      // own line (`pgTable(\n  "verification_requests",`), others inline.
+      expect(
+        new RegExp(`pgTable\\s*\\(\\s*"${table}"`).test(schema),
+        `schema: ${entity} → ${table} (no pgTable declaration found)`,
+      ).toBe(true);
     }
+  });
+
+  it("holds the verification vocabulary to the artifacts that state it", () => {
+    // The verification section quotes three load-bearing strings, and each one
+    // is a claim about an artifact that carries it: the link vocabulary is the
+    // member route's own validation message, the lifecycle names the three
+    // values the schema's `verification_request_status` enum takes — held as a
+    // list like the campaign statuses, so a vocabulary change on either side
+    // is a named red — and the one-application rule is the partial index the
+    // schema declares by that name.
+    expectHeld(DOC_NEEDLES.verificationLinks, memberVerificationRoute, "the member verification route");
+    expectHeld(ONE_PENDING_REFUSAL, memberVerificationRoute, "the one-pending refusal");
+    const enumMatch = schema.match(/pgEnum\("verification_request_status", \[(.*?)\]\)/);
+    expect(enumMatch).not.toBeNull();
+    const enumValues = (enumMatch as RegExpMatchArray)[1]
+      .split(",")
+      .map((value) => value.trim().replace(/^"|"$/g, ""));
+    const docStatuses = DOC_NEEDLES.verificationStatuses
+      .split(", ")
+      .map((status) => status.replace(/^and /, "").replace(/ /g, "_"));
+    expect(docStatuses).toEqual(enumValues);
+    expectHeld(ONE_PENDING_INDEX, schema, "the one-pending-per-user index");
   });
 
   it("holds the two unmodeled entities to their documented absence", () => {
