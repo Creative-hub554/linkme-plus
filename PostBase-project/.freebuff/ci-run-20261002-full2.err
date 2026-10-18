@@ -1,2 +1,0 @@
-ci: 1 of 4 stage(s) failed: test
-ci: stopped early — 6 stage(s) not run: preflight, drift, mutation-example, mutation-coverage, mutation-preflight, mutation (use --keep-going to run them, or --from=preflight to resume at one)

@@ -90,30 +90,44 @@ export async function POST(request: Request) {
     // Keyed by the *Page*, not by the admin who happened to upload it: the photo
     // belongs to the Page and outlives its admins, and a Page with several
     // admins would otherwise scatter the same photo across their folders.
-    const key = generateKey(getFolderForPurpose(target.purpose), pageId, file.name);
-    await putObject(key, file, file.type);
-    const url = getPublicUrl(key);
-
-    // The URL this upload is about to displace is read *before* the row is
-    // written, and only the column for this `kind`: `.returning()` hands back
+    // The URL this upload is about to displace is read *before* the object is
+    // stored, and only the column for this `kind`: `.returning()` hands back
     // the value just written, so once the update lands the previous one is no
     // longer recorded anywhere and the object behind it could never be found
-    // again.
+    // again. Reading first also means a read that fails fails the request while
+    // the bucket is still empty.
     const [current] = await db
       .select({ url: kind === "avatar" ? pages.avatarUrl : pages.coverUrl })
       .from(pages)
       .where(eq(pages.id, pageId));
 
-    const [updated] = await withDbRetry(() =>
-      db
-        .update(pages)
-        .set(kind === "avatar" ? { avatarUrl: url } : { coverUrl: url })
-        .where(eq(pages.id, pageId))
-        .returning({ id: pages.id }),
-    );
+    const key = generateKey(getFolderForPurpose(target.purpose), pageId, file.name);
+    await putObject(key, file, file.type);
+    const url = getPublicUrl(key);
+
+    // The one write that can strand the object: when it fails, nothing points
+    // at the upload and the URL is never handed out, so it comes back out of
+    // the bucket rather than staying as storage nobody can find again.
+    let updated: { id: string } | undefined;
+    try {
+      [updated] = await withDbRetry(() =>
+        db
+          .update(pages)
+          .set(kind === "avatar" ? { avatarUrl: url } : { coverUrl: url })
+          .where(eq(pages.id, pageId))
+          .returning({ id: pages.id }),
+      );
+    } catch (dbError) {
+      await deleteStoredObjects([url]);
+      throw dbError;
+    }
     // The Page could have been deleted between the role check and the write, in
-    // which case the object has nowhere to be pointed at from.
-    if (!updated) return errorResponse("Page not found", 404);
+    // which case the object has nowhere to be pointed at from — so it too goes
+    // back to the bucket instead of stranding.
+    if (!updated) {
+      await deleteStoredObjects([url]);
+      return errorResponse("Page not found", 404);
+    }
 
     // The image this one replaced is now unreferenced, so it comes out of the
     // bucket rather than staying as storage nobody points at but everyone can

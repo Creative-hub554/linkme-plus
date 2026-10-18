@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1043,6 +1044,68 @@ describe("the targeted re-pin", () => {
  * `GATE_CONTENT_DIR` is the seam: every run in this file stashes into a temp directory, so a
  * fixture cannot write the project's own, and a case can point a run at its own.
  */
+/**
+ * Which end of a line a byte follows, and why the pin cannot be made of it.
+ *
+ * This was the one drift the alarm could report that was not there, and it was silent in the
+ * direction that matters. A hash over raw bytes is not reproducible across two checkouts of one
+ * blob: `core.autocrlf=true` gives this working tree CRLF and gives the `ubuntu-latest` runner
+ * the drift stage actually runs on LF, and git records LF either way. So a pin taken here was a
+ * hash the runner could not produce — the drift stage failed in CI on a file nobody had changed,
+ * while every local run stayed green, because the checkout kept restoring the very line endings
+ * the pin had been taken from. Nothing about the code could tell the two apart, and the two
+ * copies of `hashFile`/`hashBytes` were the shape of it: one reading of "a file's hash", written
+ * twice, so a change to one of them would have left the pin and the stash disagreeing about the
+ * same file.
+ *
+ * A workflow edit is where it surfaced, and it is worth saying why that file: it was the one
+ * file in the pin a CRLF checkout had rewritten, so it was the only one whose re-pin could come
+ * out unreproducible. Every other pinned file was already LF and hashed the same either way.
+ */
+describe("the pin's line endings", () => {
+  /** One pinned fixture, written with the line endings the case asks for. */
+  function pinned(eol: string): { manifest: string; script: string } {
+    const dir = caseDir();
+    const script = path.join(dir, "coverage-alpha.mjs");
+    const manifest = path.join(dir, "gate-hashes.mjs");
+    const lines = ["export const alpha = 1;", "export const beta = 2;", ""];
+    writeFileSync(script, lines.join(eol));
+    writeFileSync(
+      manifest,
+      renderManifest({
+        algorithm: "sha1",
+        watches: fixtureWatches(dir),
+        files: { [keyOf(script)]: hashFile(script) },
+      }),
+    );
+    return { manifest, script };
+  }
+
+  it("reads the LF bytes a runner checks out as the content a CRLF checkout pinned", () => {
+    const { manifest, script } = pinned("\r\n");
+    expect(check(manifest).status).toBe(0);
+
+    // The same commit, checked out on ubuntu-latest: git's blob is LF, so the runner's
+    // working tree is. This is the run that used to report CHANGED on an untouched file.
+    writeFileSync(script, ["export const alpha = 1;", "export const beta = 2;", ""].join("\n"));
+    expect(check(manifest).status).toBe(0);
+
+    // And the fold is narrow: content is still what the pin is made of, so a real edit on
+    // either side of it is still a drift rather than something the folding absorbed.
+    writeFileSync(script, ["export const alpha = 1;", "export const beta = 3;", ""].join("\r\n"));
+    expect(check(manifest).status).toBe(1);
+  });
+
+  it("leaves a file that has no CRLF hashing as its own bytes", () => {
+    // The other forty-nine pins were recorded from an LF tree, so folding has to be a no-op
+    // there or this would have re-pinned the whole gate surface to accommodate one file.
+    const dir = caseDir();
+    const script = path.join(dir, "coverage-alpha.mjs");
+    writeFileSync(script, "export const alpha = 1;\n");
+    expect(hashFile(script)).toBe(createHash("sha1").update(readFileSync(script)).digest("hex"));
+  });
+});
+
 describe("reading a drift", () => {
   it("stashes the text a passing check matched, and diffs against it when the file moves", () => {
     const { manifest, script } = fixture();
@@ -1673,6 +1736,94 @@ describe("the committed gate manifest", () => {
         files: committed.files,
       }),
     );
+  });
+});
+
+// GitHub runs a workflow only from `.github/workflows` at the root of the *repository*, so
+// the copy inside this project is a mirror of what actually gates a pull request. Both are
+// pinned, under two rules kept apart on purpose: they are separate files with separate
+// headers and different branch names, working directories and artifact paths, and a rule
+// that merged them would pin one file under the other's name. Before this, the mirror was
+// the one gate file nothing watched — a step deleted there passed every check below it.
+describe("the workflows GitHub actually runs", () => {
+  /** The declaration this family is read from, found rather than re-typed. */
+  const mirrorRule = DEFAULT_WATCHES.find(
+    (rule: { dir: string; pattern: string }) => rule.dir === "../.github/workflows",
+  ) as { dir: string; pattern: string } | undefined;
+
+  /** The project's own workflows rule, for the reading that the two families stay apart. */
+  const projectRule = DEFAULT_WATCHES.find(
+    (rule: { dir: string; pattern: string }) => rule.dir === ".github/workflows",
+  ) as { dir: string; pattern: string } | undefined;
+
+  it("pins every repository-root workflow under its own rule, at the bytes on disk", async () => {
+    expect(mirrorRule, "no watch rule names the repository root's workflows").toBeDefined();
+    expect(projectRule, "no watch rule names the project's own workflows").toBeDefined();
+    const committed = (await import(pathToFileURL(manifestPath()).href)) as unknown as {
+      files: Record<string, string>;
+    };
+
+    const keys = Object.keys(pin([manifestPath()], [mirrorRule as { dir: string; pattern: string }])).sort();
+    expect(keys.length, "the rule matches nothing — a dead pin").toBeGreaterThan(0);
+
+    for (const key of keys) {
+      // `../`-prefixed: the key names the file where it is rather than flattening it into a
+      // path that looks like it lives inside the project.
+      expect(key.startsWith("../.github/workflows/"), key).toBe(true);
+      const file = path.join(projectRoot, key);
+      expect(existsSync(file), `${key} is pinned but not on disk`).toBe(true);
+      expect(committed.files[key], `${key} is not pinned`).toBe(hashFile(file));
+      // The rule that pins it is this one, and not the project's own family beside it.
+      expect(matchesInput(mirrorRule as { dir: string; pattern: string }, key)).toBe(true);
+      expect(matchesInput(projectRule as { dir: string; pattern: string }, key)).toBe(false);
+    }
+
+    // And the family does not leak the other way: no path inside the project is claimed by
+    // the mirror rule, so a report cannot fold a project workflow under the mirror's heading.
+    for (const key of Object.keys(committed.files)) {
+      if (key.startsWith("../.github/workflows/")) continue;
+      expect(matchesInput(mirrorRule as { dir: string; pattern: string }, key), key).toBe(false);
+    }
+  });
+
+  it("fails the check when the workflow GitHub runs has been weakened", async () => {
+    // The seam, not the tree: nothing here edits a real workflow. A manifest that records
+    // every pin except a wrong hash for the mirror's `ci.yml` is the state a weakening
+    // leaves behind, and the alarm has to answer `changed` for that path — which it can only
+    // do by reading the real file at `../.github/workflows/ci.yml`, hashing it and finding it
+    // does not match. `gone` would be the wrong answer (it means the file is not there), and
+    // `unpinned` would mean the rules never named it, so the kind asserted here is the one
+    // that proves a byte edit to that file is what a reader is told about.
+    const seam = process.env.GATE_HASHES_FILE;
+    delete process.env.GATE_HASHES_FILE;
+    try {
+      const own = await readManifest(manifestPath());
+      expect(own.problem).toBeNull();
+      const key = "../.github/workflows/ci.yml";
+      expect(Object.keys(own.recorded), "the mirror is not in the pin").toContain(key);
+
+      const weakened = path.join(caseDir(), "gate-hashes.mjs");
+      writeFileSync(
+        weakened,
+        renderManifest({
+          algorithm: own.algorithm,
+          watches: DEFAULT_WATCHES,
+          files: { ...own.recorded, [key]: "0".repeat(40) },
+        }),
+      );
+
+      const { status, report } = check(weakened);
+      expect(status, JSON.stringify(report.findings)).toBe(1);
+      expect(report.changed).toContain(key);
+      const finding = report.findings.find((entry) => entry.path === key);
+      expect(finding?.kind).toBe("changed");
+      // The detail quotes the real file's hash, so the row is about the bytes on disk.
+      expect(finding?.detail).toContain(hashFile(path.join(projectRoot, key)).slice(0, 8));
+      expect(finding?.family).toBe("../.github/workflows/^.*\\.ya?ml$");
+    } finally {
+      if (seam === undefined) delete process.env.GATE_HASHES_FILE;
+      else process.env.GATE_HASHES_FILE = seam;
+    }
   });
 });
 

@@ -3,25 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { isNavItemActive, socialNavItems } from "@/lib/nav-items";
+import { isNavItemActive, mainNavItems, socialNavItems } from "@/lib/nav-items";
+import { OnlineNow } from "@/components/realtime/online-now";
 
 /**
- * The four surfaces under Social, and the way between them.
+ * The strip under the header on Social's pages: the Feed tab, and where the
+ * tabs to Groups, Pages and Messages used to sit, the online-members listing.
  *
- * Social is one destination in the main navigation and four places to be, so the
- * header cannot say which one a reader is in — this strip does, right under it,
- * and only there. Everywhere else it renders nothing: the header already says
- * Marketplace or Jobs, and a strip about Social on the settings page would be
- * noise. That is also why this decides for itself rather than being mounted per
- * page — a page that forgot to render it would be a page with no way back.
+ * Visibility is decided from the Social *module* rather than from the tabs,
+ * and that is load-bearing now that one tab is all that is left: keyed to the
+ * tabs, the strip would hide on the very pages it was remade for. Everywhere
+ * else it renders nothing — the header already says Marketplace or Jobs, and a
+ * strip about Social on the settings page would be noise. That is also why
+ * this decides for itself rather than being mounted per page — a page that
+ * forgot to render it would be a page with no way back to the feed.
  *
- * The addresses are the ones the surfaces already had, so nothing here is a
- * redirect, a bookmark stops working, or a deep link to a conversation or a Page
- * changes shape.
+ * The Feed tab's address is the one the surfaces already had, so nothing here
+ * is a redirect, a bookmark stops working, or a deep link to a conversation
+ * or a Page changes shape.
  */
 export function SocialNav() {
   const pathname = usePathname();
-  const onSocial = socialNavItems.some((item) => isNavItemActive(pathname, item));
+  const social = mainNavItems.find((item) => item.label === "Social");
+  const onSocial = social ? isNavItemActive(pathname, social) : false;
   if (!onSocial) return null;
 
   return (
@@ -53,6 +57,9 @@ export function SocialNav() {
             </Link>
           );
         })}
+        {/* Where the Groups/Pages/Messages tabs sat: who is around, in the
+            same row and the same scroll. */}
+        <OnlineNow />
       </div>
     </nav>
   );

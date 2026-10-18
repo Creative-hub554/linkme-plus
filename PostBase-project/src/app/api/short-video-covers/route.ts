@@ -5,6 +5,7 @@ import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { eq } from "drizzle-orm";
 import {
   assertStorageConfigured,
+  deleteStoredObjects,
   generateKey,
   getFolderForPurpose,
   getPublicUrl,
@@ -114,49 +115,71 @@ export async function POST(request: Request) {
 
     const folder = getFolderForPurpose("short-video-cover");
 
-    const videoKey = generateKey(folder, session.user.id, `cover-video.${extensionForType(video.type)}`);
-    await putObject(videoKey, video, video.type || "video/webm");
-    const videoUrl = getPublicUrl(videoKey);
-
-    const profileKey = generateKey(folder, session.user.id, `profile.${extensionForType(profilePhoto.type)}`);
-    await putObject(profileKey, profilePhoto, profilePhoto.type || "image/jpeg");
-    const profilePhotoUrl = getPublicUrl(profileKey);
-
+    // Every object this request stores is remembered as it lands, so a failure
+    // anywhere up to the profile write — a later upload, or the write itself —
+    // can take all of them back out. Nothing else references them yet: the
+    // response has not gone out and the rows that would record them were never
+    // written, so a failure that kept them would strand megabytes of clip and
+    // photos at URLs nothing points at.
+    const storedUrls: string[] = [];
     const photoUrls: string[] = [];
-    for (const [index, photo] of photos.entries()) {
-      const key = generateKey(folder, session.user.id, `picture-${index}.${extensionForType(photo.type)}`);
-      await putObject(key, photo, photo.type || "image/jpeg");
-      photoUrls.push(getPublicUrl(key));
-    }
-
+    let videoUrl = "";
+    let profilePhotoUrl = "";
     let backgroundVideoUrl: string | null = null;
-    if (backgroundVideo instanceof File && backgroundVideo.size > 0) {
-      const key = generateKey(folder, session.user.id, `background.${extensionForType(backgroundVideo.type)}`);
-      await putObject(key, backgroundVideo, backgroundVideo.type || "video/mp4");
-      backgroundVideoUrl = getPublicUrl(key);
-    }
 
-    // The profile cover is the whole point of the request, so a failure here is
-    // a failure of the request rather than something to log and swallow.
-    // Clearing `coverConfig` is what makes the banner play this video instead of
-    // the legacy animated cover.
-    await ensureLocalUserProfile(session.user);
-    await db
-      .update(profiles)
-      .set({
-        coverVideoUrl: videoUrl,
-        coverConfig: null,
-        shortVideoCoverConfig: {
-          templateId,
-          aspectRatio,
-          speed,
-          duration,
-          photoUrls,
-          videoUrl,
-          updatedAt: new Date().toISOString(),
-        },
-      })
-      .where(eq(profiles.userId, session.user.id));
+    try {
+      const videoKey = generateKey(folder, session.user.id, `cover-video.${extensionForType(video.type)}`);
+      await putObject(videoKey, video, video.type || "video/webm");
+      videoUrl = getPublicUrl(videoKey);
+      storedUrls.push(videoUrl);
+
+      const profileKey = generateKey(folder, session.user.id, `profile.${extensionForType(profilePhoto.type)}`);
+      await putObject(profileKey, profilePhoto, profilePhoto.type || "image/jpeg");
+      profilePhotoUrl = getPublicUrl(profileKey);
+      storedUrls.push(profilePhotoUrl);
+
+      for (const [index, photo] of photos.entries()) {
+        const key = generateKey(folder, session.user.id, `picture-${index}.${extensionForType(photo.type)}`);
+        await putObject(key, photo, photo.type || "image/jpeg");
+        const url = getPublicUrl(key);
+        photoUrls.push(url);
+        storedUrls.push(url);
+      }
+
+      if (backgroundVideo instanceof File && backgroundVideo.size > 0) {
+        const key = generateKey(folder, session.user.id, `background.${extensionForType(backgroundVideo.type)}`);
+        await putObject(key, backgroundVideo, backgroundVideo.type || "video/mp4");
+        backgroundVideoUrl = getPublicUrl(key);
+        storedUrls.push(backgroundVideoUrl);
+      }
+
+      // The profile cover is the whole point of the request, so a failure here is
+      // a failure of the request rather than something to log and swallow.
+      // Clearing `coverConfig` is what makes the banner play this video instead of
+      // the legacy animated cover.
+      await ensureLocalUserProfile(session.user);
+      await db
+        .update(profiles)
+        .set({
+          coverVideoUrl: videoUrl,
+          coverConfig: null,
+          shortVideoCoverConfig: {
+            templateId,
+            aspectRatio,
+            speed,
+            duration,
+            photoUrls,
+            videoUrl,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+        .where(eq(profiles.userId, session.user.id));
+    } catch (publishError) {
+      if (storedUrls.length > 0) {
+        await deleteStoredObjects(storedUrls);
+      }
+      throw publishError;
+    }
 
     // The covers table is history, so a schema that has not caught up with the
     // migration must not take an otherwise-published cover down with it.

@@ -83,12 +83,23 @@ export async function POST(request: Request) {
       // unreachable. Supabase Auth metadata is available to the client and is
       // synchronized back to the profile on a later successful request.
       console.error("Profile avatar database persistence deferred:", databaseError);
-      const supabase = await createClient();
-      const { error: metadataError } = await supabase.auth.updateUser({
-        data: { avatar_url: avatarUrl, picture: avatarUrl },
-      });
-      if (metadataError) {
-        throw new Error("Photo uploaded, but it could not be attached to your profile. Please retry shortly.");
+      try {
+        const supabase = await createClient();
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: { avatar_url: avatarUrl, picture: avatarUrl },
+        });
+        if (metadataError) {
+          throw new Error("Photo uploaded, but it could not be attached to your profile. Please retry shortly.");
+        }
+      } catch (metadataFailure) {
+        // Neither the row nor the metadata took the URL, and this response
+        // never hands it out — the object would answer at a path nothing
+        // records, so it comes straight back out rather than sitting in the
+        // bucket unreferenced. The photo it was about to displace is not in
+        // that list: the profile still points at the old photo until one of
+        // the two writes lands, and a retry stores afresh under a new key.
+        await deleteStoredObjects([avatarUrl]);
+        throw metadataFailure;
       }
     }
 

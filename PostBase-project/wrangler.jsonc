@@ -12,6 +12,11 @@
     { "pattern": "linkmeplus.com", "custom_domain": true },
     { "pattern": "www.linkmeplus.com", "custom_domain": true }
   ],
+  // The media cron — eviction first, then the archive — hourly and off the
+  // hour so it lands between traffic peaks. See docs/GOOGLE-DRIVE-ARCHIVE.md.
+  "triggers": {
+    "crons": ["17 * * *"]
+  },
   "vars": {
     "ENVIRONMENT": "production"
   },

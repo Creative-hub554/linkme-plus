@@ -75,6 +75,16 @@ export const db: AppDb = new Proxy(fallbackDb, {
   get(_target, property) {
     const instance = (requestDb.getStore() ?? (() => fallbackDb))();
     const value = Reflect.get(instance, property, instance);
+    // `$client` is the one function-valued property that must not be bound. It is
+    // drizzle's own escape hatch to the driver, and postgres.js's client *is* a
+    // function — the tagged template — whose properties (`end`, `unsafe`, `begin`,
+    // `listen`) are how it is used; `Function.prototype.bind` returns a function
+    // without them. Binding this one therefore made `db.$client.end(...)` throw
+    // `db.$client.end is not a function`, which is a script crashing *after* its work
+    // has landed: how `npm run db:seed` came to exit 1 over a seed that succeeded, and
+    // why the pool's `end` is reached through the proxy at all. Only methods need their
+    // receiver, and the driver's client is not one of them.
+    if (property === "$client") return value;
     return typeof value === "function" ? value.bind(instance) : value;
   },
 });

@@ -35,6 +35,13 @@
  *   - the other stage scripts and their builders (`build-contents.mjs`,
  *     `runbook-contents.mjs`, `lint-baseline.mjs`, `preview-preflight.mjs`), each of
  *     which is the entire enforcement of its stage;
+ *   - the inbox invariant check (`notifications-check.mjs`) — the whole of `npm run
+ *     notifications:check`, which holds every seeded inbox to the notification its
+ *     engagement implies and to the count invariant the seed's reconciliation promises —
+ *     a rule of one because it belongs to no stage, and the one checker here whose
+ *     *scope* is part of its verdict: a widened exemption or an id prefix quietly
+ *     reintroduced into its count would leave the check green over the state it exists to
+ *     report, and only the pin can say so;
  *   - the redactor and the nightly report renderer (`redact.mjs`, `nightly-report.mjs`),
  *     which decide what a published report is allowed to say — a report that hides a
  *     failure is a gate that failed quietly;
@@ -249,6 +256,9 @@ export const MANIFEST_FILE = ".freebuff/gate-hashes.mjs";
 /** The digest a pinned file is recorded under. */
 export const DEFAULT_ALGORITHM = "sha1";
 
+/** The pair of bytes a checkout policy rewrites, and the only ones `hashBytes` folds. */
+const CRLF = Buffer.from("\r\n");
+
 /**
  * Which files count as gate machinery — the one place the watch rules are written.
  *
@@ -264,7 +274,11 @@ export const DEFAULT_ALGORITHM = "sha1";
  * resolved against the project root and scanned one level deep; it may name a nested
  * directory (the workflows live in one), and `.github/workflows` is one level deep because
  * that is all GitHub Actions reads — a workflow in a subdirectory there would not run, so
- * it is not a gate to pin.
+ * it is not a gate to pin. It may also name a directory *above* the project root, which is
+ * what the repository's own `.github/workflows` is: a rule's `dir` is a path, and `../` is
+ * a path. The key such a file is recorded under is likewise `../`-prefixed, which is what
+ * keeps the pin honest about where the file is rather than flattening it into a path that
+ * looks like it is inside the project.
  */
 export const DEFAULT_WATCHES = [
   // The coverage gates, and the algebra, thresholds and floor rules they share.
@@ -293,6 +307,17 @@ export const DEFAULT_WATCHES = [
   { dir: ".freebuff", pattern: "^scaffold-sweep\\.mjs$" },
   // The other scripts a gate stage is made of, and the builders they read.
   { dir: ".freebuff", pattern: "^(build-contents|runbook-contents|lint-baseline|preview-preflight)\\.mjs$" },
+  // The inbox invariant check, a rule of one for the reason the save-guard and the scaffold
+  // are: no stage runs it — it *is* `npm run notifications:check` — so there is no family
+  // for it to inherit, and the other scripts beside it here are the ones a stage spawns.
+  // It decides a verdict rather than doing an errand: it reads the live database and holds
+  // the seeded inboxes to the notification their engagement implies and to the count
+  // invariant the seed's reconciliation promises. The suite beside it pins those readings
+  // over fixtures, and could not catch the loosening this pin exists for — a rule narrowed
+  // to the adoption's id prefixes again, or an exemption widened to cover a real account's
+  // second event, would keep every fixture case green while the check answered the wrong
+  // question about the table. Nothing else reads the file, so nothing else would move.
+  { dir: ".freebuff", pattern: "^notifications-check\\.mjs$" },
   // The collect-budget ratchet: its recorder, proposer, applier and recorded numbers.
   { dir: ".freebuff", pattern: "^(collect-.*|.*-collect-baselines)\\.mjs$" },
   // What the suite and the isolated mutation run measure, and what they exclude.
@@ -321,6 +346,16 @@ export const DEFAULT_WATCHES = [
   // conditional, a `continue-on-error: true` added, a `--skip=` widened — the gate is
   // cancelled from above, and the stages below never know they did not run.
   { dir: ".github/workflows", pattern: "^.*\\.ya?ml$" },
+  // The same directory at the repository root, which is the copy GitHub reads: a workflow
+  // runs only from `.github/workflows` at the root of the repository, so the ones in this
+  // directory are a mirror of those and the mirror is what a pull request's weakening
+  // actually ships. Pinning only the copy in the project left the file the runner reads
+  // outside the pin's reach, so a step deleted there passed every gate below it. The two
+  // rules are separate because the two directories are separate facts — the mirror is
+  // deliberately not a byte-for-byte copy (its branch names, working directory and artifact
+  // paths differ, and its own header says how), and a rule that merged them would pin one
+  // file under the other's name.
+  { dir: "../.github/workflows", pattern: "^.*\\.ya?ml$" },
 ];
 
 /**
@@ -1041,9 +1076,9 @@ export function rel(path) {
   return relative(ROOT, path ?? "").split("\\").join("/");
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/** One file's content hash — `hashBytes`, given the file. One reading, shared with the stash. */
 export function hashFile(path, algorithm = DEFAULT_ALGORITHM) {
-  return createHash(algorithm).update(readFileSync(path)).digest("hex");
+  return hashBytes(readFileSync(path), algorithm);
 }
 
 /**
@@ -1267,9 +1302,32 @@ function readContentIndex(dir) {
   }
 }
 
-/** One file's content hash, over the raw bytes so encoding cannot change the pin. */
+/**
+ * One file's content hash, over the raw bytes so encoding cannot change the pin — and over
+ * CRLF folded to LF, because the line endings a file arrives with are not the file's content.
+ *
+ * The bytes are read raw for the first half of that: a BOM, or a file written in an encoding
+ * this reads as mojibake, is a real change to a file's content and has to move the pin. The
+ * one thing about a byte that is *not* the file's content is which end of a line it follows,
+ * because that is chosen by the checkout rather than written by the author. With
+ * `core.autocrlf=true` this working tree is CRLF and the same blob is LF on the
+ * `ubuntu-latest` runner the drift stage actually runs on, and git records LF either way — so
+ * a hash over raw bytes is not reproducible across the two. Pinning from a CRLF checkout then
+ * gives a hash the runner cannot reproduce, and the drift fails in CI on a file nobody changed
+ * while every local run stays green, because the checkout keeps restoring the very line endings
+ * the pin was taken from. That is the one way this alarm was able to report drift that was not
+ * there, and it is silent in the direction that matters: green locally, red on the runner.
+ *
+ * Folding is the other direction of the same trade, and it is the one the pin's own comment
+ * already asked for — it cannot catch an edit that only changes line endings, which is not an
+ * edit any verdict in this repository is made of. A file with no CRLF is hashed as the bytes it
+ * is, so this changes no hash that was already recorded from an LF tree.
+ */
 function hashBytes(bytes, algorithm) {
-  return createHash(algorithm).update(bytes).digest("hex");
+  const folded = bytes.includes(CRLF)
+    ? Buffer.from(bytes.toString("latin1").replace(/\r\n/g, "\n"), "latin1")
+    : bytes;
+  return createHash(algorithm).update(folded).digest("hex");
 }
 
 /**

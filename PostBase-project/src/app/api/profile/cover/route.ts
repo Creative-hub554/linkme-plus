@@ -49,20 +49,30 @@ export async function POST(request: Request) {
     }
 
     const key = generateKey(getFolderForPurpose("cover"), session.user.id, file.name);
-    await putObject(key, file, file.type);
-    const coverUrl = getPublicUrl(key);
-
-    await ensureLocalUserProfile(session.user);
-    // Read the cover this upload replaces before writing it: after the update
-    // the previous URL is recorded nowhere and its object could never be found.
+    // The replaced cover is read *before* anything is stored: a read that fails
+    // then fails the request with an empty bucket, and after the update the
+    // previous URL is recorded nowhere and its object could never be found.
     const [current] = await db
       .select({ coverUrl: profiles.coverUrl })
       .from(profiles)
       .where(eq(profiles.userId, session.user.id));
-    await db
-      .update(profiles)
-      .set({ coverUrl })
-      .where(eq(profiles.userId, session.user.id));
+
+    await putObject(key, file, file.type);
+    const coverUrl = getPublicUrl(key);
+
+    // The one write that can fail with the object already in the bucket. The
+    // profile still points at the old cover, so the new object would answer at
+    // a URL nothing records — it comes back out before the failure is reported.
+    try {
+      await ensureLocalUserProfile(session.user);
+      await db
+        .update(profiles)
+        .set({ coverUrl })
+        .where(eq(profiles.userId, session.user.id));
+    } catch (dbError) {
+      await deleteStoredObjects([coverUrl]);
+      throw dbError;
+    }
 
     const removed = await deleteStoredObjects([
       replacedObjectUrl(current?.coverUrl, coverUrl),

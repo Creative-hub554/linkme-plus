@@ -15,7 +15,10 @@ import { expectDocSelfHeld, expectHeld, readSource } from "./doc-freshness";
  *
  * Deliberately outside the hold, stated here so the exclusion is a decision and not
  * an omission: the third-party command shapes (`wrangler login`, `wrangler secret
- * put …`, `psql $DATABASE_URL`) whose truth lives in Cloudflare's CLI, not here; the
+ * put …`, `psql $DATABASE_URL`, and the smoke pipeline's own `docker run`/`docker
+ * exec` steps and `psql` migration loop — those are `scripts/smoke-postgres.sh`'s
+ * internals, which the guide quotes only as the teardown line an operator types)
+ * whose truth lives in Cloudflare's CLI, Docker, or Postgres, not here; the
  * provisioning instructions (bucket/namespace creation, dashboard walks); the
  * staging config, which the guide *creates* (`cp wrangler.jsonc
  * wrangler.staging.jsonc`) and so cannot pre-assert; the cost table and the
@@ -36,6 +39,13 @@ const DOC_NEEDLES: Record<string, string> = {
   deployStagingScript: "npm run deploy:staging",
   dbPushScript: "npm run db:push",
   dbPushForce: "npm run db:push --force",
+  dbSeedScript: "npm run db:seed",
+  smokePostgresScript: "npm run smoke:postgres",
+  // The reviewer queue's one operational prerequisite: a grant that only the
+  // owner's machine can perform.
+  adminGrantScript: "npm run admin:grant --",
+  adminGrantList: "npm run admin:grant -- --list",
+  adminGrantRevoke: "npm run admin:grant -- --revoke",
   cleanScript: "npm run clean",
   npmInstall: "npm install",
   envCopy: "cp .env.example .env.local",
@@ -64,6 +74,8 @@ describe("the deployment guide against the files it instructs about", () => {
       '"build":',
       '"deploy:staging":',
       '"db:push":',
+      '"db:seed":',
+      '"smoke:postgres":',
       '"clean":',
     ]) {
       expectHeld(needle, pkg, "package.json");

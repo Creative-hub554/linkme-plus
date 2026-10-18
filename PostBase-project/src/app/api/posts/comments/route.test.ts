@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * "my row or nobody's" rule the post route uses. What can be pinned without a
  * database is that the author is the session's, that a missing post or empty
  * content is refused before any write, that removal sets `deleted_at` and does
- * not remove the row, and that an update matching nothing is a `404` with no
- * hard delete behind it. The paginated envelope is pinned too, because its
+ * not remove the row, that the photos a deleted comment carried stop resolving
+ * through the thread while exactly their URLs are reclaimed from storage, and
+ * that an update matching nothing is a `404` with no hard delete behind it. The paginated envelope is pinned too, because its
  * `total` is the number the reader sees above the list.
  *
  * The fake `@/lib/db` does not *evaluate* `where`, so the route's answer to an
@@ -47,8 +48,21 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+// The route keeps the pure URL decisions real (a photo URL must parse to our
+// bucket and to the caller's own folder) and only spies on the network-touching
+// reclaim — a test that let the real one run would aim an S3 delete at
+// credentials that do not exist.
+vi.mock("@/lib/r2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/r2")>();
+  return {
+    ...actual,
+    deleteStoredObjects: vi.fn(async () => [] as string[]),
+  };
+});
+
 import { DELETE, GET, POST } from "./route";
-import { comments, posts } from "@/lib/db/schema";
+import { comments, commentMedia, posts } from "@/lib/db/schema";
+import { deleteStoredObjects } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import {
   expectGatedInsert,
@@ -61,6 +75,21 @@ import {
 const POST_ID = "22222222-2222-4222-8222-222222222222";
 const COMMENT_ID = "55555555-5555-4555-8555-555555555555";
 const PARENT_ID = "66666666-6666-4666-8666-666666666666";
+
+/** A comment that survives the delete below — its own photo must keep resolving. */
+const SURVIVOR_ID = "77777777-7777-4777-8777-777777777777";
+
+/** The test bucket's public base — `R2_PUBLIC_URL` in `src/test/setup.ts`. */
+const PUBLIC = "https://test.r2.dev";
+
+/** A photo URL under the caller's own folder — the shape a valid one has. */
+const MY_PHOTO = `${PUBLIC}/posts/author-1/1700000000000-abc1a.png`;
+const MY_PHOTO_TWO = `${PUBLIC}/posts/author-1/1700000000001-abc2b.png`;
+
+/** Another member's photo — the thread must keep serving it after the delete. */
+const SURVIVOR_PHOTO = `${PUBLIC}/posts/member-2/1700000000002-ccc3c.png`;
+
+const deletion = () => vi.mocked(deleteStoredObjects);
 
 function jsonRequest(method: string, path: string, body?: unknown) {
   return new Request(`http://localhost${path}`, {
@@ -94,7 +123,9 @@ describe("POST /api/posts/comments", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ comment: { id: COMMENT_ID, content: "Nice one" } });
+    expect(await response.json()).toEqual({
+      comment: { id: COMMENT_ID, content: "Nice one", media: [] },
+    });
     expectGatedSequence("writes", [
       {
         table: "comments",
@@ -179,6 +210,166 @@ describe("POST /api/posts/comments", () => {
       silence.mockRestore();
     }
   });
+
+  it("stores the caller's photos with a photo-only comment, in pick order", async () => {
+    fakeDb
+      .selectReturns(posts, [{ id: POST_ID }])
+      .insertReturns(comments, [{ id: COMMENT_ID, content: "" }]);
+
+    const response = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        // No text: a photo alone is a comment, exactly as the composer offers
+        // it — the "content or media" rule the post route already states.
+        content: "",
+        media: [
+          { url: MY_PHOTO, type: "image/png", altText: "Sunset over the harbour" },
+          { url: MY_PHOTO_TWO, type: "image/png" },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      comment: {
+        id: COMMENT_ID,
+        content: "",
+        // The photos come back with the comment so the optimistic render can
+        // show them before the hydration read answers.
+        media: [
+          { url: MY_PHOTO, altText: "Sunset over the harbour", type: "image/png" },
+          { url: MY_PHOTO_TWO, altText: null, type: "image/png" },
+        ],
+      },
+    });
+    // Two writes in order — the comment, then its photos bound to it — with
+    // each photo's pick position recorded as its order.
+    expectGatedSequence("writes", [
+      {
+        table: "comments",
+        values: { postId: POST_ID, authorId: "author-1", content: "", parentId: null },
+      },
+      {
+        table: "comment_media",
+        values: [
+          { url: MY_PHOTO, altText: "Sunset over the harbour", type: "image/png", order: 0, commentId: COMMENT_ID },
+          { url: MY_PHOTO_TWO, altText: null, type: "image/png", order: 1, commentId: COMMENT_ID },
+        ],
+      },
+    ]);
+    expectGatedSequence("reads", ["posts"]);
+  });
+
+  it("refuses a photo that is not this caller's own upload, reading and writing nothing", async () => {
+    // The reclaim on delete removes exactly these URLs from storage, so a
+    // photo pinned to a comment must be the commenter's own file: a URL off
+    // our bucket is refused, and so is one under somebody else's folder —
+    // otherwise commenting would be a way to delete a stranger's object.
+    const offBucket = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: "https://evil.example/x.png" }],
+      }),
+    );
+    const someoneElses = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: `${PUBLIC}/posts/member-2/1700000000000-zzz9z.png` }],
+      }),
+    );
+
+    expect(offBucket.status).toBe(400);
+    expect(await offBucket.json()).toEqual({ error: "Photos must be files you uploaded" });
+    expect(someoneElses.status).toBe(400);
+    expect(await someoneElses.json()).toEqual({ error: "Photos must be files you uploaded" });
+    // Refused before the post was even read — no visibility check, no write.
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses more than four photos and a media field that is not a list", async () => {
+    const tooMany = Array.from({ length: 5 }, (_, index) => ({
+      url: `${PUBLIC}/posts/author-1/photo-${index}.png`,
+    }));
+    const overCap = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: tooMany }),
+    );
+    const notAList = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: "one.png" }),
+    );
+
+    expect(overCap.status).toBe(400);
+    expect(await overCap.json()).toEqual({
+      error: "At most 4 photos can be attached to a comment",
+    });
+    expect(notAList.status).toBe(400);
+    expect(await notAList.json()).toEqual({ error: "Photos must be a list" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a photo entry that is not an object, and one that names no file", async () => {
+    // Every entry the list carries must be a photo object with a URL in it: a
+    // bare value is not a photo, and an entry that names no file is nothing
+    // the storage layer could ever have taken. Both are refused before
+    // anything is read or written.
+    const notAnObject = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [null] }),
+    );
+    const noUrl = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [{ type: "image/png" }] }),
+    );
+    const emptyUrl = await POST(
+      jsonRequest("POST", "/api/posts/comments", { postId: POST_ID, content: "Hi", media: [{ url: "" }] }),
+    );
+
+    expect(notAnObject.status).toBe(400);
+    expect(await notAnObject.json()).toEqual({ error: "Each photo must be an object with a URL" });
+    expect(noUrl.status).toBe(400);
+    expect(await noUrl.json()).toEqual({ error: "Each photo needs a URL" });
+    expect(emptyUrl.status).toBe(400);
+    expect(await emptyUrl.json()).toEqual({ error: "Each photo needs a URL" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a photo whose type or alt text is not text, and alt text past the cap", async () => {
+    // The fields a photo carries beside its URL are declared text — a number
+    // or a boolean typed as a photo's kind is refused as-is — and alt text is
+    // capped at 255 characters, the same cap the comment's own content keeps.
+    const badType = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, type: 7, altText: "Sunset" }],
+      }),
+    );
+    const badAltText = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, altText: 42 }],
+      }),
+    );
+    const longAltText = await POST(
+      jsonRequest("POST", "/api/posts/comments", {
+        postId: POST_ID,
+        content: "Hi",
+        media: [{ url: MY_PHOTO, altText: "x".repeat(256) }],
+      }),
+    );
+
+    expect(badType.status).toBe(400);
+    expect(await badType.json()).toEqual({ error: "Each photo's type must be text" });
+    expect(badAltText.status).toBe(400);
+    expect(await badAltText.json()).toEqual({ error: "Each photo's alt text must be text or null" });
+    expect(longAltText.status).toBe(400);
+    expect(await longAltText.json()).toEqual({ error: "Alt text is limited to 255 characters" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
 });
 
 describe("DELETE /api/posts/comments", () => {
@@ -256,6 +447,75 @@ describe("DELETE /api/posts/comments", () => {
       silence.mockRestore();
     }
   });
+
+  it("reclaims the comment's photos from storage after the soft delete", async () => {
+    fakeDb
+      .updateReturns(comments, [{ id: COMMENT_ID }])
+      .selectReturns(commentMedia, [{ url: MY_PHOTO }, { url: MY_PHOTO_TWO }]);
+
+    const response = await DELETE(
+      new Request(`http://localhost/api/posts/comments?id=${COMMENT_ID}`, { method: "DELETE" }),
+    );
+
+    expect(response.status).toBe(200);
+    // Read after the update (the soft delete leaves the rows in place) and
+    // handed to the reclaim as-is: the two URLs this comment stored.
+    expect(deletion()).toHaveBeenCalledWith([MY_PHOTO, MY_PHOTO_TWO]);
+    // The reclaim is a storage concern, not a database one.
+    expectGatedNone("deletes");
+  });
+
+  it("stops serving a deleted comment's photos, and reclaims exactly their URLs", async () => {
+    // The delete: the ownership update matches, then the photo rows are read —
+    // the soft delete leaves them in place, and `comment_media.url` is the only
+    // record of what belonged to the comment.
+    fakeDb
+      .updateReturns(comments, [{ id: COMMENT_ID }])
+      .selectReturns(commentMedia, [{ url: MY_PHOTO }, { url: MY_PHOTO_TWO }]);
+
+    const removed = await DELETE(
+      new Request(`http://localhost/api/posts/comments?id=${COMMENT_ID}`, { method: "DELETE" }),
+    );
+
+    expect(removed.status).toBe(200);
+    // Exactly these two URLs, in one call — no other file rides along, and no
+    // second call reaches for anything beyond them.
+    expect(deletion()).toHaveBeenCalledTimes(1);
+    expect(deletion()).toHaveBeenCalledWith([MY_PHOTO, MY_PHOTO_TWO]);
+    // The read the reclaim was built from was keyed to this comment alone.
+    expectGatedRead(commentMedia, { params: [COMMENT_ID] });
+
+    // The thread afterwards — what a real database answers once the soft delete
+    // has landed: the deleted row dropped, a survivor in its place, and only
+    // the survivor's photo looked up.
+    fakeDb
+      .selectReturns(posts, [{ id: POST_ID }])
+      .selectReturns(comments, [{ id: SURVIVOR_ID, content: "Still standing" }])
+      .selectReturns(comments, [{ total: 1 }])
+      .selectReturns(commentMedia, [
+        { commentId: SURVIVOR_ID, url: SURVIVOR_PHOTO, altText: null, type: "image/png" },
+      ]);
+
+    const thread = await GET(
+      new Request(`http://localhost/api/posts/comments?postId=${POST_ID}`, { method: "GET" }),
+    );
+
+    expect(thread.status).toBe(200);
+    const served = JSON.stringify(await thread.json());
+    // The deleted comment is gone from the thread, and its photo URLs with it —
+    // neither can be resolved through the API any more.
+    expect(served).not.toContain(COMMENT_ID);
+    expect(served).not.toContain(MY_PHOTO);
+    expect(served).not.toContain(MY_PHOTO_TWO);
+    // …while the survivor's own photo still resolves through the same read.
+    expect(served).toContain(SURVIVOR_PHOTO);
+    // The row read carries the soft-delete predicate — what drops the comment,
+    // and every photo it carried, on a database the fake stands in for.
+    expectGatedRead(comments, { nth: 0, where: ['"deleted_at" IS NULL'] });
+    // The photo lookup names only the survivor: the deleted comment's id never
+    // reaches it, so its URLs can never be served from the thread again.
+    expectGatedRead(commentMedia, { nth: 1, params: [SURVIVOR_ID] });
+  });
 });
 
 describe("GET /api/posts/comments", () => {
@@ -271,9 +531,11 @@ describe("GET /api/posts/comments", () => {
 
     expect(response.status).toBe(200);
     // The total is the page's own count and drives the footer; `hasMore` is
-    // false because twenty fit in one page and only three exist.
+    // false because twenty fit in one page and only three exist. Every comment
+    // carries its photos beside it — an empty array for a text-only one — so a
+    // reader never branches on the field's absence.
     expect(await response.json()).toEqual({
-      data: [{ id: COMMENT_ID, content: "One" }],
+      data: [{ id: COMMENT_ID, content: "One", media: [] }],
       pagination: { total: 3, page: 1, limit: 20, totalPages: 1, hasMore: false },
     });
     // The post is read first — its visibility decides whether the thread opens
@@ -302,7 +564,9 @@ describe("GET /api/posts/comments", () => {
     );
 
     expect(response.status).toBe(200);
-    expectGatedSequence("reads", ["comments"]);
+    // The comment read, then the batched photo read beside it — one for the
+    // whole lookup, never one per comment.
+    expectGatedSequence("reads", ["comments", "comment_media"]);
     // The comment read joins its post and carries the audience rule, so a
     // comment on an invisible post cannot be hydrated by naming its id.
     expectGatedRead(comments, { where: [/"visibility" = 'public'/, /exists/] });
@@ -372,5 +636,41 @@ describe("GET /api/posts/comments", () => {
     } finally {
       silence.mockRestore();
     }
+  });
+
+  it("attaches each comment's photos beside it, batched into one read", async () => {
+    fakeDb
+      .selectReturns(posts, [{ id: POST_ID }])
+      .selectReturns(comments, [{ id: COMMENT_ID, content: "" }])
+      .selectReturns(comments, [{ total: 1 }])
+      .selectReturns(commentMedia, [
+        { commentId: COMMENT_ID, url: MY_PHOTO, altText: "Sunset over the harbour", type: "image/png" },
+        { commentId: COMMENT_ID, url: MY_PHOTO_TWO, altText: null, type: "image/png" },
+      ]);
+
+    const response = await GET(
+      new Request(`http://localhost/api/posts/comments?postId=${POST_ID}`, { method: "GET" }),
+    );
+
+    expect(response.status).toBe(200);
+    // The photos arrive in the order the select answered them — the route's
+    // `order by order` is what makes that the pick order against a real
+    // database — and every comment carries the key, photos or not.
+    expect(await response.json()).toEqual({
+      data: [
+        {
+          id: COMMENT_ID,
+          content: "",
+          media: [
+            { url: MY_PHOTO, altText: "Sunset over the harbour", type: "image/png" },
+            { url: MY_PHOTO_TWO, altText: null, type: "image/png" },
+          ],
+        },
+      ],
+      pagination: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
+    });
+    // One photo read for the whole page — never one per comment.
+    expectGatedRead(commentMedia);
+    expectGatedSequence("reads", ["posts", "comments", "comments", "comment_media"]);
   });
 });

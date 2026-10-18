@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgEnum,
+  index,
 } from "drizzle-orm/pg-core";
 import { postAudiences } from "@/lib/post-audiences";
 // Type-only, and erased at build time: the accent's allowed values are the ones
@@ -175,6 +176,42 @@ export const comments = pgTable("comments", {
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ─── Comment media ───────────────────────────────────────────────
+//
+// Photos attached to a comment: one row per image so a comment can carry
+// several, in the order the commenter picked them. The shape is
+// `post_media` minus the processing status — nothing processes a comment's
+// photo, it is stored and served exactly as uploaded.
+//
+// Two things the rest of the codebase leans on:
+//
+// - `url` holds a public R2 URL, so the media archive's guard test requires
+//   the column to be listed in ARCHIVE_REWRITE_TARGETS. A row the rewrite
+//   pass misses would keep pointing at an object the pass is about to delete
+//   — a broken image the archive created inside a comment thread.
+// - The cascade: a comment is soft-deleted for the thread's sake, but when a
+//   row is finally hard-deleted (a cascading post delete) its photos go with
+//   it rather than leaking storage.
+export const commentMedia = pgTable(
+  "comment_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => comments.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    altText: varchar("alt_text", { length: 255 }),
+    type: varchar("type", { length: 20 }).notNull(),
+    order: integer("order").default(0),
+  },
+  (table) => [
+    // Every thread load reads its comments' photos by comment id, and
+    // Postgres does not index foreign keys on its own — an unindexed one
+    // turns that read (and the cascade above) into a scan.
+    index("comment_media_comment_id_idx").on(table.commentId),
+  ],
+);
 
 export const reactions = pgTable("reactions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -595,6 +632,41 @@ export const shortVideoCovers = pgTable("short_video_covers", {
   profileRadius: integer("profile_radius").default(180).notNull(),
   status: varchar("status", { length: 20 }).default("ready").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Media archive ────────────────────────────────────────────
+//
+// One row per R2 object the hourly archive pass moved to Google Drive: the
+// key it left behind, the Drive file id it became, and the two URLs — the
+// public R2 URL that is about to stop existing and the Drive URL that
+// replaces it everywhere in this database.
+//
+// The row is the archive's durable memory, and two flows depend on it being
+// exact rather than merely informational:
+//
+// - A run that dies between recording an object and deleting it comes back
+//   to the row, finishes the rewrite, and deletes — without re-uploading.
+//   `r2_key` is therefore the primary key: an object is archived once.
+// - Deleting a post, Page, or avatar that points at Drive must also delete
+//   the Drive file, but only ever files *this app put there* — a URL a client
+//   handed us could belong to a stranger's Drive. `deleteStoredObjects`
+//   consults this table's `new_url` before removing anything, so this row is
+//   the allow-list that keeps a delete inside the app's own files.
+//
+// There is deliberately no deletion or status column: rows are written once
+// and kept as the provenance of every Drive-hosted URL the app serves.
+export const archivedObjects = pgTable("archived_objects", {
+  r2Key: text("r2_key").primaryKey(),
+  driveFileId: text("drive_file_id").notNull(),
+  oldUrl: text("old_url").notNull(),
+  newUrl: text("new_url").notNull(),
+  contentType: varchar("content_type", { length: 100 }),
+  // Bigint-backed columns elsewhere use the string form to stay exact; the
+  // upload caps (100 MB at the largest) put every object far inside integer
+  // range, and a number keeps the pass's size comparison plain arithmetic.
+  sizeBytes: integer("size_bytes").notNull(),
+  md5Hex: varchar("md5_hex", { length: 32 }),
+  archivedAt: timestamp("archived_at").defaultNow().notNull(),
 });
 
 // ─── Categories ─────────────────────────────────────────────────

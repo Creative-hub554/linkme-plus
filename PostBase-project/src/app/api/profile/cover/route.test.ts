@@ -48,7 +48,7 @@ vi.mock("@/lib/r2", async (importOriginal) => {
 
 import { DELETE, POST } from "./route";
 import { profiles } from "@/lib/db/schema";
-import { assertStorageConfigured, deleteStoredObjects, putObject } from "@/lib/r2";
+import { assertStorageConfigured, deleteStoredObjects, getPublicUrl, putObject } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
@@ -147,7 +147,7 @@ describe("POST /api/profile/cover", () => {
     expectGatedNone("writes");
   });
 
-  it("answers 500 when the profile write fails, deleting nothing", async () => {
+  it("answers 500 when the profile write fails, taking the upload back out", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
       .selectReturns(profiles, [{ coverUrl: OLD_COVER }])
@@ -157,7 +157,13 @@ describe("POST /api/profile/cover", () => {
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: "Failed to upload cover" });
-      expect(vi.mocked(deleteStoredObjects)).not.toHaveBeenCalled();
+      // The upload this request stored, and only it: the write never landed,
+      // so the profile still points at the old cover — its object stays — while
+      // the new one (whose URL no response carried) would answer at a path
+      // nothing records unless it comes back out.
+      const [key] = vi.mocked(putObject).mock.calls[0];
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteStoredObjects)).toHaveBeenCalledWith([getPublicUrl(key)]);
       expectGatedNone("writes");
     } finally {
       silence.mockRestore();

@@ -2,9 +2,6 @@ import {
   Home,
   ShoppingBag,
   Briefcase,
-  Users,
-  Flag,
-  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,12 +64,18 @@ export const mainNavItems: NavItem[] = [
   },
 ];
 
-/** The four surfaces under Social, and the tab strip that switches between them. */
+/**
+ * The tabs the Social strip draws — which is now Feed alone.
+ *
+ * Groups, Pages and Messages came out of the strip at the reader's request.
+ * The strip is no longer the way *between* four surfaces; it is the feed's
+ * bar with the online-members listing where those tabs sat. The Social
+ * *module* still covers all four (`mainNavItems` above), so a deep link to a
+ * conversation or a Page still lights the header and every address that
+ * worked before still works — there is simply no tab for it any more.
+ */
 export const socialNavItems: NavItem[] = [
   { href: "/feed", label: "Feed", icon: Home, matches: ["/feed"] },
-  { href: "/groups", label: "Groups", icon: Users, matches: ["/groups"] },
-  { href: "/pages", label: "Pages", icon: Flag, matches: ["/pages"] },
-  { href: "/messages", label: "Messages", icon: MessageCircle, matches: ["/messages"] },
 ];
 
 /**

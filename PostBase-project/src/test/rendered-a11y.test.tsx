@@ -254,6 +254,16 @@ const CANNED: Record<string, StubPayload> = {
     results: { users: [{ id: "user-2", username: "maya_designs", displayName: "Maya Chen", isFollowing: false }] },
   },
   "/api/messages": { conversations: [conversation] },
+  // The Social strip's listing: one member online, one idle. The strip drops
+  // the idle row and draws the live one — name, dot, and the words that say
+  // which dot it is — so the audit judges a real row rather than the empty
+  // block a bare stub would leave to audit.
+  "/api/presence": {
+    users: [
+      { userId: "user-1", displayName: "Theo Wu", avatarUrl: null, online: true },
+      { userId: "user-2", displayName: "Maya Chen", avatarUrl: null, online: false },
+    ],
+  },
   "/api/notifications": { notifications: [], unreadCount: 3 },
   "/api/posts": { data: [post], pagination: { nextCursor: null } },
   // A Page the viewer administers, so the composer is on screen and has to be
@@ -780,14 +790,15 @@ describe("every rendered surface", () => {
     });
   });
 
-  test("the Social strip, which is the only way between the four surfaces", async () => {
-    // It draws its own four links and reads no endpoint, so the labels arriving
-    // is the whole of what has to be waited for. The stub path is `/feed`, which
-    // is one of the four — off Social the strip renders nothing, and an audit of
-    // nothing passes for the wrong reason.
+  test("the Social strip: the Feed tab and the listing that took the other tabs' place", async () => {
+    // The strip draws its Feed tab and beats the canned roster for the
+    // listing, so both halves are on screen and the labels arriving is the
+    // whole of what has to be waited for. The stub path is `/feed`, which is
+    // one of Social's paths — off Social the strip renders nothing, and an
+    // audit of nothing passes for the wrong reason.
     mocks.navigation.pathname = "/feed";
     const { SocialNav } = await import("@/components/layout/social-nav");
-    await audit(<SocialNav />, { shows: "Messages" });
+    await audit(<SocialNav />, { shows: "Online now" });
   });
 
   covers("/");
@@ -1355,8 +1366,26 @@ const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => Reac
       <svg aria-hidden="true" />
     </DisclosureButton>
   ),
+  "../components/chat/message-reactions.tsx#MessageReactions": (MessageReactions) => (
+    <MessageReactions
+      reactions={[
+        { type: "heart", count: 2, mine: true },
+        { type: "fire", count: 1, mine: false },
+      ]}
+      onToggle={() => {}}
+    />
+  ),
   "../components/ui/toggle-button.tsx#ToggleButton": (ToggleButton) => (
     <ToggleButton pressed={false}>Show</ToggleButton>
+  ),
+  // The panel's moment is a prop, and prop-less `MODE_COPY[mode]` has no entry
+  // to read — it throws rather than rendering something for the audit to judge.
+  // Given the least a caller gives, what the audit then checks is the part that
+  // is the same for all three: that it is a polite status region with a name,
+  // rather than a dialog nothing may act on. The three labels and headlines are
+  // pinned against each other in the component's own test, where they differ.
+  "../components/auth/auth-transition-overlay.tsx#AuthTransitionOverlay": (AuthTransitionOverlay) => (
+    <AuthTransitionOverlay mode="login" />
   ),
   "../components/ui/switch.tsx#Switch": (Switch) => <Switch aria-label="Enable dark mode" />,
   "../components/ui/input.tsx#Input": (Input) => <Input aria-label="Email address" />,
@@ -1821,6 +1850,8 @@ const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KIND
   "../components/profile/member-list-dialog.tsx#MemberListDialog": "nothing",
   "../components/profile/profile-cover.tsx#CoverCameraIcon": "nothing",
   "../components/profile/profile-cover.tsx#CoverEditIcon": "nothing",
+  "../components/providers/presence-provider.tsx#PresenceProvider": "nothing",
+  "../components/providers/room-provider.tsx#RoomProvider": "nothing",
   "../components/providers/theme-provider.tsx#ThemeProvider": "nothing",
   "../components/providers/theme-sync.tsx#ThemeSync": "nothing",
   "../components/realtime/typing-indicator.tsx#TypingIndicator": "nothing",

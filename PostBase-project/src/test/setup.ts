@@ -1,8 +1,16 @@
+import { watchForLeaks } from "./leak-watch";
+
 // Mock environment variables
 process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
 process.env.AUTH_SECRET = "test-secret";
 process.env.R2_BUCKET_NAME = "test-bucket";
 process.env.R2_PUBLIC_URL = "https://test.r2.dev";
+
+// The write tripwire, installed before the file's own modules load so a fixture
+// path built during collection is already watched, and judged at the end of the
+// file by git. A test's files belong in the scratch directory, and a fixture that
+// leaks into the checkout is dirt the next run pays for — see `leak-watch.ts`.
+watchForLeaks();
 
 // This file runs for every environment, including the node one, so anything
 // that assumes a document is guarded: `window` is how a test says which

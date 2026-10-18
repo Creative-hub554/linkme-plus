@@ -68,7 +68,31 @@ Required variables:
 
 ```bash
 npm run db:push
+npm run db:seed
 ```
+
+### 7. Grant the First Administrator
+
+The admin dashboard — moderation, the verification review queue, campaign
+approval, and reports — serves only the accounts whose `admin` role the owner
+grants. Nothing in the application can donate the role, so elevation happens
+from a machine that holds `DATABASE_URL`:
+
+```bash
+npm run admin:grant -- you@example.com
+```
+
+The run prints the account's resulting role, so a grant leaves its own
+evidence in the terminal. List who holds the role, or take it back:
+
+```bash
+npm run admin:grant -- --list
+npm run admin:grant -- --revoke you@example.com
+```
+
+Verification review needs at least one such admin: the reviewer queue at
+`/admin` lists pending applications to administrators only, and a reviewer's
+approval is what sets a member's public verified badge.
 
 ## Development
 
@@ -77,6 +101,25 @@ npm run dev
 ```
 
 Visit http://localhost:3000
+
+### Verifying the API against a scratch Postgres branch
+
+One command stands up a disposable Postgres in Docker, applies the full
+migration set (per file, recorded so it is rerunnable), seeds the demo data,
+and runs the live-Postgres smokes — the moderation and verification flows
+through the real handlers, the rendered moderation and verification-review
+dashboards, and the reports board — against
+that branch. Run it whenever the migrations, the seed, or the admin surface
+change; it cleans up after itself, so it is safe to repeat against one
+branch:
+
+```bash
+npm run smoke:postgres
+```
+
+Requires Docker. When you are done with the branch, tear it down:
+
+`docker rm -f linkme-smoke-pg`
 
 ## Production Deployment
 

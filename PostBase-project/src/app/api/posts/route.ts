@@ -7,10 +7,20 @@ import { authoredByMember } from "@/lib/db/author-timeline";
 import { toPostAudience } from "@/lib/post-audiences";
 import { deleteStoredObjects } from "@/lib/r2";
 import { clampLimit, decodeCursor, encodeCursor, isUuid, type CursorPosition } from "@/lib/cursor-pagination";
+import { isHomeFeed, sponsoredFeedPosts } from "@/lib/ads/sponsored-feed";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
 /** Ceiling on `?ids=` lookups, so a crafted request cannot ask for the world. */
 const MAX_LOOKUP_IDS = 25;
+
+/**
+ * How many boosted posts one page of the home feed may carry.
+ *
+ * One: a reader who came for their feed should find their feed, and a placement
+ * that grows into a second slot has stopped being a placement and started being
+ * the feed's new ordering.
+ */
+const SPONSORED_LIMIT = 1;
 
 /** One entry of the `media` array a client posts alongside a new post. */
 interface PostMediaInput {
@@ -135,6 +145,21 @@ export async function GET(request: Request) {
             select count(*)::int from ${reactions} as r
             where r.target_type = 'post' and r.target_id = "posts"."id"
           )`,
+          // The viewer's own reaction on this post — read as the row it *is*,
+          // the type the card wears, not the boolean shadow a row used to be
+          // re-derived into. A feed card is remounted freely (the virtualized
+          // list unmounts a card whenever it scrolls out of the window), and
+          // the remount seeds its state from the row: one that only says
+          // liked/unliked cannot name a sticker, so a confirmed 🔥 would come
+          // back as nothing. With the type on the row, the remount shows the
+          // server's truth. The outer reference is spelled out for the same
+          // reason the counts above are — a lone-table select drops the
+          // qualifier a bare column name needs to reach the outer row.
+          viewerReaction: sql<string | null>`(
+            select r.type from ${reactions} as r
+            where r.target_type = 'post' and r.target_id = "posts"."id"
+              and r.user_id = ${session.user.id}
+          )`,
           author: {
             id: users.id,
             // A missing profile row must never hide a published post. Fall back
@@ -189,8 +214,13 @@ export async function GET(request: Request) {
         mediaByPostId.set(item.postId, postMediaItems);
       }
 
+      // The boolean beside the type, derived in the same mapping rather than
+      // a second subquery: any consumer still taking the flag gets it, and
+      // it is the same rule a confirmed write settles a row with (`type ===
+      // "like"`), so a fresh read and a written row always agree.
       const postsWithMedia = result.map(({ createdAtKey: _key, ...post }) => ({
         ...post,
+        viewerLiked: post.viewerReaction === "like",
         media: mediaByPostId.get(post.id) || [],
       }));
 
@@ -206,7 +236,21 @@ export async function GET(request: Request) {
 
     const { postsWithMedia, nextCursor } = await loadFeed();
 
-    return cursorPaginatedResponse(postsWithMedia, limit, nextCursor);
+    // The front page of the feed is the one surface a boost is served on, and
+    // it is served ahead of the first organic post rather than spliced into the
+    // middle of a page the reader is part-way through. Everything else this
+    // route answers — a Page's timeline, a group's, a hydration of known ids,
+    // every page after the first — is a reader's own scrolling, where a paid
+    // post would be a placement nobody asked for.
+    const sponsored = isHomeFeed(url.searchParams)
+      ? await sponsoredFeedPosts({
+          readerId: session.user.id,
+          excludePostIds: postsWithMedia.map((post) => post.id),
+          limit: SPONSORED_LIMIT,
+        })
+      : [];
+
+    return cursorPaginatedResponse([...sponsored, ...postsWithMedia], limit, nextCursor);
   } catch (err) {
     console.error("Get posts error:", err);
     return errorResponse("Failed to fetch posts", 500);

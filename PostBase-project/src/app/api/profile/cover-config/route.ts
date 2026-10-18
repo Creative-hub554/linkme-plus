@@ -49,7 +49,6 @@ export async function POST(request: Request) {
     const files = form.getAll("photos").filter((value): value is File => value instanceof File);
     if (files.length > MAX_PHOTOS) return errorResponse(`You can use up to ${MAX_PHOTOS} photos`);
 
-    const photoUrls: string[] = [];
     if (files.length > 0) {
       try {
         assertStorageConfigured();
@@ -58,27 +57,56 @@ export async function POST(request: Request) {
       }
     }
 
+    // Every photo is validated before the first one is stored: a rejection on a
+    // later file must not leave the earlier ones in the bucket with no pointer
+    // at them.
     for (const file of files) {
       const validation = validateFile({ type: file.type, size: file.size }, "cover");
       if (!validation.valid || !file.type.startsWith("image/")) return errorResponse(validation.error || "Cover photos must be images");
-      const key = generateKey(getFolderForPurpose("cover"), session.user.id, file.name);
-      // R2's AWS SDK checksum middleware cannot hash a flowing Web File stream
-      // reliably in this runtime, so buffer the upload before sending it.
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      await putObject(key, bytes, file.type);
-      photoUrls.push(getPublicUrl(key));
     }
 
-    const backgroundIndex = Number.isInteger(config.backgroundPhotoIndex) && config.backgroundPhotoIndex !== undefined ? config.backgroundPhotoIndex : 0;
-    const coverConfig = { ...config, photos: photoUrls, backgroundPhoto: photoUrls[backgroundIndex] ?? null, updatedAt: new Date().toISOString() };
     await ensureLocalUserProfile(session.user);
-    // The config this save replaces is read before the write: the photos it held
-    // are the only record of the objects that become unreferenced when it goes.
+    // The config this save replaces is read before anything is uploaded: a read
+    // that fails then fails the request with an empty bucket, and after the
+    // write the photos it held are the only record of the objects that become
+    // unreferenced when it goes.
     const [current] = await db
       .select({ coverConfig: profiles.coverConfig })
       .from(profiles)
       .where(eq(profiles.userId, session.user.id));
-    await db.update(profiles).set({ coverConfig, coverVideoUrl: null }).where(eq(profiles.userId, session.user.id));
+
+    const photoUrls: string[] = [];
+    // Declared here because the success response hands it back, but only built
+    // once every photo is stored — the save below is what makes it real.
+    let coverConfig: CoverConfig & {
+      photos: string[];
+      backgroundPhoto: string | null;
+      updatedAt: string;
+    };
+    try {
+      for (const file of files) {
+        const key = generateKey(getFolderForPurpose("cover"), session.user.id, file.name);
+        // R2's AWS SDK checksum middleware cannot hash a flowing Web File stream
+        // reliably in this runtime, so buffer the upload before sending it.
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await putObject(key, bytes, file.type);
+        photoUrls.push(getPublicUrl(key));
+      }
+
+      const backgroundIndex = Number.isInteger(config.backgroundPhotoIndex) && config.backgroundPhotoIndex !== undefined ? config.backgroundPhotoIndex : 0;
+      coverConfig = { ...config, photos: photoUrls, backgroundPhoto: photoUrls[backgroundIndex] ?? null, updatedAt: new Date().toISOString() };
+      await db.update(profiles).set({ coverConfig, coverVideoUrl: null }).where(eq(profiles.userId, session.user.id));
+    } catch (saveError) {
+      // A failure with photos already stored — a later upload, or the profile
+      // write — would leave every photo this request stored referenced by
+      // nothing: the config never landed, so the old config's photos are still
+      // the ones in use and these have no pointer at all. They all come back
+      // out together; the replaced config's own photos are not touched.
+      if (photoUrls.length > 0) {
+        await deleteStoredObjects(photoUrls);
+      }
+      throw saveError;
+    }
 
     // Every photo the replaced config held is now unreferenced, so it comes out
     // of the bucket rather than staying as storage nobody points at but everyone

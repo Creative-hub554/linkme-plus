@@ -35,6 +35,17 @@ interface GroupPost {
   reactionCount?: number;
   media?: GroupPostMedia[];
   author?: { name?: string | null; username?: string | null; avatarUrl?: string | null };
+  /**
+   * The viewer's own reaction — the type (`"like"` or a sticker, `null` when
+   * none) beside its boolean shadow. The group read is `/api/posts`, which
+   * answers the type per row now, and a card remounted (this page's cards
+   * scroll out of view and back) seeds from what the row still holds: a
+   * boolean alone would re-derive a confirmed sticker into nothing.
+   * Confirmed writes land the same shape here through the confirmed-write
+   * seam, which is what keeps a repainted card's colour on written truth.
+   */
+  viewerReaction?: string | null;
+  viewerLiked?: boolean;
 }
 
 /**
@@ -261,27 +272,40 @@ export default function GroupView() {
                   item.type.toLowerCase().startsWith("video"),
               );
               return (
-                <PostCard
-                  key={post.id}
-                  id={post.id}
-                  // The member who wrote it, which is who a group post is by: a
-                  // group speaks in the voices of the people in it.
-                  author={{
-                    name: post.author?.name ?? "A member",
-                    username: post.author?.username ?? "member",
-                    avatar: post.author?.avatarUrl ?? undefined,
-                  }}
-                  content={post.content ?? ""}
-                  image={media?.url}
-                  mediaType={media?.type}
-                  time={formatPostTime(post.createdAt)}
-                  likes={post.reactionCount ?? 0}
-                  comments={post.commentCount ?? 0}
-                  shares={0}
-                  visibility={post.visibility ?? undefined}
-                  groupName={group.name}
-                  edited={Boolean(post.editedAt)}
-                />
+        <PostCard
+          key={post.id}
+          id={post.id}
+          // The member who wrote it, which is who a group post is by: a
+          // group speaks in the voices of the people in it.
+          author={{
+            name: post.author?.name ?? "A member",
+            username: post.author?.username ?? "member",
+            avatar: post.author?.avatarUrl ?? undefined,
+          }}
+          content={post.content ?? ""}
+          image={media?.url}
+          mediaType={media?.type}
+          time={formatPostTime(post.createdAt)}
+          likes={post.reactionCount ?? 0}
+          liked={post.viewerLiked}
+          reaction={post.viewerReaction}
+          comments={post.commentCount ?? 0}
+          shares={0}
+          visibility={post.visibility ?? undefined}
+          groupName={group.name}
+          edited={Boolean(post.editedAt)}
+          onReactionSettled={(type) => {
+            // The confirmation lands in the row the card painted from, so a
+            // card that stays mounted re-derives its heart on the repaint.
+            setPosts((current) =>
+              current.map((row) =>
+                row.id === post.id
+                  ? { ...row, viewerReaction: type, viewerLiked: type === "like" }
+                  : row,
+              ),
+            );
+          }}
+        />
               );
             })
           )}

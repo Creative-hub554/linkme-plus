@@ -581,6 +581,17 @@ describe("mutation sweep anchor drift", () => {
       kind: "broken",
       detail: "its anchor occurs 0 time(s), expected exactly 1",
     });
+    // …and the refusal carries the same run-wide reading a plain run's payload carries:
+    // the recorded baseline's un-struck count. This payload is emitted before the section
+    // that once declared `baselinePath` as a `const`, so a reordering that put the read
+    // back there would throw in the refusal's own `try` and silently drop the key — the
+    // run page would then never warn on a refusal night while warning on a plain one.
+    const recorded = JSON.parse(
+      readFileSync(path.join(projectRoot, ".freebuff", "mutation-baseline.json"), "utf8"),
+    ) as { unstruck?: unknown[] };
+    expect(payload.unstruckBaseline).toEqual(
+      Array.isArray(recorded.unstruck) ? recorded.unstruck.length : undefined,
+    );
   });
 
   it("--anchors reads every strike and runs nothing, passing a tree where they all fit", () => {
@@ -937,5 +948,199 @@ describe("mutation sweep strike vocabulary", () => {
       runCopy(sweepCopy({ word: "beat" }), [NO_MATCHES, "--json"]).stdout ?? "{}",
     );
     expect(unspoken.stdout).toContain(unspokenPayload.survivors[0].detail);
+  });
+});
+
+/**
+ * The route walk's race windows, driven against a scratch tree.
+ *
+ * The sweep says everything it says about a file against the bytes it read while building
+ * the plan. A session that edits a route (or its neighbour test) inside the run's window
+ * breaks that premise twice over: a splice taken by index out of the plan's source would
+ * be written over the editor's edit, and a verdict recorded before the edit would live on
+ * as an answer about bytes nobody can read back. So the sweep hashes both halves of every
+ * route while it plans, re-reads them before each strike and once more before the report;
+ * a file that no longer matches its wedge is not measured, its verdicts are voided, and
+ * one `broken` row names it — refusing is better than striking garbage and calling the
+ * result a measurement.
+ *
+ * These cases drive the real script through its `MUTATION_ROUTE_ROOT` seam, which re-roots
+ * the route walk at a scratch tree the same way `MUTATION_STRIKE_ROOT` re-roots the
+ * self-mutation targets — so an outside edit can land inside a run without a real file
+ * ever being at risk. `MUTATION_RACE_AT`/`MUTATION_RACE_FILE` are the sweep's own edit
+ * seam: before plan item `n`'s gate runs (or, when the slice never reaches it, just before
+ * the end-of-run sweep), the sweep appends a comment to the named file, which is exactly
+ * an outside edit arriving between two of the sweep's own reads.
+ *
+ * The neighbour test the fixture carries is deliberately one vitest cannot find: `runTest`
+ * still gets a JSON report — zero files, zero failures — so every measured strike records
+ * a *survived* verdict, which is what makes the voiding in the mid-run and end-of-run
+ * cases a recorded verdict being taken back rather than nothing ever having been said.
+ */
+describe("mutation sweep race windows", () => {
+  /** A fixture route: one refusal-shaped guard, with whatever name the caller asks for. */
+  const GUARD = (name: string) =>
+    [
+      "export async function " + name + "() {\n",
+      "  if (!id) return errorResponse(\"ID required\", 400);\n",
+      "  return successResponse({ id });\n",
+      "}\n",
+    ].join("");
+
+  /** A scratch route root: the route(s) under `src/app`, a neighbour test beside them. */
+  function makeRouteRoot(...bodies: string[]): { root: string; route: string; test: string; source: string } {
+    const root = mkdtempSync(path.join(workdir, "route-root-"));
+    const route = path.join(root, "src", "app", "api", "race", "route.ts");
+    const test = path.join(root, "src", "app", "api", "race", "route.test.ts");
+    mkdirSync(path.dirname(route), { recursive: true });
+    const source = bodies.join("");
+    writeFileSync(route, source);
+    writeFileSync(test, `import { it } from "vitest";\n\nit("neighbour", () => {});\n`);
+    return { root, route, test, source };
+  }
+
+  /** Runs the sweep against a scratch route root. The race seams stand together or not at all. */
+  function runRace(args: string[], routeRoot: string, race?: { at: number; file: string }) {
+    return spawnSync(process.execPath, [sweep, "--no-fail-open", "--file=race", ...args], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        MUTATION_LOCK_FILE: lockPath,
+        MUTATION_ROUTE_ROOT: routeRoot,
+        ...(race ? { MUTATION_RACE_AT: String(race.at), MUTATION_RACE_FILE: race.file } : {}),
+      },
+    });
+  }
+
+  it("refuses the seam's other half rather than editing the checkout it would measure", () => {
+    // The seam writes a file by name — into the checkout it would otherwise measure, if the
+    // route walk was not re-rooted first. So it asks to be re-rooted, and the two env vars
+    // stand together or not at all: any half set is the same refusal.
+    const tree = makeRouteRoot(GUARD("GET"));
+    const halfSeam = spawnSync(process.execPath, [sweep, "--file=race"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        MUTATION_LOCK_FILE: lockPath,
+        MUTATION_RACE_AT: "1",
+        MUTATION_RACE_FILE: tree.test,
+      },
+    });
+    expect(halfSeam.status).toBe(1);
+    expect(halfSeam.stderr).toContain("re-root the route walk first");
+
+    const halfEnv = runRace([], tree.root, { at: 1, file: "" });
+    expect(halfEnv.status).toBe(1);
+    expect(halfEnv.stderr).toContain("stand together");
+  });
+
+  it("skips a strike whose file an outside edit moved since the plan, and measures nothing in it", () => {
+    // One guard, and the edit lands before even its gate: no strike at all, no splice in
+    // the file, one raced row, exit 1 — the run says what it could not measure rather
+    // than splicing the plan's bytes over the editor's.
+    const tree = makeRouteRoot(GUARD("GET"));
+
+    const result = runRace(["--json"], tree.root, { at: 1, file: tree.test });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}");
+    expect(payload.checked).toBe(0);
+    expect(payload.gate).toBe("fail");
+    expect(payload.racedStrikes).toBe(1);
+    expect(payload.racedFiles).toHaveLength(1);
+    expect(payload.racedFiles[0]).toMatch(/route\.ts$/);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({
+      kind: "broken",
+      reason: "race",
+      detail: expect.stringContaining("landed inside the sweep's window"),
+    });
+    // Nothing was measured and nothing was written: the file is exactly the bytes the
+    // plan spliced from, with no mutation applied and no lock left behind.
+    expect(readFileSync(tree.route, "utf8")).toBe(tree.source);
+    expect(existsSync(lockPath)).toBe(false);
+    // The log names the file and the half that moved, without measuring either.
+    expect(result.stderr).toContain("RACED");
+    expect(result.stderr).toContain("its neighbour test was edited while the sweep ran");
+  });
+
+  it("voids a verdict it already recorded, when an outside edit follows it inside the window", () => {
+    // Two guards, one strike measured before the edit, one gate that catches it. Strike 1
+    // recorded a survivor for a file nobody can read back the same way it was read; strike
+    // 2's gate refuses, voids that verdict (and refunds its check), and carries one row
+    // for the whole file. A run that said "survived" here would leave a reader an answer
+    // whose subject no longer exists.
+    const tree = makeRouteRoot(GUARD("GET"), GUARD("DELETE"));
+
+    const result = runRace(["--limit=2", "--json"], tree.root, { at: 2, file: tree.test });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}");
+    // One strike measured, one verdict recorded, then both taken back: the count refunds
+    // to zero, and no `guard` survivor rode with the raced row.
+    expect(payload.checked).toBe(0);
+    expect(payload.racedStrikes).toBe(1);
+    expect(payload.survivors.filter((row: { kind: string }) => row.kind === "guard")).toEqual([]);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject(
+      { kind: "broken", reason: "race", detail: expect.stringContaining("landed inside the sweep's window") },
+    );
+    // The file is whole: the skipped strike left it as the plan's bytes, the way the
+    // in-strike guard leaves it when a foreign edit arrives mid-strike.
+    expect(readFileSync(tree.route, "utf8")).toBe(tree.source);
+    expect(existsSync(lockPath)).toBe(false);
+    expect(result.stderr).toContain("verdict(s) recorded earlier for it are void");
+  });
+
+  it("catches a late edit that follows a route's last strike out the door", () => {
+    // One guard, one strike measured, then the seam's edit lands past the slice — which
+    // a per-strike gate never sees, because no gate runs after the last strike. The run's
+    // last check over the wedge is what catches it, voiding the same verdict the
+    // mid-run case voids.
+    const tree = makeRouteRoot(GUARD("GET"));
+
+    const result = runRace(["--limit=1", "--json"], tree.root, { at: 2, file: tree.test });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}");
+    expect(payload.checked).toBe(0);
+    expect(payload.racedStrikes).toBe(0);
+    expect(payload.racedFiles).toHaveLength(1);
+    expect(payload.survivors.filter((row: { kind: string }) => row.kind === "guard")).toEqual([]);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+    expect(readFileSync(tree.route, "utf8")).toBe(tree.source);
+    expect(result.stderr).toContain("changed after its last strike");
+  });
+
+  it("reports a run with no race as it always did, so the check is not a blanket refusal", () => {
+    // One guard, measured whole, no edit anywhere: the verdict stands, `checked` counts it,
+    // and no raced row is carried at all. The control says what the cases above red when
+    // the tree moves — and that nothing about the check fires when it does not.
+    const tree = makeRouteRoot(GUARD("GET"));
+
+    const result = runRace(["--json"], tree.root);
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}");
+    expect(payload.racedStrikes).toBe(0);
+    expect(payload.racedFiles).toEqual([]);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "guard", masked: true });
+    expect(readFileSync(tree.route, "utf8")).toBe(tree.source);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("spells the race reason once, printing the payload's own detail lines", () => {
+    // The race rows share the one-sentence discipline: whatever the report prints about an
+    // outside edit is the `detail` the survivor object carries, not a second copy a later
+    // edit could drift apart.
+    const source = readFileSync(sweep, "utf8");
+    const spelled =
+      source.match(/an edit to \$\{which\} \(\$\{label\(route\)\}\) landed inside the sweep's window/g) ?? [];
+    expect(spelled, "the race reason must be spelled once (inside raceRow)").toHaveLength(1);
+    expect(source).toContain("for (const row of raceRows) {");
   });
 });

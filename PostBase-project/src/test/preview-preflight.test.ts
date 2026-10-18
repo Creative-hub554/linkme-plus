@@ -179,9 +179,42 @@ function scratchCheckout(lock: Record<string, unknown> | null): string {
   return dir;
 }
 
-/** A pid that is genuinely gone: a process spawned and already reaped. */
-function deadPid(): number {
-  return spawnSync(process.execPath, ["-e", ""]).pid ?? 0;
+/**
+ * A pid that is genuinely gone — and seen to be gone by the same process-table
+ * read the preflight judges liveness with. Spawn-and-reap alone lost a race on
+ * a loaded box: the preflight's table read still listed the pid (or a reuse had
+ * already recycled it — the sweep's own node spawns recycle pids aggressively)
+ * after the child had exited, and the case red on a verdict that called the
+ * lock held. So the helper awaits the child's exit and then polls
+ * `Win32_Process` about the pid exactly as the script's own lookup does,
+ * re-spawning afresh until a candidate answers gone.
+ */
+async function reapedPidAbsentFromProcessTable(pid: number): Promise<boolean> {
+  const script =
+    `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
+    "if ($p) { Write-Output $p.CommandLine }";
+  const read = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  // A failed lookup is not evidence of absence — the table may just be slow to
+  // answer under load, so the caller's poll loop reads this as "not yet gone."
+  return read.status === 0 && (read.stdout ?? "").trim() === "";
+}
+
+async function deadPid(): Promise<number> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const pid = await new Promise<number>((resolve, reject) => {
+      const child = spawn(process.execPath, ["-e", ""]);
+      child.once("error", reject);
+      child.once("close", () => resolve(child.pid ?? 0));
+    });
+    for (let poll = 0; poll < 30; poll += 1) {
+      if (await reapedPidAbsentFromProcessTable(pid)) return pid;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error("no pid could be confirmed absent from the process table the preflight reads");
 }
 
 afterAll(() => {
@@ -219,7 +252,7 @@ describe("the preflight's read of a lock held by a process that is alive and not
   it("keeps the stale-lock advice for a dead pid, so the two cases are told apart", async () => {
     const port = await freePort();
     const dir = scratchCheckout({
-      pid: deadPid(),
+      pid: await deadPid(),
       port,
       appUrl: `http://localhost:${port}`,
     });

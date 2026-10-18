@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { BoostManager } from "@/components/ads/boost-manager";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,16 @@ interface PagePost {
   commentCount?: number;
   reactionCount?: number;
   media?: PagePostMedia[];
+  /**
+   * The viewer's own reaction — the type (`"like"` or a sticker, `null` when
+   * none) beside its boolean shadow. Same shape as the group's rows, and for
+   * the same reason: the read is `/api/posts` and answers the type per row,
+   * so a remounted card seeds the sticker the server keeps instead of
+   * re-deriving `like`-or-nothing from the boolean. The confirmed write
+   * writes the same shape, and the repainted card re-derives from the row.
+   */
+  viewerReaction?: string | null;
+  viewerLiked?: boolean;
 }
 
 /**
@@ -291,14 +302,33 @@ export default function PageView() {
                   mediaType={media?.type}
                   time={formatPostTime(post.createdAt)}
                   likes={post.reactionCount ?? 0}
+                  liked={post.viewerLiked}
+                  reaction={post.viewerReaction}
                   comments={post.commentCount ?? 0}
                   shares={0}
                   visibility={post.visibility ?? undefined}
                   edited={Boolean(post.editedAt)}
+                  onReactionSettled={(type) => {
+                    // Same seam the group's rows use: the confirmation is
+                    // written into the row the card reads its heart from.
+                    setPosts((current) =>
+                      current.map((row) =>
+                        row.id === post.id
+                          ? { ...row, viewerReaction: type, viewerLiked: type === "like" }
+                          : row,
+                      ),
+                    );
+                  }}
                 />
               );
             })
           )}
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="mt-6" aria-label="Boosted posts">
+          <BoostManager pageId={page.id} />
         </section>
       )}
 

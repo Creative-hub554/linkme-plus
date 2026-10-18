@@ -151,6 +151,35 @@ describe("useWebSocket connection", () => {
     expect(latest?.isConnected).toBe(false);
   });
 
+  it("stays idle while disabled, and lets go when disabled again", async () => {
+    function Gated({ enabled }: { enabled: boolean }) {
+      latest = useWebSocket({ ...OPTIONS, enabled });
+      return null;
+    }
+    const ui = mountSurface(<Gated enabled={false} />, { providers: "none" });
+
+    // No connection — and not even an explicit ask may dial while disabled:
+    // this is how a surface that exists closed on the page (a dialog mounted
+    // before anyone opens it) keeps from connecting on every render.
+    expect(FakeWebSocket.instances).toHaveLength(0);
+    latest?.connect();
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    // Enabled: it dials.
+    await ui.render(<Gated enabled={true} />);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    // Disabled again: the socket it held is closed, and no reconnect follows —
+    // the close handler's stale schedule must not dial back into a hook that
+    // is no longer asking for a connection.
+    await ui.render(<Gated enabled={false} />);
+    expect(FakeWebSocket.instances[0].readyState).toBe(3);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
   it("reports the connection once the socket opens", async () => {
     mountHook();
     await act(async () => {
@@ -204,6 +233,7 @@ describe("useWebSocket sending", () => {
     latest?.sendTyping("c1");
     latest?.stopTyping("c1");
     latest?.sendMessage("c1", "hello");
+    latest?.sendRead("c1", 1_700_000_000_000);
     latest?.sendNotification("u2", { title: "hi" });
     latest?.joinRoom("r2");
     latest?.leaveRoom("r1");
@@ -213,6 +243,7 @@ describe("useWebSocket sending", () => {
       { type: "typing", conversationId: "c1" },
       { type: "stop-typing", conversationId: "c1" },
       { type: "message", conversationId: "c1", content: "hello" },
+      { type: "read", conversationId: "c1", at: 1_700_000_000_000 },
       { type: "notification", targetUserId: "u2", title: "hi" },
       { type: "join-room", room: "r2" },
       { type: "leave-room", room: "r1" },
