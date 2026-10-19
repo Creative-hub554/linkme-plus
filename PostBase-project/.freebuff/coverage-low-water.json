@@ -1,0 +1,17 @@
+{
+  "note": "The low-water mark each declared reading is held against: the lowest level its records have settled to, and the night that settled it. A fall below it fails `npm run coverage:trend`; a return to a level the reading has held does not. Regenerate with: npm run coverage:low-water",
+  "readings": {
+    "rendered-links": {
+      "value": 25,
+      "since": "2026-10-09"
+    },
+    "scratch-paths": {
+      "value": 7,
+      "since": "2026-10-13"
+    },
+    "convention-guards": {
+      "value": 13,
+      "since": "2026-10-13"
+    }
+  }
+}
