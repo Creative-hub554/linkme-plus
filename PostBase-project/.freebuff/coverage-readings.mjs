@@ -41,6 +41,21 @@
  *     which is how a footer's count of links becomes a guard's metric. A line the pattern
  *     cannot read is named as unreadable by every consumer, never plotted as a zero.
  *
+ * One field is optional, and its absence is the rule it exists to depart from:
+ *
+ *   - `floored` — whether the reading's records are floors, which is yes by default. A
+ *     default-yes is the whole of what the low-water derivation needs: every reading whose
+ *     number is "how much the tree was audited" wants a floor, so a level it settled to once is
+ *     a level its next night is held against. A reading whose number is *how much work remains*
+ *     wants no floor at all — the queue's size falling is the queue being served, and a fall
+ *     below its lowest night is good news a red night would lie about — so it declares
+ *     `floored: false` and is thereby charted without one: the derivation names it in no
+ *     `coverage-low-water.json`, the command holds it against no level, and its row and its
+ *     chart's floor line say the absence is deliberate (`noFloorWords`) rather than a history
+ *     nothing has accrued. The flag is read by the one derivation and the two renderers, both
+ *     of which walk the registry, so a second unfloored reading is one field, not an edit in
+ *     three files.
+ *
  * The module is machinery, not a gate: it is imported by `.freebuff/ci.mjs`,
  * `.freebuff/nightly-report.mjs`, `.freebuff/coverage-history.mjs` and the suites that publish
  * readings, and it is pinned like its siblings so a quietly narrowed prefix or a changed
@@ -103,6 +118,38 @@ export const CONVENTION_GUARDS_READING = {
 };
 
 /**
+ * The verification queue's reading: the size the armed alarm judged the queue at.
+ *
+ * A reading whose number is a queue's *settled size* rather than a measure of the tree, and the
+ * registry's one entry that says so with `floored: false` — the field the header documents: a
+ * floor is the level a fall below reds the night, and the queue falling is the queue being
+ * served, so the readings' floor machinery has no business in it. `coverage-trend`'s derivation
+ * and both renderers read the flag from here.
+ */
+export const QUEUE_SETTLED_READING = {
+  id: "queue-settled",
+  file: ".queue-settled-coverage.txt",
+  env: "CI_QUEUE_SETTLED_STAMP_FILE",
+  prefix: "queue-settled coverage:",
+  // The queue's settled size — the count the alarm judged — is the reading's head number, side
+  // by side with the window it was judged against and the rows it owed, which are the prose the
+  // chart keeps out and the bullet keeps.
+  metric: {
+    pattern: /^(\d+) pending application\(s\)/,
+    label: "pending applications",
+  },
+  // The one reading's records are deliberately not floors: a queue's drain past its lowest night
+  // is good news the floor machinery would red, so no `coverage-low-water.json` names this
+  // reading, and the chart and the command say the absence is the rule.
+  floored: false,
+  // …and the words its chart line answers with in place of the generic "held against the nights
+  // at hand", which is the floor machinery's own reason and not this reading's.
+  noFloorWords:
+    "charted without a floor, deliberately — this reading's number is how much work remains, and a " +
+    "drain past the lowest night is good news a red would lie about",
+};
+
+/**
  * Every reading a run can carry, in the order the summary prints them.
  *
  * The array is the register: the runner walks it to clear and to read, the summary walks it to
@@ -116,6 +163,7 @@ export const READINGS = [
   RENDERED_LINKS_READING,
   SCRATCH_PATHS_READING,
   CONVENTION_GUARDS_READING,
+  QUEUE_SETTLED_READING,
 ];
 
 /**

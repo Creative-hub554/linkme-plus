@@ -10,6 +10,7 @@ import { makeScratchDir, removeScratchDir } from "./scratch";
 // metric that stops reading its own line fails here rather than on a page nobody looks at.
 import {
   CONVENTION_GUARDS_READING,
+  QUEUE_SETTLED_READING,
   READINGS,
   RENDERED_LINKS_READING,
   SCRATCH_PATHS_READING,
@@ -23,6 +24,7 @@ import {
   LOW_WATER_FILE,
   TREND_LIMIT,
   coverageOverTime,
+  derivedLowWater,
   historyRecords,
   mergeRecords,
   readLowWater,
@@ -124,6 +126,11 @@ const bodies = {
     "(200 test file(s) scanned)",
   conventionGuards: (guards: number) =>
     `${guards} guard(s) exercised on both of their shapes — mount, settle`,
+  // The alarm's own line, as the armed suite writes it: the settled size first (the number the
+  // metric reads), the window and the owed rows beside it. A fixture builds it from the entry,
+  // so a re-worded prefix moves this string with it.
+  queueSettled: (pending: number, judgedAt = "2026-10-19T15:28:34.501Z", owed = 0) =>
+    `${pending} pending application(s) — judged ${judgedAt} against a 48h window; ${owed} owed past it`,
 };
 
 describe("the runbook's dated records", () => {
@@ -758,7 +765,12 @@ describe("the coverage:trend command", () => {
         "  from 3 runbook record(s) and 0 nightly history row(s)",
         "REGRESSED   rendered-links         25 chrome unique destinations — down 2 from the low-water 27 of 2 previous record(s) (2026-09-01 → 2026-09-02)",
         "NO HISTORY  scratch-paths          no record at all — neither the runbook nor the history table has carried this reading",
-        "NO HISTORY  convention-guards      no record at all — neither the runbook nor the history table has carried this reading",        "",
+        "NO HISTORY  convention-guards      no record at all — neither the runbook nor the history table has carried this reading",
+        // The registry's unfloored reading rows like any other reading with no record yet — its
+        // absence is an omission too — but its mark and its words say the lack of a comparison
+        // would stay a lack even with records, because no floor is the decision it records.
+        "NOT FLOORED queue-settled          no record at all — neither the runbook nor the history table has carried this reading — charted without a floor, deliberately: this reading's number is how much work remains, and a drain past the lowest night is good news a red would lie about",
+        "",
         "  The floor is the reading's committed low-water: the lowest level its records have settled to,",
         "  so a fall below it fails the night that measured it while a return to a level it has held does",
         "  not. A reading that really stepped down is a decision to write down — `npm run",
@@ -772,7 +784,7 @@ describe("the coverage:trend command", () => {
 
     expect(report).toMatchObject({ gate: "pass", exitCode: 0, compared: 0, regressed: [] });
     expect(renderTrendReport(report).split("\n")[0]).toBe(
-      "coverage:trend: 0 of 3 reading(s) compared — no declared reading has a floor or an earlier " +
+      "coverage:trend: 0 of 4 reading(s) compared — no declared reading has a floor or an earlier " +
         "night to be held against, so there is nothing to answer.",
     );
   });
@@ -935,5 +947,65 @@ describe("the coverage:trend command", () => {
       expect(payload.sources.history).toBeGreaterThan(0);
       expect(payload.sources.added).toBeGreaterThan(0);
     });
+
+    it("answers no floor for the one unfloored reading, and says the absence is deliberate", () => {
+        // The queue's settled size is the registry's `floored: false` entry, so the derivation
+        // names it in no floor file and the command holds it against nothing: asserting the
+        // null floor here with a *hand-named* committed low-water is the point — the flag wins
+        // over anything the file might say, because the decision lives in the entry.
+        const unfloored = trendReport(
+          [
+            record("2026-10-18", [
+              line(QUEUE_SETTLED_READING, bodies.queueSettled(2, "2026-10-18T02:00:00.000Z", 0)),
+            ]),
+            record("2026-10-19", [
+              line(QUEUE_SETTLED_READING, bodies.queueSettled(0, "2026-10-19T15:28:34.501Z", 0)),
+            ]),
+          ].join("\n\n"),
+          {
+            history: "",
+            lowWater: { [QUEUE_SETTLED_READING.id]: { value: 5, since: "2026-10-16" } },
+          },
+        );
+        const row = unfloored.rows.find(
+          (row: { id: string }) => row.id === QUEUE_SETTLED_READING.id,
+        );
+        // The registry's own walk puts every declared reading in the rows, so the lookup
+        // finding its entry is a fact about the registry rather than something to guard.
+        expect(row).toBeDefined();
+        expect(row?.status).toBe("not-held");
+        expect(row?.floored).toBe(false);
+        expect(row?.floor).toBeNull();
+        expect(row?.floorFrom).toBeNull();
+        expect(row?.current).toEqual({ date: "2026-10-19", value: 0 });
+        // Unheld is never red: the queue draining from 2 to 0 is the good news the floor
+        // machinery would lie about, and `compared` counts only floor-held rows.
+        expect(unfloored.regressed).toEqual([]);
+        expect(unfloored.compared).toBe(0);
+        const text = renderTrendReport(unfloored);
+        expect(text).toContain("NOT FLOORED queue-settled");
+        expect(text).toContain("0 pending applications — charted without a floor, deliberately");
+      });
+
+      it("derives no floor for the unfloored reading, whatever its records say", () => {
+        const floors = derivedLowWater(
+          mergeRecords(
+            runbookRecords(
+              [
+                record("2026-10-18", [
+                  line(QUEUE_SETTLED_READING, bodies.queueSettled(2, "2026-10-18T02:00:00.000Z", 0)),
+                ]),
+              ].join("\n\n"),
+            ),
+            [],
+          ),
+        );
+
+        // A queue that has only ever been at 2 pending would otherwise become a floor of 2 the
+        // night the queue drains to 0 reds — the shape this flag exists to prevent. The
+        // floored readings keep their rule in the same derivation, so the case stakes both
+        // halves of the behaviour at once.
+        expect("queue-settled" in floors).toBe(false);
+      });
   });
 });

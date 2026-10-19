@@ -370,6 +370,10 @@ const RECORD_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export function derivedLowWater(records = []) {
   const floors = {};
   for (const entry of READINGS) {
+    // The registry's one exception is stated by the entry, not re-derived here: a reading that
+    // declares `floored: false` — the queue's settled size — is a number whose fall is good news,
+    // so its records are a series to chart and in no file a floor to hold anything against.
+    if (entry.floored === false) continue;
     const measured = records
       .filter((record) => record.readings[entry.id] !== undefined)
       .map((record) => ({ date: record.date, value: metricOf(entry, record.readings[entry.id]) }))
@@ -515,6 +519,11 @@ export function sparkline(values) {
   return values.map((value) => barFor(value, low, high)).join("");
 }
 
+/** What a reading whose entry declares `floored: false` is told instead of a floor the row holds it against. */
+const NOT_HELD_LINE =
+  "this reading's number is how much work remains, and a drain past the lowest night is good " +
+  "news a red would lie about";
+
 /** What a reading the committed file does not name says for itself, in place of a drawn floor. */
 const NO_FLOOR_LINE =
   "  no committed floor — this reading is held against the nights at hand rather than against a " +
@@ -580,7 +589,11 @@ function seriesRow(series, floor = null) {
   return [
     `- **${series.id}** \`${sparkline(values)}\` — ${latest} ${series.label}, ${change} ` +
       `(range ${Math.min(...values)}–${Math.max(...values)}) over ${window} (${span})${named}`,
-    floor === null ? NO_FLOOR_LINE : floorLine(series, floor),
+    floor === null
+      ? series.entry?.noFloorWords
+        ? `  ${series.entry.noFloorWords}`
+        : NO_FLOOR_LINE
+      : floorLine(series, floor),
   ];
 }
 
@@ -613,17 +626,33 @@ export function readingMovement(entry, records, { limit = TREND_LIMIT, lowWater 
   const current = points[points.length - 1] ?? null;
   const earlier = points.slice(0, -1);
   const measured = earlier.filter((point) => point.value !== null);
+  // The registry's one `floored: false` reading is held against nothing at all — by decision,
+  // not by accident: a queue's drain past its lowest night is good news, and no committed
+  // low-water names it because the derivation names it in no file. The flag is read from the
+  // entry here rather than re-declared, so a second unfloored reading is one field in the
+  // registry, never an edit in this file.
+  const unfloored = entry.floored === false;
   // The committed low-water wins where the file names this reading — that is the whole point of
   // recording it — and the nights at hand are the floor for a reading no file has recorded yet.
   const held = lowWater?.[entry.id] ?? null;
   const atHand = measured.length > 0 ? Math.min(...measured.map((point) => point.value)) : null;
-  const floor = held !== null && Number.isInteger(held.value) ? held.value : atHand;
-  const floorFrom =
-    floor === null ? null : held !== null && Number.isInteger(held.value) ? "low-water" : "records";
+  const floor = unfloored
+    ? null
+    : held !== null && Number.isInteger(held.value)
+      ? held.value
+      : atHand;
+  const floorFrom = unfloored
+    ? null
+    : floor === null
+      ? null
+      : held !== null && Number.isInteger(held.value)
+        ? "low-water"
+        : "records";
   const value = current?.value ?? null;
 
-  const status =
-    current === null || floor === null
+  const status = unfloored
+    ? "not-held"
+    : current === null || floor === null
       ? "no-history"
       : value === null
         ? "unreadable"
@@ -636,6 +665,7 @@ export function readingMovement(entry, records, { limit = TREND_LIMIT, lowWater 
   return {
     id: entry.id,
     label: entry?.metric?.label ?? entry.id,
+    floored: !unfloored,
     status,
     current,
     floor,
@@ -714,6 +744,7 @@ const MARKS = {
   rose: "ROSE",
   "no-history": "NO HISTORY",
   unreadable: "UNREADABLE",
+  "not-held": "NOT FLOORED",
 };
 
 /** One row of the command's report: the movement in words, with the numbers behind it. */
@@ -737,6 +768,22 @@ function movementRow(row) {
   }
   if (row.status === "unreadable") {
     return `${head} the newest line is not one this metric can read (${row.current.date}) — ${row.label} cannot be compared`;
+  }
+  // The registry's unfloored reading is charted but deliberately gated by nothing, so its row
+  // says that rather than borrowing the no-history wording: nothing is missing here — the
+  // history may be as long as any other's — what is absent is a floor, by decision the entry
+  // itself records. A reading whose line cannot be read is still named below: charted-without-
+  // a-floor governs whether the number is held against one, never whether a broken line is
+  // admitted to be one.
+  if (row.status === "not-held") {
+    const charted =
+      row.current === null
+        ? "no record at all — neither the runbook nor the history table has carried this reading"
+        : `${row.current.value} ${row.label}`;
+    const unreadable = row.current !== null && row.current.value === null
+      ? ` — the newest line (${row.current.date}) is not one this metric can read`
+      : "";
+    return `${head} ${charted}${unreadable} — charted without a floor, deliberately: ${NOT_HELD_LINE}`;
   }
   const movement =
     row.status === "held"

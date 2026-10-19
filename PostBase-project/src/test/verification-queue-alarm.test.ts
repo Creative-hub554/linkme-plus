@@ -10,6 +10,12 @@ import {
 // in the module the runner and the nightly renderer read, so writer and readers cannot
 // drift.
 import { queueAlarmPath } from "../../.freebuff/queue-alarm-verdict.mjs";
+// The queue's settled size rides the readings' own pipeline, so its line is built and
+// written through the registry entry the trend charts it by — never a hand-copied prefix.
+import {
+  QUEUE_SETTLED_READING,
+  readingPath,
+} from "../../.freebuff/coverage-readings.mjs";
 
 /**
  * The verification queue's nightly alarm.
@@ -167,6 +173,21 @@ function hoursLimit(): number {
           null,
           2,
         ) + "\n",
+      );
+      // …and the same judgment as the readings' own line, to the sidecar the registry
+      // entry names: the queue's settled size is charted over time like the coverage
+      // readings' series — the trend reads one number (`pending`) per night off this line —
+      // with the window and the owed rows said beside it, the same facts the run page's
+      // alarm section holds. The entry's own prefix and path spell both ends, so a
+      // re-worded registry moves the writer with it. An unarmed run writes nothing, the
+      // same parked-alarm absence the verdict takes: a cleared sidecar is the runner's
+      // per-attempt work, and an absent cell is how the history table holds an unfilled
+      // night.
+      writeFileSync(
+        readingPath(QUEUE_SETTLED_READING, process.cwd(), process.env),
+        `${QUEUE_SETTLED_READING.prefix} ${pending.length} pending application(s) — ` +
+          `judged ${now.toISOString()} against a ${maxAgeHours}h window; ` +
+          `${overdue.length} owed past it.\n`,
       );
       // The gate's red is this expectation's failure message: the sentence the
       // paging reader acts on — who is owed, how long, and where to act —

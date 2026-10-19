@@ -173,6 +173,16 @@ function linksRunbook(values: (number | string)[]): string {
  */
 type Floors = Record<string, { value: number; since: string }>;
 
+/**
+ * Whether a registry entry declares the one optional field — `floored: false` — that takes its
+ * records out of the floors. A member-of-union access through a cast rather than a direct
+ * property read, because the neighbouring entries do not carry the field and the module is
+ * JavaScript the types are inferred from.
+ */
+function markedUnfloored(entry: { floored?: boolean } | Record<string, unknown>): boolean {
+  return (entry as { floored?: boolean }).floored === false;
+}
+
 /** A low-water file as the recorder writes one, with only the readings a case names. */
 const floorsOf = (...named: [string, number, string][]) =>
   renderLowWater(Object.fromEntries(named.map(([id, value, since]) => [id, { value, since }])));
@@ -428,12 +438,32 @@ describe("the committed low-water in this checkout", () => {
   it("names every reading the records have settled, at the lowest level they state", () => {
     const floors = readLowWater(read(committed.lowWater)) as Floors;
     const records = recordsIn();
-    const settled = READINGS.filter((entry) =>
-      records.some((held) => metricOf(entry, held.readings[entry.id]) !== null),
+    const settled = READINGS.filter(
+      (entry) =>
+        !markedUnfloored(entry) &&
+        records.some((held) => metricOf(entry, held.readings[entry.id]) !== null),
     );
+    // The registry's unfloored reading is the deliberate exception, and it is named here by its
+    // own absence: its records settle (the queue has a number tonight), and no floor names it —
+    // which is what `floored: false` means on the committed file's side, asserted against the
+    // real pair rather than against a fixture of it.
+    const unfloored = READINGS.filter((entry) => markedUnfloored(entry));
+    if (unfloored.length > 0) {
+      expect(
+        READINGS.some(
+          (entry) =>
+            markedUnfloored(entry) &&
+            records.some((held) => metricOf(entry, held.readings[entry.id]) !== null),
+        ),
+        "the fixture wants the unfloored reading's records committed, so this case says something",
+      ).toBe(true);
+    }
 
     expect(settled.length, "the committed records carry no readable reading at all").toBeGreaterThan(0);
     expect(Object.keys(floors)).toEqual(settled.map((entry) => entry.id));
+    for (const entry of unfloored) {
+      expect(Object.keys(floors), `${entry.id} was floored deliberately-not`).not.toContain(entry.id);
+    }
     for (const entry of settled) {
       const measured = records
         .map((held) => metricOf(entry, held.readings[entry.id]))

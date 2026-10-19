@@ -16,6 +16,7 @@ import {
 // registry rather than from a second copy of an id, a prefix or a column name.
 import {
   CONVENTION_GUARDS_READING,
+  QUEUE_SETTLED_READING,
   READINGS,
   RENDERED_LINKS_READING,
   SCRATCH_PATHS_READING,
@@ -55,11 +56,15 @@ const SCRATCH_PATHS_LINE = `${SCRATCH_PATHS_READING.prefix} 7 suite(s) keep a sc
 /** A real-shaped convention-guards reading: the roster of guards the meta-test exercised. */
 const CONVENTION_GUARDS_LINE = `${CONVENTION_GUARDS_READING.prefix} 13 guard(s) exercised on both of their shapes — beat-clock, runbook, stale-stage-lists`;
 
+/** A real-shaped queue-settled reading: the settled size, judged against the alarm's window. */
+const QUEUE_SETTLED_LINE = `${QUEUE_SETTLED_READING.prefix} 0 pending application(s) — judged 2026-10-19T15:28:34.501Z against a 48h window; 0 owed past it`;
+
 /** A night on which every guard measured: the report's map, keyed as the report keys it. */
 const FULL_NIGHT = {
   [RENDERED_LINKS_READING.id]: RENDERED_LINKS_LINE,
   [SCRATCH_PATHS_READING.id]: SCRATCH_PATHS_LINE,
   [CONVENTION_GUARDS_READING.id]: CONVENTION_GUARDS_LINE,
+  [QUEUE_SETTLED_READING.id]: QUEUE_SETTLED_LINE,
 };
 
 /** The readings map a report with only some of the guards measuring carries. */
@@ -173,8 +178,11 @@ describe("the coverage history row", () => {
       "",
       escaped(SCRATCH_PATHS_LINE),
       escaped(CONVENTION_GUARDS_LINE),
+      // The queue is the night's unfilled column: the thin night armed nothing, and an absence
+      // is an empty cell beside the readings somebody did measure — never a column dropped.
+      "",
     ]);
-    // The row is still one row of four cells: an absence is a cell the table states, not a
+    // The row is still one row of five cells: an absence is a cell the table states, not a
     // column that quietly shifted its neighbour into the reading's place.
     expect(result.text.match(/\| 2026-10-02 \|/g)).toHaveLength(1);
   });
@@ -231,6 +239,7 @@ describe("the coverage history row", () => {
       escaped(RENDERED_LINKS_LINE),
       "",
       escaped(CONVENTION_GUARDS_LINE),
+      "",
     ]);
   });
 
@@ -288,6 +297,7 @@ describe("the table's columns", () => {
       "Rendered-links coverage",
       "Scratch-paths coverage",
       "Convention-guards coverage",
+      "Queue-settled coverage",
     ]);
     // …and no two columns can carry the same heading: the ids are the table's keys and the
     // prefixes its contract, so a reading that arrived under a name already taken is refused by
@@ -385,6 +395,7 @@ describe("the coverage-history CLI", () => {
       "",
       escaped(SCRATCH_PATHS_LINE),
       escaped(CONVENTION_GUARDS_LINE),
+      "",
     ]);
   });
 
@@ -420,6 +431,9 @@ describe("the coverage-history CLI", () => {
       escaped(moved),
       escaped(SCRATCH_PATHS_LINE),
       escaped(CONVENTION_GUARDS_LINE),
+      // The queue's cell rides through from the run that measured it — the whole rule: a
+      // correction of one column is not a statement about the others, however many there are.
+      escaped(QUEUE_SETTLED_LINE),
     ]);
   });
 
@@ -534,6 +548,7 @@ describe("the coverage-history CLI", () => {
       "",
       escaped(SCRATCH_PATHS_LINE),
       "",
+      "",
     ]);
 
     const rendered = run(["--stamp", RENDERED_LINKS_LINE, "--file", history, "--date", "2026-09-30"]);
@@ -542,6 +557,7 @@ describe("the coverage-history CLI", () => {
       "2026-09-30",
       escaped(RENDERED_LINKS_LINE),
       escaped(SCRATCH_PATHS_LINE),
+      "",
       "",
     ]);
   });
@@ -552,6 +568,23 @@ describe("the coverage-history CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("does not read like one");
     for (const entry of READINGS) expect(result.stderr).toContain(entry.prefix);
+  });
+
+  it("files the queue's settled size under its own column, as the registry keys it", () => {
+    // The unfloored reading is a column like any other — a stamp fills its cell, and the cell's
+    // refusal rules are the table's, not the entry's `floored` flag: a stamp that reads like the
+    // queue's reading reads, under the queue's id, is a recorded measurement whatever the floors
+    // decide about it later.
+    const history = path.join(dir, "queue-stamp.md");
+
+    const queued = run(["--stamp", QUEUE_SETTLED_LINE, "--file", history, "--date", "2026-10-19"]);
+    expect(queued.status).toBe(0);
+    expect(queued.stderr).toContain(`— ${QUEUE_SETTLED_READING.id}`);
+    const cells = cellsOf(rowFor(readFileSync(history, "utf8"), "2026-10-19"));
+    expect(cells[READINGS.findIndex((entry) => entry.id === QUEUE_SETTLED_READING.id) + 1]).toBe(
+      escaped(QUEUE_SETTLED_LINE),
+    );
+    expect(cells).toHaveLength(COLUMNS.length + 1);
   });
 
   it("defaults --file to the committed history's path", () => {

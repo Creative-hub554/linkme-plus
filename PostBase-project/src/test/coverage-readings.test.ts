@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CONVENTION_GUARDS_READING,
+  QUEUE_SETTLED_READING,
   READINGS,
   RENDERED_LINKS_READING,
   SCRATCH_PATHS_READING,
@@ -46,6 +47,9 @@ const historySource = readSource("../../.freebuff/coverage-history.mjs");
 const renderedLinksSource = readSource("./rendered-links.test.tsx");
 const scratchPathsSource = readSource("./scratch-paths.test.ts");
 const conventionGuardsSource = readSource("./convention-guards.test.ts");
+// The queue's writer builds its line inside the live alarm case, beside the verdict sidecar it
+// already writes — the one suite honest about publishing the reading only when the alarm is on.
+const queueSettledSource = readSource("./verification-queue-alarm.test.ts");
 
 /** The name the module exports an entry under, derived from the id the report keys it by. */
 function exportedName(id: string): string {
@@ -279,6 +283,11 @@ describe("the one spelling the pipeline keeps", () => {
         name: "src/test/convention-guards.test.ts",
         source: conventionGuardsSource,
         entry: CONVENTION_GUARDS_READING,
+      },
+      {
+        name: "src/test/verification-queue-alarm.test.ts",
+        source: queueSettledSource,
+        entry: QUEUE_SETTLED_READING,
       },
     ];
     for (const { name, source, entry } of writers) {
