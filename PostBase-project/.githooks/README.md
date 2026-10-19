@@ -1,8 +1,9 @@
 # Repository hooks
 
 The pre-push gate refuses a push to `master` until the fast checks pass
-(`typecheck`, `lint:ci`, `gates:drift`); `PUSH_GATE=full` adds the whole
-coverage suite, and `git push --no-verify` bypasses one push on purpose.
+(`typecheck`, `lint:ci`, `gates:drift`); `PUSH_GATE=full` runs the complete
+11-stage gate (`npm run ci`) instead, and `git push --no-verify` bypasses one
+push on purpose.
 
 Install it — one command, from anywhere in the clone:
 

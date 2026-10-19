@@ -1,5 +1,10 @@
 import sharp from "sharp";
-import { assertStorageConfigured, getPublicUrl, putObject } from "@/lib/r2";
+import {
+  assertStorageConfigured,
+  getFolderForPurpose,
+  getPublicUrl,
+  putObject,
+} from "@/lib/r2";
 
 /**
  * Demo imagery for the seed script.
@@ -7,8 +12,11 @@ import { assertStorageConfigured, getPublicUrl, putObject } from "@/lib/r2";
  * The artwork is generated locally with sharp from SVG, so seeding needs no
  * third-party image service and no checked-in binaries: a given index always
  * renders the same picture. Files are written to the project's own R2 bucket
- * under a `seed/` prefix, so the URLs are as stable as real uploads and are
- * served by the same CDN.
+ * under the `seed` folder (`getFolderForPurpose("seed")`), so the URLs are as
+ * stable as real uploads and are served by the same CDN — and the hourly
+ * eviction pass lists that same folder, so seeded objects a later re-seed
+ * stops referencing are reclaimed by the same reference check that guards
+ * real uploads.
  *
  * The one exception is the sample video, which cannot be synthesised here (no
  * encoder is available). It is the Blender Foundation's Big Buck Bunny clip
@@ -17,6 +25,13 @@ import { assertStorageConfigured, getPublicUrl, putObject } from "@/lib/r2";
  */
 
 const JPEG_QUALITY = 82;
+
+/**
+ * The folder every seeded object lives under, derived from the rule
+ * `getFolderForPurpose("seed")` — the same call `evictionPrefixes()` makes,
+ * so a key built here is always a key the eviction pass lists.
+ */
+const SEED_FOLDER = getFolderForPurpose("seed");
 
 /** Brand-adjacent palettes; each artwork picks one by index. */
 const PALETTES: Array<[string, string, string]> = [
@@ -258,7 +273,7 @@ export function assertDemoMediaConfigured(): void {
 
 /** Seeds an avatar for a demo member and returns its public URL. */
 export async function ensureDemoAvatar(index: number, initials: string): Promise<string> {
-  const key = `seed/avatars/${initials.toLowerCase().replace(/[^a-z0-9]/g, "")}-${index}.png`;
+  const key = `${SEED_FOLDER}/avatars/${initials.toLowerCase().replace(/[^a-z0-9]/g, "")}-${index}.png`;
   return ensureAsset(
     key,
     async () => sharp(svgBytes(avatarSvg(index, initials))).png({ compressionLevel: 9 }).toBuffer(),
@@ -268,7 +283,7 @@ export async function ensureDemoAvatar(index: number, initials: string): Promise
 
 /** Seeds the artwork for a demo image post and returns its public URL. */
 export async function ensureDemoPostImage(index: number): Promise<string> {
-  const key = `seed/posts/artwork-${String(index).padStart(2, "0")}.jpg`;
+  const key = `${SEED_FOLDER}/posts/artwork-${String(index).padStart(2, "0")}.jpg`;
   return ensureAsset(
     key,
     async () => sharp(svgBytes(postArtworkSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
@@ -278,7 +293,7 @@ export async function ensureDemoPostImage(index: number): Promise<string> {
 
 /** Seeds the cover banner for a demo Page and returns its public URL. */
 export async function ensureDemoPageCover(index: number): Promise<string> {
-  const key = `seed/pages/cover-${String(index).padStart(2, "0")}.jpg`;
+  const key = `${SEED_FOLDER}/pages/cover-${String(index).padStart(2, "0")}.jpg`;
   return ensureAsset(
     key,
     async () => sharp(svgBytes(pageCoverSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
@@ -288,7 +303,7 @@ export async function ensureDemoPageCover(index: number): Promise<string> {
 
 /** Seeds the photo for a demo marketplace listing and returns its public URL. */
 export async function ensureDemoListingImage(index: number): Promise<string> {
-  const key = `seed/listings/listing-${String(index).padStart(2, "0")}.jpg`;
+  const key = `${SEED_FOLDER}/listings/listing-${String(index).padStart(2, "0")}.jpg`;
   return ensureAsset(
     key,
     async () => sharp(svgBytes(listingPhotoSvg(index))).jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true }).toBuffer(),
@@ -308,7 +323,7 @@ const SAMPLE_VIDEOS = [
  * fewer videos).
  */
 export async function ensureDemoVideo(clipIndex: number): Promise<string | null> {
-  const key = `seed/videos/sample-clip-${clipIndex + 1}.mp4`;
+  const key = `${SEED_FOLDER}/videos/sample-clip-${clipIndex + 1}.mp4`;
   const url = getPublicUrl(key);
   if (await assetExists(url)) return url;
 

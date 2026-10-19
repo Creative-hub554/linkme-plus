@@ -28,7 +28,7 @@ import { mainNavItems } from "@/lib/nav-items";
  * is the end-to-end shape through the real entry — that the matcher still
  * runs the middleware on the routes the nav omits, and that the real chain
  * answers a signed-out request for each with the redirect to `/login` and a
- * signed-in one with a pass. Both read through `src/middleware.ts` itself
+ * signed-in one with a pass. Both read through `src/proxy.ts` itself
  * here, with only Supabase mocked.
  *
  * Only the matcher's *positive* side is asserted: Next compiles the matcher
@@ -62,7 +62,7 @@ vi.mock("@supabase/ssr", () => ({
     (createServerClient as (...inner: unknown[]) => unknown)(...args),
 }));
 
-import { config, middleware } from "./middleware";
+import { config, proxy } from "./proxy";
 
 /** The doors the nav withholds from a visitor, and the ones it advertises. */
 const doors = mainNavItems.filter((item) => item.requiresAuth).map((item) => item.href);
@@ -98,7 +98,7 @@ describe("the doors the signed-out nav refuses to advertise", () => {
 
   it("every door the nav withholds turns a signed-out reader around to /login", async () => {
     for (const door of [...doors, `${doors[0]}/post-1`]) {
-      const response = await middleware(new NextRequest(`http://localhost${door}`));
+      const response = await proxy(new NextRequest(`http://localhost${door}`));
       expect(response.status, `${door} should bounce a visitor`).toBe(307);
       expect(response.headers.get("location"), `${door} should name the login door`).toBe(
         "http://localhost/login",
@@ -117,7 +117,7 @@ describe("the doors the signed-out nav refuses to advertise", () => {
       "no open door to check — the main nav lists nothing public",
     ).toBeGreaterThan(0);
     for (const door of openDoors) {
-      const response = await middleware(new NextRequest(`http://localhost${door}`));
+      const response = await proxy(new NextRequest(`http://localhost${door}`));
       expect(response.status, `${door} should let a visitor through`).toBe(200);
       expect(response.headers.get("location"), `${door} should not bounce a visitor`).toBeNull();
     }
@@ -126,7 +126,7 @@ describe("the doors the signed-out nav refuses to advertise", () => {
   it("a signed-in reader is not caged by the doors", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "member-1" } } });
     for (const door of doors) {
-      const response = await middleware(new NextRequest(`http://localhost${door}`));
+      const response = await proxy(new NextRequest(`http://localhost${door}`));
       expect(response.status, `${door} should pass a member`).toBe(200);
       expect(response.headers.get("location"), `${door} should not redirect a member`).toBeNull();
     }

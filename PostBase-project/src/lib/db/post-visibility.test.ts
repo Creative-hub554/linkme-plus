@@ -92,12 +92,14 @@ describe("visiblePostsCondition", () => {
       "viewer-1",
       "viewer-1",
       "viewer-1",
+      "viewer-1",
+      "viewer-1",
     ]);
   });
 
   test("binds each reader's own id rather than a shared value", () => {
-    expect(compile("reader-a").params).toEqual(["reader-a", "reader-a", "reader-a", "reader-a"]);
-    expect(compile("reader-b").params).toEqual(["reader-b", "reader-b", "reader-b", "reader-b"]);
+    expect(compile("reader-a").params).toEqual(["reader-a", "reader-a", "reader-a", "reader-a", "reader-a", "reader-a"]);
+    expect(compile("reader-b").params).toEqual(["reader-b", "reader-b", "reader-b", "reader-b", "reader-b", "reader-b"]);
   });
 
   test("asks each edge of the reader and of the post, never of one another", () => {
@@ -108,8 +110,13 @@ describe("visiblePostsCondition", () => {
     expect(sql.match(/f\.follower_id = \$/g)).toHaveLength(1);
     expect(sql.match(/pf\.user_id = \$/g)).toHaveLength(1);
     expect(sql.match(/gm\.user_id = \$/g)).toHaveLength(1);
-    // Once as the authorship check, once as the arm's correlation.
-    expect(sql.match(/"posts"\."author_id"/g)).toHaveLength(2);
+    // A post remains subject to blocks even if it is public or the reader
+    // otherwise meets its audience. The author is correlated in both block
+    // directions, so either side's block hides the author's posts.
+    expect(sql).toMatch(/not exists \([\s\S]*from "blocks"[\s\S]*"blocker_id" = \$5 and "blocks"\."blocked_id" = "posts"\."author_id"[\s\S]*"blocker_id" = "posts"\."author_id" and "blocks"\."blocked_id" = \$6/);
+    expect(sql.match(/not exists/g)).toHaveLength(1);
+    // Author clause, audience-arm correlation, and both directions of the block.
+    expect(sql.match(/"posts"\."author_id"/g)).toHaveLength(4);
     expect(sql.match(/"posts"\."page_id"/g)).toHaveLength(2);
     expect(sql.match(/"posts"\."group_id"/g)).toHaveLength(1);
   });
@@ -141,7 +148,9 @@ describe("visiblePostsCondition rendered from the rule", () => {
     // post can have — and one per group-gated audience, whose subject is not a
     // choice. So none is rendered ungated, and none pays for a lookup it cannot
     // use.
-    expect(sql.match(/exists/g)).toHaveLength(gated.length * 2 + membershipGated.length);
+    // Count audience-edge lookups only; the block rule contributes its own
+    // single `not exists`, asserted separately above.
+    expect(sql.match(/(?<!not )exists/g)).toHaveLength(gated.length * 2 + membershipGated.length);
   });
 
   test("gates the group audience on a membership rather than on a follow", () => {
@@ -153,6 +162,7 @@ describe("visiblePostsCondition rendered from the rule", () => {
     expect(sql.match(/group_members/g)).toHaveLength(1);
     expect(sql.match(/from "follows" as f/g)).toHaveLength(1);
     expect(sql.match(/from "page_follows" as pf/g)).toHaveLength(1);
+    expect(sql.match(/from "blocks"/g)).toHaveLength(1);
   });
 });
 

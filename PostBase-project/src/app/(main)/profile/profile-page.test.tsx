@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanupSurfaces, mountSurface, type MountedSurface } from "@/test/render";
+import { cleanupSurfaces, mountSurface, withSurfaceProviders, type MountedSurface } from "@/test/render";
 import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fetch";
 
 /**
@@ -33,7 +33,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: mocks.user, isLoading: false }),
+  useAuth: () => ({ user: mocks.user, isLoading: false, isAuthenticated: true }),
+}));
+
+vi.mock("@/components/auth/authenticator-security", () => ({
+  AuthenticatorSecurity: () => <div />,
 }));
 
 // The member list reads presence from the session, and the real hook talks to
@@ -61,6 +65,7 @@ const profile = {
     bio: "Visual designer",
     location: "Singapore",
     createdAt: "2020-03-01T00:00:00.000Z",
+    verified: false,
     avatarUrl: null,
     coverUrl: null,
     coverVideoUrl: null,
@@ -126,7 +131,7 @@ async function mountProfile(
 ): Promise<{ ui: MountedSurface; requests: FetchRecorder }> {
   mocks.searchParams = new URLSearchParams(search);
   const requests = stubFetch({
-    "/api/users": { user: profile.user, stats: profile.stats, isFollowing: false },
+    "/api/users": { user: profile.user, stats: profile.stats, isFollowing: false, isBlocked: false, blockedByViewer: false },
     "/api/posts": postsEndpoint(),
     "/api/posts/media": mediaEndpoint,
     "/api/messages": { conversationId: "conv-9" },
@@ -315,6 +320,40 @@ describe("the profile page", () => {
     expect(ui.container.textContent).toContain("More sections");
   });
 
+  test("edits profile basics from the profile and saves them in settings", async () => {
+    const { ui, requests } = await mountProfile();
+    await ui.waitFor(() => ui.container.textContent?.includes("My first post") ?? false, {
+      description: "the owner's profile",
+    });
+
+    await ui.click(buttonWithText(ui, "Edit Profile") as HTMLElement);
+    expect(mocks.push).toHaveBeenCalledWith("/settings");
+
+    const { default: SettingsPage } = await import("@/app/(main)/settings/page");
+    await ui.render(withSurfaceProviders(<SettingsPage />, "theme+tooltip"));
+    await ui.waitFor(() => ui.container.textContent?.includes("Profile settings") ?? false, {
+      description: "profile settings after navigation",
+    });
+    await ui.waitFor(
+      () => (ui.container.querySelector("#bio") as HTMLTextAreaElement | null)?.value === "Visual designer",
+      { description: "the loaded profile bio" },
+    );
+
+    await ui.type(ui.container.querySelector("#bio") as HTMLTextAreaElement, "Designer and community builder");
+    await ui.type(ui.container.querySelector("#location") as HTMLInputElement, "Singapore");
+    await ui.click(buttonWithText(ui, "Save basic info") as HTMLElement);
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Basic information saved.") ?? false,
+      { description: "the saved profile basics" },
+    );
+
+    const save = requests.calls.find((call) => call.pathname === "/api/users" && call.method === "PUT");
+    expect(save?.body).toEqual({
+      bio: "Designer and community builder",
+      location: "Singapore",
+    });
+  });
+
   test("opens the cover studio from the cover tab", async () => {
     const { ui } = await mountProfile({}, "tab=cover");
     await ui.waitFor(
@@ -381,14 +420,20 @@ describe("the profile page", () => {
     });
   });
 
+  test("shows a verified badge on a verified member profile", async () => {
+    const { ui } = await mountProfile({
+      "/api/users": { ...mayaProfile, user: { ...mayaProfile.user, verified: true } },
+    }, "user=user-2");
+    await ui.waitFor(() => ui.container.textContent?.includes("Maya Chen") ?? false, {
+      description: "the verified member's profile",
+    });
+    expect(ui.container.querySelector('[aria-label="Maya Chen\'s verified account badge"]')).not.toBeNull();
+  });
+
   test("opens someone else's profile from a link", async () => {
     const { ui } = await mountProfile(
       {
-        "/api/users": {
-          user: { ...profile.user, id: "user-2", displayName: "Maya Chen", username: "maya" },
-          stats: { followers: 9, following: 9 },
-          isFollowing: false,
-        },
+        "/api/users": mayaProfile,
       },
       "user=user-2",
     );
@@ -397,6 +442,95 @@ describe("the profile page", () => {
     });
     // Their own composer is not shown, but their posts tab is.
     expect(ui.container.textContent).not.toContain("What's on your mind?");
+  });
+
+  test("blocks a member after confirmation and unblocks without restoring the follow", async () => {
+    let blockWriteCount = 0;
+    const { ui, requests } = await mountProfile(
+      {
+        "/api/users": mayaProfile,
+        "/api/users/follow": (request) => ({
+          following: request.body?.following,
+          followers: request.body?.following ? 10 : 9,
+        }),
+        "/api/users/block": () => {
+          blockWriteCount += 1;
+          return { blocked: blockWriteCount === 1, followers: 9, following: 9 };
+        },
+      },
+      "user=user-2",
+    );
+    await ui.waitFor(() => ui.container.textContent?.includes("Maya Chen") ?? false, {
+      description: "the member's profile",
+    });
+    await ui.click(ui.byName("Block Maya Chen"));
+    await ui.waitFor(() => document.body.textContent?.includes("Block Maya Chen?") ?? false, {
+      description: "the block confirmation",
+    });
+    expect(requests.calls.some((call) => call.pathname === "/api/users/block" && call.method === "POST")).toBe(false);
+    await ui.click(buttonInDocument("Block Maya Chen") as HTMLElement);
+    await ui.waitFor(() => ui.container.querySelector('[aria-label="Unblock Maya Chen"]') !== null, {
+      description: "the blocked profile action",
+    });
+    expect(buttonWithText(ui, "Follow")).toBeNull();
+    expect(ui.container.querySelector('[aria-label="Followers of Maya Chen: 9. Open list"]')).not.toBeNull();
+    const blockWrite = requests.calls.find((call) => call.pathname === "/api/users/block" && call.method === "POST");
+    expect(blockWrite?.body).toEqual({ userId: "user-2" });
+
+    await ui.click(ui.byName("Unblock Maya Chen"));
+    await ui.waitFor(() => ui.container.querySelector('[aria-label="Block Maya Chen"]') !== null, {
+      description: "the unblocked profile action",
+    });
+    expect(buttonWithText(ui, "Follow")).not.toBeNull();
+    const blockRequests = requests.calls.filter((call) => call.pathname === "/api/users/block" && call.method === "POST");
+    expect(blockRequests).toHaveLength(2);
+    expect(requests.calls.some((call) => call.pathname === "/api/users/follow" && call.method === "POST")).toBe(false);
+  });
+
+  test("follows and unfollows a member from their profile, reconciling the count", async () => {
+    const { ui, requests } = await mountProfile(
+      {
+        "/api/users": mayaProfile,
+        "/api/users/follow": (request) => ({
+          following: request.body?.following,
+          followers: request.body?.following ? 10 : 9,
+        }),
+      },
+      "user=user-2",
+    );
+    await ui.waitFor(() => ui.container.textContent?.includes("Maya Chen") ?? false, {
+      description: "the member's profile",
+    });
+    await ui.waitFor(() => buttonWithText(ui, "Follow") !== null, {
+      description: "the follow action",
+    });
+    expect(ui.container.querySelector('[aria-label="Followers of Maya Chen: 9. Open list"]')).not.toBeNull();
+
+    await ui.click(buttonWithText(ui, "Follow") as HTMLElement);
+    await ui.waitFor(() => buttonWithText(ui, "Following") !== null, {
+      description: "the settled following state",
+    });
+    await ui.waitFor(
+      () => ui.container.querySelector('[aria-label="Followers of Maya Chen: 10. Open list"]') !== null,
+      { description: "the updated follower count" },
+    );
+
+    await ui.click(buttonWithText(ui, "Following") as HTMLElement);
+    await ui.waitFor(() => buttonWithText(ui, "Follow") !== null, {
+      description: "the settled unfollow state",
+    });
+    await ui.waitFor(
+      () => ui.container.querySelector('[aria-label="Followers of Maya Chen: 9. Open list"]') !== null,
+      { description: "the restored follower count" },
+    );
+
+    const writes = requests.calls.filter(
+      (call) => call.pathname === "/api/users/follow" && call.method === "POST",
+    );
+    expect(writes.map((call) => call.body)).toEqual([
+      { userId: "user-2", following: true },
+      { userId: "user-2", following: false },
+    ]);
   });
 
   test("deletes an owned post, after confirming", async () => {

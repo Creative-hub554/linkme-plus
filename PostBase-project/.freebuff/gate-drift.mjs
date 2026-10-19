@@ -285,9 +285,10 @@ export const DEFAULT_WATCHES = [
   { dir: ".freebuff", pattern: "^coverage-.*\\.mjs$" },
   // The runner, the alarm itself, the import closure the runner folds into every
   // script-backed stage's key, and the files that decide what a report says — including
-  // the two that put a comment on a pull request and the gate that reports whether it
-  // arrived, because a report nobody can read is the same failure as one never written.
-  { dir: ".freebuff", pattern: "^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure)\\.mjs$" },
+  // the two that put a comment on a pull request and the two gates that report whether
+  // what a night owed arrived and held (the comment and the settlement record), because
+  // a report nobody can read is the same failure as one never written.
+  { dir: ".freebuff", pattern: "^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure|wait-drift-gate)\\.mjs$" },
   // The stage order's lint-time snapshot: `--stages=write` writes it beside the marked lines
   // and `--stages=check` verifies its contents — but only when a check runs, and a hand edit
   // between two of them is believed silently by exactly the reader the file exists for (an

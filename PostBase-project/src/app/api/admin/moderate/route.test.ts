@@ -35,9 +35,9 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { POST } from "./route";
-import { moderationActions, reports, users } from "@/lib/db/schema";
+import { moderationActions, reports, users, posts, comments } from "@/lib/db/schema";
+import { expectGatedNone, expectGatedSequence, expectGatedUpdate } from "@/test/expect-gated";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
-import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
 const REPORT_ID = "11111111-1111-4111-8111-111111111111";
 const TARGET_ID = "22222222-2222-4222-8222-222222222222";
@@ -160,10 +160,13 @@ describe("POST /api/admin/moderate", () => {
       action: { id: "action-1", action: "removal", targetType: "post", targetId: TARGET_ID },
     });
 
-    // The action carries the report's target, the session actor, and the request's
-    // action and reason; the report is then resolved; the audit row records the
-    // same action under `moderation.`.
+    // Removal removes the content first — the same soft delete a self-delete
+    // takes, gated on a row that has not already gone. Then the action carries
+    // the report's target, the session actor, and the request's action and
+    // reason; the report is then resolved; the audit row records the same
+    // action under `moderation.`.
     expectGatedSequence("writes", [
+      { table: "posts", values: { deletedAt: expect.any(Date) } },
       {
         table: "moderation_actions",
         values: {
@@ -186,6 +189,79 @@ describe("POST /api/admin/moderate", () => {
         },
       },
     ]);
+    // The delete is the target's own row, and only while it is still here:
+    // re-removing already removed content is a no-op, not a second record.
+    expectGatedUpdate(posts, { where: '"posts"."id" = $1', params: [TARGET_ID] });
+  });
+
+  it("removes the reported comment, not a post", async () => {
+    fakeDb
+      .selectReturns(users, [{ id: "user-1", role: "admin" }])
+      .selectReturns(reports, [
+        { id: REPORT_ID, status: "pending", targetType: "comment", targetId: TARGET_ID },
+      ]);
+    fakeDb.insertReturns(moderationActions, [
+      { id: "action-1", action: "removal", targetType: "comment", targetId: TARGET_ID },
+    ]);
+
+    const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "removal", reason: "reply guy" }));
+
+    expect(response.status).toBe(201);
+    expectGatedSequence("writes", ["comments", "moderation_actions", "reports", "audit_logs"]);
+    expectGatedUpdate(comments, {
+      where: '"comments"."id" = $1',
+      params: [TARGET_ID],
+      values: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it("rolls back the removal when recording its action fails", async () => {
+    scriptAdminAndReport("pending");
+    fakeDb.failNextInsert(moderationActions, new Error("database unavailable"));
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "removal", reason: "spam" }));
+
+      expect(response.status).toBe(500);
+      // A failed decision leaves neither the content removal nor a partial
+      // decision behind. The transaction is the contract under test here.
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
+  it("removes no content a removal was chosen over an account for", async () => {
+    fakeDb
+      .selectReturns(users, [{ id: "user-1", role: "admin" }])
+      .selectReturns(reports, [
+        { id: REPORT_ID, status: "pending", targetType: "user", targetId: "32222222-2222-4222-8222-222222222222" },
+      ]);
+    fakeDb.insertReturns(moderationActions, [
+      { id: "action-1", action: "removal", targetType: "user", targetId: "32222222-2222-4222-8222-222222222222" },
+    ]);
+
+    const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "removal", reason: "misfiled" }));
+
+    expect(response.status).toBe(201);
+    // An account has no row to soft-delete — the decision is the action, its
+    // report resolution and its audit row, and only those.
+    expectGatedSequence("writes", ["moderation_actions", "reports", "audit_logs"]);
+  });
+
+  it("removes no content when a non-removal action is chosen", async () => {
+    scriptAdminAndReport("pending");
+    fakeDb.insertReturns(moderationActions, [
+      { id: "action-1", action: "warning", targetType: "post", targetId: TARGET_ID },
+    ]);
+
+    const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "warning", reason: "tone it down" }));
+
+    expect(response.status).toBe(201);
+    // A warning leaves the post standing: the posts table is never asked for.
+    expectGatedSequence("writes", ["moderation_actions", "reports", "audit_logs"]);
+    expect(fakeDb.writes.some((write) => write.table === "posts")).toBe(false);
   });
 
   it("admits a moderator, not only an admin", async () => {

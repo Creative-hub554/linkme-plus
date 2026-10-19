@@ -15,13 +15,15 @@ import { expectDocSelfHeld, expectHeld, readSource } from "./doc-freshness";
  *
  * Deliberately outside the hold, stated here so the exclusion is a decision and not
  * an omission: the third-party command shapes (`wrangler login`, `wrangler secret
- * put …`, `psql $DATABASE_URL`, and the smoke pipeline's own `docker run`/`docker
- * exec` steps and `psql` migration loop — those are `scripts/smoke-postgres.sh`'s
- * internals, which the guide quotes only as the teardown line an operator types)
- * whose truth lives in Cloudflare's CLI, Docker, or Postgres, not here; the
- * provisioning instructions (bucket/namespace creation, dashboard walks); the
- * staging config, which the guide *creates* (`cp wrangler.jsonc
- * wrangler.staging.jsonc`) and so cannot pre-assert; the cost table and the
+ * put …`, `psql $DATABASE_URL`, the staging section's `npx wrangler deploy --env
+ * staging`, and the smoke pipeline's own `docker run`/`docker exec` steps and
+ * `psql` migration loop — those are `scripts/smoke-postgres.sh`'s internals, which
+ * the guide quotes only as the teardown line an operator types) whose truth lives
+ * in Cloudflare's CLI, Docker, or Postgres, not here; the
+ * provisioning instructions (bucket/namespace creation, dashboard walks, the
+ * staging resources the guide *instructs the operator to create and record*, and
+ * a team `env.staging` block it tells them to add to `wrangler.jsonc`), which no
+ * committed file can pre-assert; the cost table and the
  * performance/security checklists, which are prose about external services; and
  * `NEXTAUTH_URL`/`CLOUDFLARE_*`/`CLOUDFLARE_STREAM_*`, which `.env.example` carries
  * but the guide does not quote.
@@ -36,13 +38,20 @@ const wrangler = readSource("wrangler.jsonc");
 const DOC_NEEDLES: Record<string, string> = {
   devScript: "npm run dev",
   buildScript: "npm run build",
-  deployStagingScript: "npm run deploy:staging",
+  deployScript: "npm run deploy",
+  // The inert `npm run deploy:staging` wrapper is gone from the checkout: the
+  // guide's staging path is now `CLOUDFLARE_ENV=staging npm run build` (this
+  // needle, whose script half "build" is held in package.json below) followed
+  // by the excluded `npx wrangler deploy --env staging`. Dropped deliberately,
+  // not forgotten: a needle a rework orphaned fails its suite, and this one
+  // was orphaned by the removal I chose to hold rather than re-create.
+  stagingBuildScript: "CLOUDFLARE_ENV=staging npm run build",
   dbPushScript: "npm run db:push",
   dbPushForce: "npm run db:push --force",
   dbSeedScript: "npm run db:seed",
   smokePostgresScript: "npm run smoke:postgres",
-  // The reviewer queue's one operational prerequisite: a grant that only the
-  // owner's machine can perform.
+  // The reviewer queue's and ledger's one operational prerequisite: a grant that
+  // only the owner's machine can perform.
   adminGrantScript: "npm run admin:grant --",
   adminGrantList: "npm run admin:grant -- --list",
   adminGrantRevoke: "npm run admin:grant -- --revoke",
@@ -72,10 +81,11 @@ describe("the deployment guide against the files it instructs about", () => {
     for (const needle of [
       '"dev":',
       '"build":',
-      '"deploy:staging":',
+      '"deploy":',
       '"db:push":',
       '"db:seed":',
       '"smoke:postgres":',
+      '"admin:grant":',
       '"clean":',
     ]) {
       expectHeld(needle, pkg, "package.json");

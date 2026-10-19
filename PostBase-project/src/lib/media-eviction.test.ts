@@ -7,6 +7,7 @@ import {
 import {
   buildReferenceQueries,
   createEvictionStorage,
+  evictionPrefixes,
   runEvictionPass,
   type EvictionPassDeps,
   type EvictionStorage,
@@ -54,7 +55,7 @@ interface HarnessOptions {
   dryRun?: boolean;
   graceHours?: number;
   publicUrlBase?: string;
-  prefix?: string;
+  prefixes?: string[];
 }
 
 /** One pass over fully-controlled fakes, with every step recorded in order. */
@@ -71,7 +72,7 @@ function harness(options: HarnessOptions = {}) {
     dryRun = false,
     graceHours = 24,
     publicUrlBase = HOT,
-    prefix = "posts/",
+    prefixes = ["posts/"],
   } = options;
 
   const events: string[] = [];
@@ -80,7 +81,9 @@ function harness(options: HarnessOptions = {}) {
     async listByPrefix(value) {
       events.push(`list:${value}`);
       if (listThrows) throw new Error("r2 unavailable");
-      return objects;
+      // Real R2 scopes a listing to its prefix, so the fake must too — or a
+      // multi-prefix pass would see every object once per folder.
+      return objects.filter((object) => object.key.startsWith(value));
     },
     async delete(key) {
       events.push(`delete:${key}`);
@@ -105,7 +108,7 @@ function harness(options: HarnessOptions = {}) {
 
   const config = {
     publicUrlBase,
-    prefix,
+    prefixes,
     graceHours,
     batchLimit,
     dryRun,
@@ -276,10 +279,12 @@ describe("runEvictionPass", () => {
     ]);
   });
 
-  it("only lists objects under the configured prefix", async () => {
-    const { deps, events } = harness({ prefix: "posts/" });
+  it("only lists the configured prefixes, in order", async () => {
+    const { deps, events } = harness({ prefixes: ["custom/one/", "custom/two/"] });
     await runEvictionPass(deps);
-    expect(events[0]).toBe("list:posts/");
+    // Nothing beyond the configuration — no whole-bucket sweep hiding
+    // behind the list, and no folder asked for twice.
+    expect(events).toEqual(["list:custom/one/", "list:custom/two/"]);
   });
 
   it("dry run reports the plan and touches nothing", async () => {
@@ -372,12 +377,112 @@ describe("runEvictionPass", () => {
   });
 
   it("passes the configured prefix through to the listing", async () => {
-    const { deps, events } = harness({ prefix: "posts/", objects: [] });
+    const { deps, events } = harness({ prefixes: ["posts/"], objects: [] });
     await runEvictionPass(deps);
     // Nothing aged past the grace window (there is nothing at all), so the
     // pass short-circuits before any database call — the listing is the only
     // event, and it carries the configured prefix.
     expect(events).toEqual(["list:posts/"]);
+  });
+
+  it("lists every folder the pass covers, not just the first", async () => {
+    const { deps, events } = harness({ prefixes: evictionPrefixes(), objects: [] });
+    await runEvictionPass(deps);
+    expect(events).toEqual(["list:posts/", "list:seed/"]);
+  });
+
+  it("ages, skips and batches candidates across every folder together", async () => {
+    const { deps, events } = harness({
+      prefixes: evictionPrefixes(),
+      objects: [
+        storedObject("posts/member-1/older.png", 40 * ONE_HOUR),
+        storedObject("posts/member-1/middle.png", 30 * ONE_HOUR),
+        storedObject("seed/posts/artwork-99.jpg", 50 * ONE_HOUR),
+        storedObject("seed/avatars/stale-9.png", 26 * ONE_HOUR),
+        storedObject("seed/listings/listing-99.jpg", ONE_HOUR),
+      ],
+      archivedKeys: ["posts/member-1/middle.png"],
+      batchLimit: 2,
+    });
+    const report = await runEvictionPass(deps);
+
+    // One candidate pool across folders: the young seed object and the
+    // archive-owned post object are excluded before the limit is spent, then
+    // the two oldest — a 50-hour seed orphan ahead of a 40-hour post one —
+    // are checked and evicted whichever folder listed first, while the
+    // 26-hour seed orphan waits for the next hour's batch instead of
+    // getting a limit of its own.
+    expect(report).toMatchObject({
+      listed: 5,
+      young: 1,
+      archivedOwned: 1,
+      checked: 2,
+      referenced: 0,
+      evicted: 2,
+      failed: [],
+    });
+    expect(events).toEqual([
+      "list:posts/",
+      "list:seed/",
+      "archived:4",
+      "referenced:2",
+      "delete:seed/posts/artwork-99.jpg",
+      "delete:posts/member-1/older.png",
+    ]);
+  });
+
+  it("deletes nothing when a later folder's listing fails, even after an earlier one succeeded", async () => {
+    const events: string[] = [];
+    const deps: EvictionPassDeps = {
+      storage: {
+        async listByPrefix(prefix) {
+          events.push(`list:${prefix}`);
+          if (prefix === "seed/") throw new Error("r2 unavailable");
+          return [storedObject(ORPHAN, 25 * ONE_HOUR)];
+        },
+        async delete(key) {
+          events.push(`delete:${key}`);
+        },
+      },
+      store: {
+        async findArchived() {
+          events.push("archived");
+          return [];
+        },
+        async findReferencedUrls() {
+          events.push("referenced");
+          return [];
+        },
+      },
+      config: {
+        publicUrlBase: HOT,
+        prefixes: evictionPrefixes(),
+        graceHours: 24,
+        batchLimit: 10,
+        dryRun: false,
+        now: NOW,
+      },
+    };
+
+    const report = await runEvictionPass(deps);
+
+    // The posts/ listing succeeded and found a perfectly good orphan — but a
+    // partial view of the bucket is not a view of the bucket, so the whole
+    // hour's pass stands down before any lookup runs.
+    expect(report).toMatchObject({ listed: 0, evicted: 0 });
+    expect(report.failed).toEqual([{ key: "(list)", error: "r2 unavailable" }]);
+    expect(events).toEqual(["list:posts/", "list:seed/"]);
+  });
+});
+
+describe("evictionPrefixes", () => {
+  it("covers the post uploads folder and the demo seeder's folder", () => {
+    // The seam the extended pass rests on: these are the folders the writers
+    // write to — `posts/` for the upload routes, `seed/` for the demo seeder,
+    // the one putObject caller outside a route. A new writer of either kind
+    // joins the pass by joining this list, so this expectation is meant to
+    // fail loudly when that has been forgotten.
+    expect(evictionPrefixes()).toEqual(["posts/", "seed/"]);
   });
 });
 

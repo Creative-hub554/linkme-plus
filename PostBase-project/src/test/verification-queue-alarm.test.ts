@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MAX_AGE_HOURS,
@@ -5,6 +6,10 @@ import {
   overdueApplications,
   type PendingApplication,
 } from "@/lib/verification-queue";
+// The verdict sidecar's one spelling — the path (with its env seam) and the shape live
+// in the module the runner and the nightly renderer read, so writer and readers cannot
+// drift.
+import { queueAlarmPath } from "../../.freebuff/queue-alarm-verdict.mjs";
 
 /**
  * The verification queue's nightly alarm.
@@ -132,11 +137,41 @@ function hoursLimit(): number {
         .where(eq(verificationRequests.status, "pending"));
 
       const now = new Date();
-      const overdue = overdueApplications(pending, now, hoursLimit());
+      const maxAgeHours = hoursLimit();
+      const overdue = overdueApplications(pending, now, maxAgeHours);
+      // This run's judgment, published as data before the assertion can red:
+      // the sidecar is what the nightly report's section is built from, so a
+      // failed gate publishes the handles (wait, oldest first) rather than
+      // leaving the run page to a summary that only names the stage. `pending`
+      // is the read the field exists for: the queue's *settled size* — every
+      // application the suite judged, inside the window as well as past it —
+      // so the runbook's dated bullet accrues the queue as history rather than
+      // only its reds. A green armed run writes the same shape with none
+      // overdue; an unarmed run never writes the file — the difference between
+      // an alarm on duty and one parked. The path is the module's one
+      // spelling, through the env seam it honors, so a runner the suite spawns
+      // can redirect and the real sidecar belongs to the real alarm.
+      writeFileSync(
+        queueAlarmPath(process.cwd()),
+        JSON.stringify(
+          {
+            maxAgeHours,
+            judgedAt: now.toISOString(),
+            pending: pending.length,
+            overdue: overdue.map((waited) => ({
+              id: waited.id,
+              username: waited.username,
+              waitHours: Math.floor((now.getTime() - waited.createdAt.getTime()) / HOURS),
+            })),
+          },
+          null,
+          2,
+        ) + "\n",
+      );
       // The gate's red is this expectation's failure message: the sentence the
       // paging reader acts on — who is owed, how long, and where to act —
       // rendered from the same moment the rows were judged against.
-      expect(overdue, alarmMessage(overdue, hoursLimit(), now)).toEqual([]);
+      expect(overdue, alarmMessage(overdue, maxAgeHours, now)).toEqual([]);
     } finally {
       // The house convention for every live read: end the pool before the
       // process can be left holding one.

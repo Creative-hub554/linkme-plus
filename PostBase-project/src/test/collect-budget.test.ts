@@ -52,15 +52,22 @@ import baselineSource from "../../.freebuff/collect-budget-baselines.mjs?raw";
 // run leaves behind is turned into an annotation rather than dropped.
 import { SOFT_GATE_FILE, softGateDetails } from "../../.freebuff/collect-budget-soft.mjs";
 // The apply contract: the payload a proposal carries, the tighten-only merge that
-// turns it into the baselines file, and the command and markers the workflow and
-// this suite both name. The shared renderer is imported under a distinct name so
-// a test can prove it still agrees byte for byte with the reporter's own.
+// turns it into the baselines file, and the command, markers and outcome vocabulary the
+// workflow and this suite both name. The shared renderer is imported under a distinct
+// name so a test can prove it still agrees byte for byte with the reporter's own.
 import {
   APPLY_COMMAND,
   APPLY_REPLY_MARKER,
+  APPLY_STATUSES,
+  APPLY_STATUS_OPEN,
   PROPOSAL_MARKER,
+  applyAdopted,
+  applyOutcomeIn,
   applyProposal,
   parseProposalState,
+  proposalAnswer,
+  proposalAnsweredAt,
+  proposalPostedAt,
   renderBaselines as renderBaselinesShared,
   renderProposalState,
 } from "../../.freebuff/collect-apply.mjs";
@@ -963,6 +970,162 @@ describe("applyProposal", () => {
   });
 });
 
+/**
+ * Which comment on a pull request is the proposal and which is the reply that answered it.
+ *
+ * The markers are this module's, and so is the reading that turns them into days: the nightly job's
+ * settlement step hands `gh pr list --json number,closedAt,comments` over and cannot see the comments
+ * itself, so "the job proposed on the Tuesday" and "somebody answered on the Thursday" are decided
+ * here. Three decisions are pinned below rather than left to a caller: the **oldest** marked comment
+ * is the proposal (the poster updates the earliest id its marker finds, and posts a second comment
+ * only when that lookup failed, so a duplicate must not move the age), the **earliest** reply is the
+ * answer (a second approval updates the reply already there rather than stacking one), and a comment
+ * nobody can read — no body, no `createdAt`, an entry that is not one — is skipped rather than
+ * guessed at, because the caller is deciding whether a request was answered.
+ */
+describe("the proposal and the reply, found in a pull request's comments", () => {
+  const comment = (createdAt: string, body: string) => ({ createdAt, body });
+  const proposal = (createdAt: string) => comment(createdAt, `${PROPOSAL_MARKER}\n\nbody`);
+  // A reply as the apply job posts one: its marker, the outcome it declares where it declared one (the
+  // step's own status, in the hidden comment the settlement reader looks for), then its sentences.
+  const reply = (createdAt: string, status: string | null = null) =>
+    comment(
+      createdAt,
+      `${APPLY_REPLY_MARKER}\n\n` +
+        (status === null ? "" : `${APPLY_STATUS_OPEN}${status} -->\n\n`) +
+        "body",
+    );
+  const pull = (...comments: { createdAt: string; body: string }[]) => ({
+    number: 7,
+    closedAt: null,
+    comments,
+  });
+
+  it("dates the proposal from the oldest comment carrying the proposal marker", () => {
+    expect(proposalPostedAt(pull(proposal("2026-10-05T02:20:00Z")))).toBe("2026-10-05T02:20:00Z");
+    // The other comments on the request are not the proposal, whatever they say — and a duplicate the
+    // poster left when its marker lookup failed does not move the age: the question was first asked
+    // when the oldest of them appeared.
+    expect(
+      proposalPostedAt(
+        pull(
+          comment("2026-10-01T02:20:00Z", "a person's own words"),
+          proposal("2026-10-05T02:20:00Z"),
+          comment("2026-10-06T02:20:00Z", "the payload alone: <!-- collect-budget-proposal-state {} -->"),
+          proposal("2026-10-11T02:20:00Z"),
+        ),
+      ),
+    ).toBe("2026-10-05T02:20:00Z");
+  });
+
+  it("dates the answer from the earliest reply, and answers null while there is none", () => {
+    expect(proposalAnsweredAt(pull(proposal("2026-10-05T02:20:00Z")))).toBeNull();
+    expect(proposalAnsweredAt(pull(proposal("2026-10-05T02:20:00Z"), reply("2026-10-07T09:00:00Z")))).toBe(
+      "2026-10-07T09:00:00Z",
+    );
+    // A second approval of the same proposal is a second reading of one answer rather than a later
+    // one, and the two markers are never each other: a reply is not a proposal, and a proposal that
+    // happens to quote the reply's words is still the day the job asked.
+    expect(
+      proposalAnsweredAt(
+        pull(reply("2026-10-09T09:00:00Z"), reply("2026-10-07T09:00:00Z")),
+      ),
+    ).toBe("2026-10-07T09:00:00Z");
+    expect(
+      proposalPostedAt(
+        pull(comment("2026-10-05T02:20:00Z", `quoted: ${APPLY_REPLY_MARKER}`)),
+      ),
+    ).toBeNull();
+  });
+
+  it("answers null for a request with no readable comments, and skips what it cannot read", () => {
+    // Null is one state — no marked comment at all — whether the list was empty, the request had
+    // nothing on it, the field is not there, the entry is not a request, or the only marked comment
+    // is one whose day cannot be read. The caller counts a settlement from the pair, so a comment it
+    // could not read must not date anything.
+    expect(proposalPostedAt(pull())).toBeNull();
+    expect(proposalPostedAt(pull(reply("2026-10-07T09:00:00Z")))).toBeNull();
+    // The probes below are cast the way this file's other out-of-contract cases are, because both
+    // finders are promised a pull request and the point is what they do with what is not one.
+    const asPull = (value: unknown) => value as Parameters<typeof proposalPostedAt>[0];
+    expect(proposalPostedAt({ number: 7, closedAt: null })).toBeNull();
+    expect(proposalPostedAt({ number: 7, comments: "none" })).toBeNull();
+    expect(proposalPostedAt(asPull(null))).toBeNull();
+    expect(proposalAnsweredAt(asPull(undefined))).toBeNull();
+    // A marked comment with no body is not one, a body-less or dateless entry beside a readable one
+    // changes nothing, and the readable pair still dates both ends.
+    const unreadable = {
+      number: 7,
+      closedAt: null,
+      comments: [
+        { createdAt: "2026-10-05T02:20:00Z" },
+        { body: `${PROPOSAL_MARKER}` },
+        null,
+        "not a comment",
+        proposal("2026-10-05T02:20:00Z"),
+        reply("2026-10-07T09:00:00Z"),
+      ],
+    };
+    expect(proposalPostedAt(unreadable)).toBe("2026-10-05T02:20:00Z");
+    expect(proposalAnsweredAt(unreadable)).toBe("2026-10-07T09:00:00Z");
+  });
+
+  it("reads the outcome off the reply that dates the answer, and declares nothing it cannot read", () => {
+    // The day and the word come off the *same* comment, which is why this is one answer rather than two
+    // calls: a settlement dated by one reply and described by another would be a record of neither.
+    expect(proposalAnswer(pull(proposal("2026-10-05T02:20:00Z"), reply("2026-10-07T09:00:00Z", "refused")))).toEqual({
+      at: "2026-10-07T09:00:00Z",
+      status: "refused",
+    });
+    // The earliest reply is the answer here too, so a later reply's status cannot come to describe an
+    // earlier reply's day — the same rule that makes the oldest proposal the day the job asked.
+    expect(
+      proposalAnswer(
+        pull(
+          proposal("2026-10-05T02:20:00Z"),
+          reply("2026-10-09T09:00:00Z", "applied"),
+          reply("2026-10-07T09:00:00Z", "refused"),
+        ),
+      ),
+    ).toEqual({ at: "2026-10-07T09:00:00Z", status: "refused" });
+    // A reply that declares nothing is the answer it always was: `null`, not a word invented for it. The
+    // caller writes the record's word for that case, so this module never asserts an outcome.
+    expect(proposalAnswer(pull(proposal("2026-10-05T02:20:00Z"), reply("2026-10-07T09:00:00Z")))).toEqual({
+      at: "2026-10-07T09:00:00Z",
+      status: null,
+    });
+    // No reply at all is not an answer, and neither is an entry nobody can read — the finders' own rule.
+    expect(proposalAnswer(pull(proposal("2026-10-05T02:20:00Z")))).toBeNull();
+    const asPull = (value: unknown) => value as Parameters<typeof proposalAnswer>[0];
+    expect(proposalAnswer(asPull(undefined))).toBeNull();
+    expect(proposalAnswer(asPull({ number: 7, closedAt: null, comments: "none" }))).toBeNull();
+  });
+
+  it("states only the outcomes the runbook can read back, and calls an adoption an adoption", () => {
+    expect(applyOutcomeIn(`${APPLY_STATUS_OPEN}refused -->`)).toBe("refused");
+    expect(applyOutcomeIn(`${APPLY_REPLY_MARKER}\n\n${APPLY_STATUS_OPEN}drift -->\n\nbody`)).toBe("drift");
+    // A declaration this vocabulary does not hold — including an empty one, which is a declaration the
+    // job got wrong rather than the absence of one — reads as `unknown`: a word nothing can interpret is
+    // closer to "the reply did not say" than to any status, and mapping it to a status this module knows
+    // would be inventing the outcome. No marker at all is the other case, and is not a declaration.
+    expect(applyOutcomeIn(`${APPLY_STATUS_OPEN}rejected -->`)).toBe("unknown");
+    expect(applyOutcomeIn(`${APPLY_STATUS_OPEN} -->`)).toBe("unknown");
+    expect(applyOutcomeIn(`${APPLY_STATUS_OPEN}unknown -->`)).toBe("unknown");
+    expect(applyOutcomeIn("a reply with no declaration in it")).toBeNull();
+    expect(applyOutcomeIn(`${APPLY_REPLY_MARKER}\n\nbody`)).toBeNull();
+    expect(applyOutcomeIn(undefined)).toBeNull();
+    expect(applyOutcomeIn(7)).toBeNull();
+    // The one judgement a reader of these records cannot make by comparing strings: `applied` and
+    // `unchanged` are the two that adopted the proposal — the second because the recorded baselines
+    // already sat at or below what was asked for — and every other word left the gates alone. Stated
+    // over the vocabulary rather than over a hand-listed pair, so a word added there is decided here.
+    expect(APPLY_STATUSES.filter(applyAdopted)).toEqual(["applied", "unchanged"]);
+    expect(applyAdopted("refused")).toBe(false);
+    expect(applyAdopted("answered")).toBe(false);
+    expect(applyAdopted(undefined)).toBe(false);
+  });
+});
+
 describe("the apply contract", () => {
   it("keeps the workflow's command and reply marker in step with the constants", () => {
     expect(applyWorkflowSource).toContain(APPLY_COMMAND);
@@ -1044,6 +1207,46 @@ describe("the apply contract", () => {
     expect(applyWorkflowSource).not.toContain("gh api -X");
     // One implementation, called once: the reply is posted, and posted in one place.
     expect(applyWorkflowSource.split("node .freebuff/pr-comment.mjs").length - 1).toBe(1);
+  });
+
+  it("declares the outcome it acted on in the reply, from the vocabulary the runbook reads back", () => {
+    // What the reply did with the proposal, in the hidden comment the nightly job's settlement step
+    // reads (`APPLY_STATUS_OPEN`): this is what makes a refused proposal a `refused` record in the
+    // runbook rather than an `answered` one, so the shape is pinned — the step composes the reply in
+    // shell, where nothing else could notice the declaration going missing or moving.
+    expect(applyWorkflowSource).toContain(`${APPLY_STATUS_OPEN}%s -->`);
+    // …and it is *used*: a step that computed an outcome and posted its sentences alone would pass
+    // every pin above and declare nothing.
+    expect(applyWorkflowSource).toContain('"$marker" "$outcome" "$summary"');
+    // The seven statuses the applier can hand over are declared verbatim rather than mapped — what a
+    // reviewer reads and what the runbook states come from one value — and the two words the workflow
+    // adds are for what the applier never got to name: a fork there is no branch to stack on, and an
+    // approval that could not be applied at all.
+    expect(applyWorkflowSource).toContain('outcome="$STATUS"');
+    for (const word of ["fork", "unknown"]) {
+      expect(applyWorkflowSource).toContain(`outcome='${word}'`);
+      expect(APPLY_STATUSES).toContain(word);
+    }
+    // Every word the step can declare is one the vocabulary holds, or the reply would declare something
+    // the settlement reader could only record as `unknown` — which is the vocabulary's word for exactly
+    // that, and not what a status added to one side of this pair should become. Both directions are
+    // stated over the sources rather than over a hand-listed set: the applier's `status = …` literals,
+    // and the arms of the step's own case.
+    const fromLauncher = [...applyScriptSource.matchAll(/status = [^\n;]*/g)].flatMap((line) =>
+      [...line[0].matchAll(/"([a-z-]+)"/g)].map((match) => match[1]),
+    );
+    expect(fromLauncher.length).toBeGreaterThan(0);
+    expect(fromLauncher.filter((word) => !APPLY_STATUSES.includes(word))).toEqual([]);
+    const caseStart = applyWorkflowSource.indexOf('case "$STATUS" in');
+    const caseEnd = applyWorkflowSource.indexOf("esac", caseStart);
+    expect(caseStart).toBeGreaterThan(-1);
+    expect(caseEnd).toBeGreaterThan(caseStart);
+    const arms = applyWorkflowSource
+      .slice(caseStart, caseEnd)
+      .split("\n")
+      .map((line) => /^\s+([a-z-]+)\)\s*$/.exec(line)?.[1])
+      .filter((arm): arm is string => arm !== undefined);
+    expect(arms).toEqual(APPLY_STATUSES.filter((word) => !["fork", "unknown"].includes(word)));
   });
 
   it("stages the gate manifest in the same commit as the baselines", () => {
@@ -1360,21 +1563,24 @@ describe("the apply contract", () => {
   });
 });
 /**
- * The `id:` and the `--label` of every step in a workflow whose script calls the poster.
+ * The `name:`, `id:`, `--label` and `--producer` of every step in a workflow whose script calls
+ * the poster.
  *
  * A step block is what follows a `      - ` at the steps' own indentation, which is the one
  * fact about the file's layout this relies on — and the workflows are pinned by content, so a
  * reformat that moved these would be an edit somebody made on purpose, failing here rather
  * than quietly letting a step out of the check.
  */
-function posterSteps(source: string): { id: string; label: string }[] {
+function posterSteps(source: string): { name: string; id: string; label: string; producer: string }[] {
   return source
     .split(/\n      - /)
     .slice(1)
     .filter((block) => block.includes("node .freebuff/pr-comment.mjs"))
     .map((block) => ({
+      name: /^name: (.+)$/m.exec(block)?.[1] ?? "",
       id: /(?:^|\n)        id: (\S+)/.exec(block)?.[1] ?? "",
       label: /--label '([^']+)'/.exec(block)?.[1] ?? "",
+      producer: /--producer '([^']+)'/.exec(block)?.[1] ?? "",
     }));
 }
 
@@ -1400,40 +1606,128 @@ function gateSteps(source: string): string[] {
     .filter((block) => block.includes("node .freebuff/comment-gate.mjs"));
 }
 
+/**
+ * The jobs in a workflow, name and body.
+ *
+ * Read from `jobs:` so the two-space keys under `on:` never become jobs, and split on the
+ * job-level `  <name>:` boundary — the one fact about the file's layout this relies on, the
+ * same one `posterSteps` relies on for steps. A job's block is the block its own cases read:
+ * `posterSteps` and `gateSteps` both take any source string, so each job's posters and gate
+ * are derived from that job's text rather than from the file as a whole.
+ */
+function jobBlocks(source: string): { name: string; text: string }[] {
+  const jobsStart = source.indexOf("\njobs:");
+  const jobsSource = jobsStart === -1 ? source : source.slice(jobsStart);
+  return jobsSource
+    .split(/\n  (?=[A-Za-z0-9_-]+:\r?\n)/)
+    .slice(1)
+    .map((part) => ({
+      name: /^([A-Za-z0-9_-]+):\r?\n/.exec(part)?.[1] ?? "",
+      text: `\n  ${part}`,
+    }));
+}
+
 describe("the job-level gate on the comment steps", () => {
-  const steps = posterSteps(ciWorkflowSource);
+  it("judges every step in each job that posts a comment, counted from the file", () => {
+    // The rule the night holds in `coverage-low-water.test.ts`, over this file's two jobs.
+    // `ci.yml` posts from the `test` job (two steps) and the `collect-propose` job (one),
+    // each with its own verdict step — and `steps.<id>.outcome` only sees the *same* job, so a
+    // file-wide count is the wrong shape here: a gate naming another job's step would satisfy a
+    // file-wide check while judging nothing, and a poster moved across jobs would take its entry
+    // with it while leaving both verdicts green. Each job's gate is therefore held to that job's
+    // own posters, derived from that job's text rather than compared to a hand-written list.
+    // Both copies are read, because both are run: the project's is the canonical the suite reads
+    // and the repository root's is the one GitHub actually reads, so a producer drifted in
+    // *either* alone is a run page blaming a log that never posted on one of the two runs.
+    // The two proposal steps share a name (`Comment the proposal on the pull request`) in
+    // different jobs with different labels — which is why every lookup below stays inside the
+    // job's own text instead of searching the file by step name.
+    const mirrorPath = path.join(projectRoot, "..", ".github", "workflows", "ci.yml");
+    const sources: [string, string][] = existsSync(mirrorPath)
+      ? [
+          ["the workflow's own copy", ciWorkflowSource],
+          ["the mirror GitHub actually runs", readFileSync(mirrorPath, "utf8")],
+        ]
+      : [["the workflow's own copy", ciWorkflowSource]];
 
-  it("gives every step that posts a comment an id to be judged by", () => {
-    // `continue-on-error: true` is what keeps a comment failure from taking the drift and
-    // mutation checks with it, and the price is that the job stayed green: the verdict has to
-    // be read from outside the step, as `steps.<id>.outcome`. A step added without an `id`
-    // would be silently outside the gate, and gets named here instead. The exit status being
-    // read is the poster's own — pinned non-zero for a skip in `src/test/pr-comment.test.ts`,
-    // where the note and the status are asserted together.
-    expect(steps.map((step) => step.id)).toEqual([
-      "comment-summary",
-      "comment-coverage",
-      "comment-proposal",
-    ]);
-    expect(steps.map((step) => step.label)).toEqual([
-      "Collect-budget summary comment",
-      "Coverage-proposal comment",
-      "Collect-budget proposal comment",
-    ]);
-  });
+    const entryFor = (step: { label: string; id: string }) =>
+      `"${step.label}=\${{ steps.${step.id}.outcome }}"`;
 
-  it("names each of them in a gate, under the label its own step used", () => {
-    // The tie that makes the two notes one story: the poster heads its run-page note with this
-    // label and the gate's line about it carries the same one, so a reader following either
-    // lands on the same step. A gate that invented a second name would send them looking for a
-    // comment nobody can find.
-    expect(gateSteps(ciWorkflowSource)).toHaveLength(2);
-    for (const step of steps) {
-      expect(ciWorkflowSource).toContain(`"${step.label}=\${{ steps.${step.id}.outcome }}"`);
+    for (const [which, source] of sources) {
+      const jobs = jobBlocks(source);
+      const jobsWithPosters = jobs.filter((job) =>
+        job.text.includes("node .freebuff/pr-comment.mjs"),
+      );
+      // The two jobs that post, and no third: a poster added to `lint`, `exposure` or `build`
+      // is a comment no gate below judges, and gets named here instead of passing silently.
+      expect(
+        jobsWithPosters.map((job) => job.name).sort(),
+        `${which} posts comments from other jobs`,
+      ).toEqual(["collect-propose", "test"]);
+
+      for (const job of jobsWithPosters) {
+        const derived = posterSteps(job.text);
+        // The file's own list per job, rather than a second copy of what the gate says — the
+        // gate is read *through* these, not compared to a hand-kept list. `test` carries two
+        // posters and `collect-propose` one, which is the three the artifact cases assume.
+        expect(
+          derived.map((step) => step.id),
+          `${which} job ${job.name} posts from other steps`,
+        ).toEqual(job.name === "test" ? ["comment-summary", "comment-coverage"] : ["comment-proposal"]);
+        expect(
+          derived.map((step) => step.label),
+          `${which} job ${job.name} posts under other labels`,
+        ).toEqual(
+          job.name === "test"
+            ? ["Collect-budget summary comment", "Coverage-proposal comment"]
+            : ["Collect-budget proposal comment"],
+        );
+
+        const gates = gateSteps(job.text);
+        expect(gates, `${which} job ${job.name} has no verdict step`).toHaveLength(1);
+        const gate = gates[0];
+
+        for (const step of derived) {
+          // The three things a step has to carry to be judged at all: a name to be found by, an
+          // `id:` the gate can read an outcome out of — `steps.<id>.outcome` for a step no file
+          // declares is empty, so a rename that took the id and left the gate naming it is a
+          // comment nothing judges — and the `--label` the poster reports under, which is the name
+          // the gate's own line about the loss carries.
+          expect(step.name, "a poster step with no name cannot be found").not.toBe("");
+          expect(step.id, `${step.name} posts a comment and declares no id`).not.toBe("");
+          expect(step.label, `${step.name} posts a comment and states no label`).not.toBe("");
+          // …and it names *itself* as the producer: every note the poster writes says "The
+          // '<producer>' step …" — the step that ran `gh`, the log to check — so a producer naming
+          // the step that rendered the body would blame a log that never posted. Read out of the
+          // step rather than restated, so a rename of either half fails here.
+          expect(step.producer, `${step.name} states no producer`).not.toBe("");
+          expect(step.producer, `${step.name} names another step as its producer`).toBe(step.name);
+          expect(gate, `${which} job ${job.name} never judges ${step.id}`).toContain(entryFor(step));
+          // …and judged *after* it ran, inside the same job: the gate reads a step's outcome, and a
+          // poster below it would be a verdict about a step that had not run yet.
+          expect(job.text.indexOf(gate)).toBeGreaterThan(job.text.indexOf(step.id));
+        }
+        // …and counted rather than listed, which is the direction a list of expected pairs cannot
+        // see: an entry left behind by a step that stopped posting comments is an extra entry, and
+        // nothing in the loop above reads the gate for entries it was not handed. The count holds
+        // the gate to that job's own posters in both directions — one missing and one extra.
+        expect(gate.split("=${{ steps.").length - 1, `${which} job ${job.name} has a pair too many`).toBe(
+          derived.length,
+        );
+      }
+
+      // Jobs that post nothing judge nothing: a gate in `lint`, `exposure` or `build` would judge
+      // steps it cannot see, and always read empty.
+      for (const job of jobs.filter((candidate) => !candidate.text.includes("node .freebuff/pr-comment.mjs"))) {
+        expect(job.text, `${which} job ${job.name} judges a comment it never posts`).not.toContain(
+          "node .freebuff/comment-gate.mjs",
+        );
+      }
+      // …and the file carries exactly the two verdict steps, one per posting job: a second verdict
+      // in either job would judge the same steps twice and disagree with itself on the night one
+      // of them was skipped.
+      expect(gateSteps(source), `${which} carries other verdict steps`).toHaveLength(2);
     }
-    // Counted rather than listed, so a fourth comment step added without a gate cannot pass by
-    // being outside a list some test keeps by hand.
-    expect(ciWorkflowSource.split("=${{ steps.").length - 1).toBe(steps.length);
   });
 
   it("fails the job rather than the step, and runs after the step it judges", () => {
@@ -1446,7 +1740,7 @@ describe("the job-level gate on the comment steps", () => {
       expect(gate).not.toContain("continue-on-error");
       expect(gate).toContain("name: Fail when a comment this run owed was not posted");
     }
-    for (const step of steps) {
+    for (const step of posterSteps(ciWorkflowSource)) {
       expect(ciWorkflowSource.indexOf(`--label '${step.label}'`)).toBeLessThan(
         ciWorkflowSource.indexOf(`"${step.label}=`),
       );
@@ -1466,6 +1760,14 @@ describe("the job-level gate on the comment steps", () => {
       .find((block) => block.includes("node .freebuff/pr-comment.mjs"));
     expect(reply).toBeDefined();
     expect(reply).not.toContain("continue-on-error");
+    // The reply names its own step too: it is the last thing the job does, so its notes are the
+    // verdict, and a producer naming another step would blame a log that never posted.
+    const text = reply ?? "";
+    const name = /^name: (.+)$/m.exec(text)?.[1] ?? "";
+    expect(name).not.toBe("");
+    expect(/--producer '([^']+)'/.exec(text)?.[1] ?? "", `${name} names another step as its producer`).toBe(
+      name,
+    );
   });
 });
 

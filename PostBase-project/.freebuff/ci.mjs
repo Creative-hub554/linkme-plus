@@ -282,7 +282,7 @@
  *   `--diff-base=<ref>`                       → diff against this ref (default `HEAD`)
  *   `--no-cache`                              → ignore (and do not write) the result cache
  *   `--cache-ttl=<duration>`                  → trust a recorded pass for this long (default `7d`, `0` for no cap)
- *   `--no-record`                             → leave the runbook's dated bullet unwritten (default: the close appends one, marking failures `failed`)
+ *   `--no-record`                             → leave the runbook's dated bullet unwritten (default: the close appends one — verdict, marks, every coverage reading it carried — marking failures `failed`)
  *
  * Forwarded to the stage that owns them, unchanged:
  *   `--port <n>`, `--timeout <ms>`            → preflight
@@ -347,10 +347,17 @@ import { SOFT_GATE_FILE, softGateDetails } from "./collect-budget-soft.mjs";
 // the repeated collect session's `npm run collect:stale` is what gates on them. The
 // same file carries the measurement the collect-budget run summary publishes.
 import { RUN_REPORT_FILE, parseRunReport, staleGateDetails } from "./collect-run.mjs";
+// The armed alarm's verdict — its file name and its one shape live in the module the
+// writer (the alarm test) and the renderer read, so the three cannot drift apart.
+import { parseQueueAlarmVerdict, queueAlarmPath } from "./queue-alarm-verdict.mjs";
 // The lock the tree-editing checks hold while they rewrite a file, and the recovery
 // that puts it back. This run heals the tree before its stages measure it, and one of
 // those checks may not be among the stages at all.
 import { LOCK_PATH, recoverInterruptedRun } from "./mutation-lock.mjs";
+// The coverage readings the suite publishes: one entry per guard — its sidecar, its env seam,
+// the prefix that makes a line its own — which the runner reads generically and the summary
+// renders generically, so a new reading is a declaration there rather than machinery here.
+import { READINGS, carriedReading, reading, readingPath } from "./coverage-readings.mjs";
 // The import closure of a gate script: the `.mjs` modules a stage's script loads,
 // read out of the sources. Folded into each script-backed stage's key files below,
 // so a helper a gate picks up re-keys that stage without anybody restating it in a
@@ -444,37 +451,41 @@ const RECORD_RUNBOOK_FILE = process.env.CI_RECORD_RUNBOOK_FILE
   : join(ROOT, ".freebuff", "run.md");
 
 /**
- * Where the rendered-links guard leaves its coverage stamp: one line, written
- * by the suite's own close-out while the test stage runs, cleared with the
- * stage's other artifacts at each attempt, and read at the close — folded into
- * the runbook bullet, carried in the `--json` payload as `coverageStamp`, and
- * rendered on the nightly summary. The env override is the same seam
- * `CI_RECORD_RUNBOOK_FILE` is — the tests' way to point a run at scratch rather
- * than at the tree's real stamp — and the default is a dot-file beside the
+ * Where each coverage reading's sidecar lives, keyed by reading id.
+ *
+ * The registry in `.freebuff/coverage-readings.mjs` declares each reading's file and env seam,
+ * so the runner has nothing per-reading left to state: a third guard's reading is an entry in
+ * that module and the paths below pick it up. The seam is the same one `CI_RECORD_RUNBOOK_FILE`
+ * is — the tests' way to point a run at scratch rather than at the tree's real sidecar, with a
+ * relative value resolved against the root — and the default is a dot-file beside the
  * reporter's, transient and input to no gate.
  */
-const RENDERED_LINKS_COVERAGE_FILE = process.env.CI_COVERAGE_STAMP_FILE
-  ? isAbsolute(process.env.CI_COVERAGE_STAMP_FILE)
-    ? process.env.CI_COVERAGE_STAMP_FILE
-    : join(ROOT, process.env.CI_COVERAGE_STAMP_FILE)
-  : join(ROOT, ".freebuff", ".rendered-links-coverage.txt");
+const READING_FILES = new Map(READINGS.map((entry) => [entry.id, readingPath(entry, ROOT)]));
+
+/** The armed alarm's verdict sidecar: cleared per attempt, read at the test stage's turn.
+ * Through the module's own env seam, so a suite that spawns this runner — the runner tests,
+ * any sibling gate the suite drives — can point the clear-and-read at scratch and never
+ * delete the real sidecar an armed alarm test wrote while it ran. */
+const ALARM_VERDICT_PATH = queueAlarmPath(ROOT);
 
 /**
  * The runbook's closing bullet, appended once per run: the date and the closing
  * verdict's counts, the stages that failed when the run is red, the per-stage
- * marks for what ran, and the day's suspects when the run had any. A failed run
- * marks the failure `failed` and names its stages, so the text records a red as
- * a red exactly as the runs recorded here by hand do; the counts are the same
- * numbers `verdictLine` prints. Fail-silent by design — an unwritable runbook is
- * a note on stderr, never a verdict flipped or an exit code changed — and the
- * dedupe asks about the *whole* bullet, not its heading: the heading is the date,
- * the verdict's counts, and the outcome, and two runs can share all three while
- * recording different facts below it — a stamp one close measured and the other
- * never carried, marks from a different stage set. A heading-only check is how a
- * genuine run's record gets swallowed by an identical-looking earlier bullet, so
- * only a byte-identical record dedupes, and a dedupe is logged the way a failed
- * append is: a reader of the log tells "the record already sat there" from
- * "nothing was recorded at all".
+ * marks for what ran, every coverage reading this run carried — one line per
+ * reading, in the registry's order, so each guard's coverage accumulates here as
+ * a trend of its own rather than only the first declared one — and the day's
+ * suspects when the run had any. A failed run marks the failure `failed` and
+ * names its stages, so the text records a red as a red exactly as the runs
+ * recorded here by hand do; the counts are the same numbers `verdictLine` prints.
+ * Fail-silent by design — an unwritable runbook is a note on stderr, never a
+ * verdict flipped or an exit code changed — and the dedupe asks about the *whole*
+ * bullet, not its heading: the heading is the date, the verdict's counts, and the
+ * outcome, and two runs can share all three while recording different facts below
+ * it — a reading one close measured and the other never carried, marks from a
+ * different stage set. A heading-only check is how a genuine run's record gets
+ * swallowed by an identical-looking earlier bullet, so only a byte-identical
+ * record dedupes, and a dedupe is logged the way a failed append is: a reader of
+ * the log tells "the record already sat there" from "nothing was recorded at all".
  *
  * Answers what the close did, so the `--json` payload can carry it: `written`
  * when this run appended the bullet, `deduped` when the file already held it,
@@ -500,16 +511,35 @@ function recordRunBullet() {
   const marks = results
     .map(({ stage, result }) => `${stage.label} ${result.pass ? "PASS" : "FAIL"}`)
     .join(", ");
-  // The rendered-links guard's stamp, when the test stage left one, rides the
-  // bullet verbatim: what the guard audited is part of what a full gate
-  // measured, and the dated bullets are where that reading accrues. Absent —
-  // a stubbed test stage, a stage that died before the suite ran — the bullet
-  // simply omits the line: the stamp is a reading, never a floor, so its
-  // absence is not a failure of the close.
-  const coverage = renderedLinksCoverage ?? readRenderedLinksCoverage(RENDERED_LINKS_COVERAGE_FILE);
+  // Every declared reading the run carried rides the bullet verbatim, in the
+  // registry's order: what a guard audited is part of what a full gate measured,
+  // and the dated bullets are where those readings accrue — one line per reading
+  // rather than the first declared one alone, so a second guard that starts
+  // publishing is a line here with no edit, and two nights' bullets can be read
+  // against each other reading by reading. Absent — a stubbed test stage, a stage
+  // that died before the suite ran, a reading this night's suite left none of —
+  // its line is simply omitted: a reading is never a floor, so its absence is not
+  // a failure of the close, and a reading that arrived as nothing is not printed
+  // as a line of its own.
+  const readings = READINGS.map((entry) => coverageReadingAtClose(entry.id)).filter(
+    (line) => line !== null,
+  );
+  // The armed alarm's verdict rides the bullet as its one line, placed among the
+  // readings it sits beside on every consumer: the threshold, the moment judged,
+  // the queue's settled size (the `pending` total — inside the window as well as
+  // past it), and the rows the verdict names, oldest first. This is where the
+  // queue accrues as history the way the readings do: attendance is one line per
+  // night on one dated bullet, so a future night's bullet can be read against
+  // this one and a quiet queue is a number in the record, not an empty page.
+  // An unarmed night carries no verdict and the line is omitted — the same
+  // answer every absent reading takes: an alarm on duty states, one parked
+  // says nothing at all. The spelling lives in its one function below, so the
+  // bullet, the payload and the page cannot drift apart over this line's words.
+  const alarmLines = queueAlarmVerdict === null ? [] : [queueAlarmLine(queueAlarmVerdict)];
   const lines = [
     `${head} ${marks}.`,
-    ...(coverage ? [`  ${coverage}.`] : []),
+    ...readings.map((line) => `  ${line}.`),
+    ...alarmLines,
     ...(pinSuspects.length > 0
       ? [
           `  Suspects: ${pinSuspects.map((suspect) => `${suspect.path} (${suspect.how})`).join(", ")}.`,
@@ -523,7 +553,7 @@ function recordRunBullet() {
     const existing = existsSync(RECORD_RUNBOOK_FILE)
       ? readFileSync(RECORD_RUNBOOK_FILE, "utf8")
       : "";
-    // The whole bullet — heading, marks, stamp line, suspects — is what dedupes,
+    // The whole bullet — heading, marks, the readings it carried, suspects — is what dedupes,
     // not the heading: an earlier bullet can share this run's date, verdict, and
     // outcome while differing below the heading, and swallowing this run for the
     // resemblance would erase the one record the close exists to keep.
@@ -542,6 +572,25 @@ function recordRunBullet() {
     );
     return "failed";
   }
+}
+
+/**
+ * The verdict's bullet line, spelled once: a reader who wants to know whether a
+ * night's queue was owed an application times it — the moment the suite judged,
+ * the window it judged against, the queue's settled size, and the rows it owed
+ * oldest first — off the words this function prints, not off a second rendering
+ * of the same object somewhere in the tree.
+ */
+function queueAlarmLine(verdict) {
+  const rows = verdict.overdue.map((row) => `@${row.username} ${row.waitHours}h`).join(", ");
+  const owed =
+    verdict.overdue.length === 0
+      ? "none owed"
+      : `${verdict.overdue.length} owed past the window: ${rows}`;
+  return (
+    `  queue-alarm: judged ${verdict.judgedAt} against a ${verdict.maxAgeHours}h window — ` +
+    `${verdict.pending} pending application(s), ${owed}.`
+  );
 }
 
 /**
@@ -892,32 +941,56 @@ function runTypecheck() {
 // --- Stage 2: the vitest suite ----------------------------------------------
 
 /**
- * The rendered-links guard's coverage stamp, if the suite left one this run.
- * Read with the same fail-silent shrug as the reporter's sidecars, and held to
- * the stamp's own prefix, so a stray file at that path cannot write a line of
- * its choosing into the runbook — a guard's reading is the only thing this
- * folds in.
+ * One reading off its sidecar, or `null` when this run's suite left none.
+ *
+ * The registry owns the prefix check, so a reading can only come from the file it declares and
+ * a stray file at that path is not a reading — a guard's own line is the only thing this folds
+ * in. The read is fail-silent like the reporter's sidecars: a missing, unreadable or
+ * another-guard's file is the same state as an absent reading, which every consumer omits
+ * rather than printing as a zero.
  */
-function readRenderedLinksCoverage(path) {
+function readCoverage(entry) {
   try {
-    const line = readFileSync(path, "utf8").trim();
-    return line.startsWith("rendered-links coverage:") ? line : null;
+    return carriedReading(entry, readFileSync(READING_FILES.get(entry.id), "utf8"));
   } catch {
     return null;
   }
 }
 
 /**
- * The stamp, read at the test stage's turn and kept for the close: both the
- * runbook bullet and the `--json` payload quote the *same* reading, so the
- * bullet, the report and the run page cannot disagree about what the guard
- * audited. `null` when the stage left none — a stubbed suite, a run that died
- * before the suite ran — which every consumer omits silently.
+ * Every reading, read at the test stage's turn and kept for the close: the runbook bullet and
+ * the `--json` payload quote the *same* lines, so the bullet, the report and the run page
+ * cannot disagree about what a guard audited.
+ *
+ * Initialised to a `null` per declared reading, so a report always carries every reading the
+ * tree declares — `null` for the one this run's suite left none of, an omission a consumer can
+ * tell from a reading, and never an absent field that would read as "no such reading".
  */
-let renderedLinksCoverage = null;
-function captureRenderedLinksCoverage() {
-  renderedLinksCoverage = readRenderedLinksCoverage(RENDERED_LINKS_COVERAGE_FILE);
-  return renderedLinksCoverage;
+/**
+ * The armed alarm's judgement, when this run's suite wrote one: parsed (the module owns the
+ * shape) at the test stage's turn, `null` otherwise — an unarmed, cached or never-run suite
+ * carries no verdict, so nothing is attached and no section is rendered, the reader being
+ * told nothing rather than shown a zero that pretends an alarm ran.
+ */
+let queueAlarmVerdict = null;
+
+const coverageReadings = Object.fromEntries(READINGS.map((entry) => [entry.id, null]));
+function captureCoverageReadings() {
+  for (const entry of READINGS) coverageReadings[entry.id] = readCoverage(entry);
+  return coverageReadings;
+}
+
+/**
+ * One reading as of the close: this run's capture when the test stage ran, the sidecar's own
+ * line otherwise.
+ *
+ * The fallback is for the stages that do not run — a suite answered from a recorded pass, a
+ * `--only` selection that leaves the test stage out — where the sidecar is still whatever the
+ * last suite wrote to that path, and the runbook bullet should quote it rather than omit a
+ * reading the tree holds.
+ */
+function coverageReadingAtClose(id) {
+  return coverageReadings[id] ?? readCoverage(reading(id));
 }
 
 /** The collect-time soft-gate warnings the reporter left, if any. */
@@ -989,10 +1062,14 @@ function oneTestRun(reportPath, softPath, runReportPath) {
   if (existsSync(reportPath)) unlinkSync(reportPath);
   if (existsSync(softPath)) unlinkSync(softPath);
   if (existsSync(runReportPath)) unlinkSync(runReportPath);
-  // The coverage stamp belongs to this attempt like the report does: a stale
-  // copy a plain `npm test` left behind must not reach the close as this
-  // run's reading.
-  if (existsSync(RENDERED_LINKS_COVERAGE_FILE)) unlinkSync(RENDERED_LINKS_COVERAGE_FILE);
+  // The readings belong to this attempt like the report does: a stale sidecar a plain
+  // `npm test` or a killed run left behind must not reach the close as this run's coverage.
+  for (const path of READING_FILES.values()) {
+    if (existsSync(path)) unlinkSync(path);
+  }
+  // The alarm verdict belongs to this attempt like the report does: a stale sidecar an
+  // unarmed or killed suite left behind must not read as this run's judgment.
+  if (existsSync(ALARM_VERDICT_PATH)) unlinkSync(ALARM_VERDICT_PATH);
 
   const child = spawnSync(
     process.execPath,
@@ -1101,6 +1178,15 @@ function runTest() {
   // reads the same file for the per-module measurements, and it may run after this
   // stage. Every run rewrites it, so a leftover cannot be mistaken for this run's.
   const runReport = readRunReport(runReportPath);
+  // The armed alarm's verdict, read and deleted like the soft sidecar — the file belongs
+  // to this attempt. A missing, unreadable or wrong-shape file is the same state: no
+  // verdict, which the close omits rather than renders as a zero.
+  try {
+    queueAlarmVerdict = parseQueueAlarmVerdict(readFileSync(ALARM_VERDICT_PATH, "utf8"));
+  } catch {
+    queueAlarmVerdict = null;
+  }
+  if (existsSync(ALARM_VERDICT_PATH)) unlinkSync(ALARM_VERDICT_PATH);
 
   // The failures the loop below cannot see, read first so they are named beside the failed
   // tests rather than leaving a summary with nothing under it.
@@ -2594,7 +2680,7 @@ const STAGE_RUNS = {
   // stage reads null/last-attempt honestly below.
   test: (stage) => {
     const result = runTest(stage);
-    captureRenderedLinksCoverage();
+    captureCoverageReadings();
     return result;
   },
   preflight: (stage) =>
@@ -5187,8 +5273,9 @@ for (const suspect of pinSuspects) {
 // family would be annotation noise, not a place on the diff. The rows keep their
 // annotations, so the fold costs no file its mark.
 // The runbook's dated bullet, written once the run's own facts are all in hand —
-// the counts, the failed stages, the suspects — so what it records is what this
-// run closed with, not a projection of it.
+// the counts, the failed stages, the coverage readings the suite published, the
+// suspects — so what it records is what this run closed with, not a projection
+// of it.
 const recorded = recordRunBullet();
 
 const annotations = results.flatMap(({ stage, result }) =>
@@ -5293,11 +5380,18 @@ if (JSON_OUTPUT) {
     // `--no-record`, `failed` when the append itself failed — so a machine consumer can
     // tell a recorded run from a silent one without reading the runbook.
     recorded,
-    // The rendered-links guard's coverage reading, when the suite left one: the same
-    // line the runbook bullet quotes, so a consumer of this report sees the guard's
-    // coverage trend without reading the runbook. Absent (`null`) for a stubbed or
-    // failed suite — an omission, never a zero.
-    coverageStamp: renderedLinksCoverage,
+    // The suite's coverage readings, keyed by the registry's ids: one entry per guard that
+    // publishes what it audited — the rendered-links destinations, the frozen-scratch pass's
+    // roster of judged suites, the convention guards' exercised roster — and `null` for the one
+    // this run's suite left none of, an omission rather than a zero. A consumer that wants one
+    // particular reading looks it up by id, and the ones a run carried are the same lines the
+    // runbook bullet quotes and the coverage history accrues, so the report keeps one shape
+    // however many readings the tree declares.
+    readings: { ...coverageReadings },
+    // The verification queue's alarm, when an armed suite published this run's judgement —
+    // the rows a red alarm night puts on the run page. The key is simply absent when
+    // there was none, the way a page without an armed alarm should read.
+    ...(queueAlarmVerdict === null ? {} : { queueAlarm: queueAlarmVerdict }),
     // A lock the run dealt with before any stage ran, when the stage that owns it was
     // not one of them: it has no stage row to ride, so the run carries it here, with the
     // `mark` a report reads to tell a heal from a lock left for a human.

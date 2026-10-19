@@ -113,7 +113,7 @@ jobs:
             --body .freebuff/collect-gates.md \
             --marker '<!-- collect-budget-summary -->' \
             --label 'Collect-budget summary comment' \
-            --producer 'Publish collect-budget summary'
+            --producer 'Comment the collect-budget summary on the pull request'
       # The gate machinery itself, pinned by content: the runner, every stage script, the
       # two mutation checks and the lock they share, the redactor and the nightly report,
       # the collect ratchet, the coverage gates, the two vitest configs, the compiler and
@@ -220,7 +220,7 @@ jobs:
             --body .coverage/coverage-proposal.md \
             --marker '<!-- coverage-threshold-proposal -->' \
             --label 'Coverage-proposal comment' \
-            --producer 'Propose threshold raises'
+            --producer 'Comment the proposal on the pull request'
       # The verdict on the two comment steps above, and the reason they can stay
       # `continue-on-error: true`: a comment that could not be posted must not stop the
       # drift check or the coverage-mutation check between them and this step, and the
@@ -358,7 +358,7 @@ jobs:
             --body .freebuff/collect-budget-proposal.md \
             --marker '<!-- collect-budget-proposal -->' \
             --label 'Collect-budget proposal comment' \
-            --producer 'Propose baseline and soft-threshold drops'
+            --producer 'Comment the proposal on the pull request'
       # The verdict on the comment step above, for the same reason the `test` job has one:
       # the step is `continue-on-error` so that a failed comment cannot take the artifact
       # upload with it, and this is what stops the job passing when the comment never

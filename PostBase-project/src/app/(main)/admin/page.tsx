@@ -1,63 +1,38 @@
 "use client";
 
+import { AdminStats } from "@/components/admin/admin-stats";
+import { AdminUsers } from "@/components/admin/admin-users";
+import { AdminModeration } from "@/components/admin/admin-moderation";
+import { AdminModerationHistory } from "@/components/admin/admin-moderation-history";
+import { AdminReports } from "@/components/admin/admin-reports";
 import { CampaignReviewQueue } from "@/components/admin/campaign-review-queue";
+import { AdminVerificationRequests } from "@/components/admin/admin-verification-requests";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Users, FileText, Flag, BarChart3, Settings, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
-const stats = [
-  { label: "Total Users", value: "12,456", change: "+234 this week", icon: Users },
-  { label: "Active Posts", value: "3,892", change: "+156 today", icon: FileText },
-  { label: "Reports Pending", value: "23", change: "5 urgent", icon: Flag },
-  { label: "Revenue", value: "$4,567", change: "+12% vs last month", icon: BarChart3 },
-];
-
-const recentReports = [
-  { id: "1", type: "Spam", content: "User posting crypto scams", status: "pending", reportedAt: "2h ago" },
-  { id: "2", type: "Harassment", content: "Inappropriate comments on post", status: "pending", reportedAt: "4h ago" },
-  { id: "3", type: "Fake Account", content: "Impersonating a public figure", status: "reviewed", reportedAt: "1d ago" },
-  { id: "4", type: "Spam", content: "Multiple duplicate listings", status: "resolved", reportedAt: "2d ago" },
-];
-
-const pendingUsers = [
-  { id: "1", name: "John Doe", email: "john@example.com", signedUp: "1h ago" },
-  { id: "2", name: "Jane Smith", email: "jane@example.com", signedUp: "3h ago" },
-];
-
+/**
+ * The admin dashboard.
+ *
+ * Everything that prints a number now prints a real one: the heading row is
+ * `AdminStats` (GET /api/admin/stats) and the reports tab is `AdminReports`
+ * (GET /api/admin/reports), both loading their own data — and their own
+ * failure states — rather than the invented rows that used to sit here. The
+ * campaigns tab keeps the review queue, the one section that has always been
+ * live. The two tabs with no route behind them hold self-describing
+ * placeholders, which is a placeholder that describes itself rather than a
+ * placeholder that pretends.
+ */
 export default function AdminPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-navy-800">Admin Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your LinkMe+ platform</p>
-        </div>
-        <Button variant="outline">
-          <Settings className="h-4 w-4 mr-2" />
-          Settings
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold text-navy-800">Admin Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-1">Manage your LinkMe+ platform</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="text-2xl font-bold text-navy-800 mt-1">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
-                </div>
-                <div className="h-10 w-10 rounded-lg bg-brand-blue/10 flex items-center justify-center">
-                  <stat.icon className="h-5 w-5 text-brand-blue" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Computed by GET /api/admin/stats — nothing here asserts a number. */}
+      <AdminStats />
 
       {/* Tabs */}
       <Tabs defaultValue="reports">
@@ -70,88 +45,67 @@ export default function AdminPage() {
           <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+          <TabsTrigger value="verification">Verification</TabsTrigger>
         </TabsList>
 
         <TabsContent value="reports" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Recent Reports</CardTitle>
+              <CardTitle className="text-base">Reports</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {recentReports.map((report) => (
-                  <div key={report.id} className="flex items-center justify-between p-3 rounded-lg border border-surface-border hover:bg-surface-light-blue transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                        report.status === "pending" ? "bg-yellow-100" :
-                        report.status === "reviewed" ? "bg-blue-100" : "bg-green-100"
-                      }`}>
-                        {report.status === "pending" ? (
-                          <Clock className="h-4 w-4 text-yellow-600" />
-                        ) : report.status === "reviewed" ? (
-                          <AlertTriangle className="h-4 w-4 text-blue-600" />
-                        ) : (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        )}
-                        {/* The status was a colour and a glyph, both invisible
-                            to a screen reader: three reports read out
-                            identically. */}
-                        <span className="sr-only">Status: {report.status}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{report.type}</p>
-                        <p className="text-xs text-muted-foreground">{report.content}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{report.reportedAt}</span>
-                      {report.status === "pending" && (
-                        <Button size="sm" variant="outline">Review</Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <AdminReports />
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* The member list the roles route serves: searchable, filtered, and
+            the two moderator moves. */}
         <TabsContent value="users" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Pending User Approvals</CardTitle>
+              <CardTitle className="text-base">Members</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Promote to moderator and demote from it. Admin roles belong to the owner console.
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {pendingUsers.map((user) => (
-                  <div key={user.id} className="flex items-center justify-between p-3 rounded-lg border border-surface-border">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-surface-light-blue flex items-center justify-center text-sm font-medium">
-                        {user.name[0]}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{user.signedUp}</span>
-                      <Button size="sm" variant="outline">Approve</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <AdminUsers />
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* The moderation queue's hands and the record they write: pending
+            content and account reports, decided with a required reason
+            through the moderate route — then every action ever recorded,
+            listed underneath with its actor, reason and date. */}
         <TabsContent value="content" className="mt-4">
-          <Card>
-            <CardContent className="p-8 text-center">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">Content moderation tools coming soon</p>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Reported content</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Warn or remove reported posts and comments; suspend or ban reported accounts. Every decision carries a reason.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <AdminModeration />
+              </CardContent>
+            </Card>
+
+            {/* GET /api/admin/moderation-actions — the decision ledger. */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Moderation history</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Every recorded moderation action, newest first, with who made it, why and when.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <AdminModerationHistory />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/*
@@ -173,10 +127,20 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="verification" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Account verification</CardTitle>
+              <p className="text-sm text-muted-foreground">Review public links submitted by members. Approving awards the verified badge.</p>
+            </CardHeader>
+            <CardContent><AdminVerificationRequests /></CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="analytics" className="mt-4">
           <Card>
             <CardContent className="p-8 text-center">
-              <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+              <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-3" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">Analytics dashboard coming soon</p>
             </CardContent>
           </Card>

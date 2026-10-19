@@ -91,8 +91,10 @@ label for a closure module no input names) with
 
 ### `.freebuff/gate-drift.mjs`
 
-The runner watch-family regex gains `import-closure`:
-`^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure)\.mjs$`.
+The runner watch-family regex gains `import-closure` — and `wait-drift-gate` beside it
+later, the second gate that turns a finding inside a tolerated step into the night's
+verdict, which is what the two of them have in common in this family:
+`^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure|wait-drift-gate)\.mjs$`.
 The `STAGE_TABLE` inputs are unchanged on purpose — the runner, not the table, now
 augments keys.
 

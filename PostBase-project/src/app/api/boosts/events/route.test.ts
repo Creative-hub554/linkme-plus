@@ -161,4 +161,40 @@ describe("POST /api/boosts/events", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ recorded: true, impressions: 3, clicks: 3 });
   });
+
+  it("answers 404 for a campaign that is not there, counting nothing", async () => {
+    // A beacon can name a campaign that never was: the answer is a 404, not
+    // a delivery-rule response and not an effective count of anything.
+    fakeDb.selectReturns(adCampaigns, []);
+
+    const response = await POST(event({ campaignId: CAMPAIGN_ID, type: "impression" }));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Campaign not found" });
+    expectGatedNone("writes");
+  });
+
+  it("answers 400 for a body that is not an event", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/boosts/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "not json [[",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "An event is required" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("answers 500 when the campaign cannot be read", async () => {
+    fakeDb.failNextSelect(adCampaigns, new Error("db down"));
+
+    const response = await POST(event({ campaignId: CAMPAIGN_ID, type: "impression" }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to record this event" });
+  });
 });

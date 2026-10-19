@@ -1,11 +1,11 @@
 import type { Plugin } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
-import { RoomHub, type HubSocket } from "./room-hub";
+import { RoomHub, type HubSocket } from "./room-hub.ts";
 import {
   authenticateWsUpgrade,
   type WsSessionAuthenticator,
   type WsSessionConfig,
-} from "./ws-session";
+} from "./ws-session.ts";
 
 /**
  * `/ws` under `vinext dev`, where there is no Durable Object to answer it.

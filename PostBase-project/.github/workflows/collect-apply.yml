@@ -196,9 +196,23 @@ jobs:
         run: |
           set -euo pipefail
           marker='<!-- collect-budget-apply -->'
+          # The outcome this reply declares, in the hidden comment the nightly job's settlement step
+          # reads back (`APPLY_STATUS_OPEN`, in `.freebuff/collect-apply.mjs`): the word is the status
+          # itself — `applied`, `unchanged`, `refused`, `drift`, `unverified`, `no-payload` — so a
+          # proposal the job refused to apply is recorded in the runbook as a refusal rather than as an
+          # answered one. `fork` is this step's own word for the branch it cannot open a follow-up
+          # against, and the `*` arm below declares `unknown` rather than leaving the marker empty: a
+          # declaration a reader would have to interpret is not one.
           if [ "$SAME_REPO" != "true" ]; then
+            outcome='fork'
             summary="This pull request comes from a fork, so there is no branch here to open a follow-up against. Run \`npm run collect:record\` locally and commit the result instead."
           else
+            # The status this step was handed *is* the word the reply declares — the applier's own
+            # outcome, or `unverified` when the drift check refused it — so it is declared verbatim
+            # rather than mapped: what a reviewer reads on the pull request and what the runbook
+            # records come from one value, and a status added to the applier is declared the day it
+            # exists rather than the day somebody remembers to add it here.
+            outcome="$STATUS"
             case "$STATUS" in
               applied)
                 summary="Applied the proposed narrowing in a follow-up pull request stacked on this branch. Review and merge it to adopt the tighter budgets." ;;
@@ -213,10 +227,11 @@ jobs:
               unverified)
                 summary="Refused — the values applied and were re-pinned, but \`npm run gates:drift\` then disagreed with the tree, so nothing was committed. That means the pin does not describe what the commit would have carried; run \`npm run gates:drift\` on that branch and look at what it reports." ;;
               *)
+                outcome='unknown'
                 summary="The approval could not be applied. See this workflow's log." ;;
             esac
           fi
-          body=$(printf '%s\n\n%s' "$marker" "$summary")
+          body=$(printf '%s\n\n<!-- collect-budget-apply-status %s -->\n\n%s' "$marker" "$outcome" "$summary")
           node .freebuff/pr-comment.mjs \
             --text "$body" \
             --marker "$marker" \

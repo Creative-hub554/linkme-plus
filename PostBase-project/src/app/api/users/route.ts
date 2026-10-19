@@ -1,6 +1,7 @@
 import { db, withDbRetry } from "@/lib/db";
 import { ensureLocalUserProfile } from "@/lib/db/ensure-profile";
-import { users, profiles, follows, visibilityEnum } from "@/lib/db/schema";
+import { users, profiles, follows, blocks, visibilityEnum } from "@/lib/db/schema";
+import { blockedEitherWay } from "@/lib/db/blocks";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { createClient } from "@/utils/supabase/server";
 import { eq, and, sql, count, ne } from "drizzle-orm";
@@ -62,6 +63,7 @@ export async function GET(request: Request) {
         id: users.id,
         username: users.username,
         role: users.role,
+        verified: users.verified,
         createdAt: users.createdAt,
         displayName: profiles.displayName,
         avatarUrl: profiles.avatarUrl,
@@ -117,6 +119,12 @@ export async function GET(request: Request) {
         )
       );
 
+    const [block] = await db
+      .select({ blockerId: blocks.blockerId })
+      .from(blocks)
+      .where(blockedEitherWay(session.user.id, user.id))
+      .limit(1);
+
     return successResponse({
       user,
       stats: {
@@ -124,6 +132,8 @@ export async function GET(request: Request) {
         following,
       },
       isFollowing: !!isFollowing,
+      isBlocked: Boolean(block),
+      blockedByViewer: block?.blockerId === session.user.id,
     });
   } catch (err) {
     console.error("Get user error:", err);
@@ -140,6 +150,7 @@ export async function GET(request: Request) {
         id: session.user.id,
         username: fallbackUsername,
         role: "member",
+        verified: false,
         createdAt: session.user.created_at ?? null,
         displayName: String(metadata.display_name || metadata.full_name || metadata.name || session.user.email?.split("@")[0] || "Member"),
         avatarUrl: String(metadata.avatar_url || metadata.picture || "") || null,
@@ -159,6 +170,8 @@ export async function GET(request: Request) {
       },
       stats: { followers: 0, following: 0 },
       isFollowing: false,
+      isBlocked: false,
+      blockedByViewer: false,
       persistence: "auth-metadata",
     });
   }

@@ -109,6 +109,16 @@ describe("GET /api/admin/campaigns", () => {
       ],
     });
   });
+
+  it("answers 500 when the queue itself cannot be read", async () => {
+    fakeDb.selectReturns(users, [{ role: "admin" }]).failNextSelect(adCampaigns, new Error("db down"));
+
+    const response = await GET(queue());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to list the review queue" });
+    expectGatedNone("writes");
+  });
 });
 
 describe("POST /api/admin/campaigns", () => {
@@ -197,5 +207,60 @@ describe("POST /api/admin/campaigns", () => {
         metadata: { reason: "Misleading price" },
       }),
     });
+  });
+
+  it("names the campaign before anything is read for it", async () => {
+    // A decision without a campaign id named — or one whose id is not even of
+    // the shape a campaign has — must stop here: it is not a lookup that came
+    // back empty, it is no lookup at all, and reading that far would give a
+    // malformed request the query a real id would have earned.
+    const missing = await POST(decide({ action: "approve" }));
+    const malformed = await POST(decide({ campaignId: "not-a-uuid", action: "approve" }));
+
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({ error: "A campaign is required" });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: "A campaign is required" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("answers 404 for a campaign that is not there, writing nothing", async () => {
+    fakeDb
+      .selectReturns(users, [{ role: "admin" }])
+      .selectReturns(adCampaigns, []);
+
+    const response = await POST(decide({ campaignId: CAMPAIGN_ID, action: "approve" }));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Campaign not found" });
+    expectGatedNone("writes");
+  });
+
+  it("answers 400 for a body that is not a decision", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/admin/campaigns", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "not json [[",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "A campaign and a decision are required" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("answers 500 when the decision cannot be recorded", async () => {
+    fakeDb
+      .selectReturns(users, [{ role: "admin" }])
+      .selectReturns(adCampaigns, [awaiting()])
+      .failNextUpdate(adCampaigns, new Error("db down"));
+
+    const response = await POST(decide({ campaignId: CAMPAIGN_ID, action: "approve" }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to record this decision" });
   });
 });

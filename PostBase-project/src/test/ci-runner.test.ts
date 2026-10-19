@@ -22,6 +22,18 @@ import { makeScratchDir, removeScratchDir } from "./scratch";
 // rather than restated, so the invariant case pins the same walker the run uses
 // instead of carrying a second copy that could drift from it.
 import { importClosure } from "../../.freebuff/import-closure.mjs";
+// The one declaration of the suite's coverage readings: which guards publish one, the sidecar
+// each writes, the env seam that can point it elsewhere, and the id its line travels under in
+// the report. Every spawned run's seams and every assertion about the report's shape are read
+// from it, so a reading declared there is exercised by these cases without a line being added.
+import {
+  READINGS,
+  RENDERED_LINKS_READING,
+  SCRATCH_PATHS_READING,
+} from "../../.freebuff/coverage-readings.mjs";
+// The alarm verdict's env seam: the same module the runner reads its sidecar path from, so
+// the runner-level cases below redirect through the one spelling rather than a second copy.
+import { QUEUE_ALARM_ENV } from "../../.freebuff/queue-alarm-verdict.mjs";
 
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -205,6 +217,29 @@ function writeStub(name: string, body: string): string {
   return stubPath;
 }
 
+/**
+ * Every declared reading's env seam, pointed at scratch under `dir`.
+ *
+ * Derived from the registry rather than listed, for the reason the seams exist at all: a run's
+ * test stage clears the sidecar paths it names, so a run spawned here that left a seam at its
+ * default would delete the sidecars this suite's own sibling test files write — and a reading
+ * added to the registry would be a seam nobody redirected. Cases that exercise one reading
+ * override its own path.
+ */
+function readingSeams(dir: string = stubDir): Record<string, string> {
+  return {
+    ...Object.fromEntries(
+      READINGS.map((entry) => [entry.env, path.join(dir, `${entry.id}-reading-default.txt`)]),
+    ),
+    // The verification queue's armed alarm publishes its verdict to a sidecar the test
+    // stage clears per attempt, exactly like the readings — so every spawned run points
+    // its seam at scratch too, for the same reason: a run spawned here must never delete
+    // the real sidecar an armed alarm test wrote while this suite ran. The seam comes
+    // from the same module the runner reads the path from, so there is one spelling.
+    [QUEUE_ALARM_ENV]: path.join(dir, "queue-alarm-verdict-default.json"),
+  };
+}
+
 let cacheSeq = 0;
 let reportSeq = 0;
 
@@ -348,13 +383,15 @@ function runCi(args: string[], env: Record<string, string> = {}) {
       ...process.env,
       ...CI_MARKERS,
       CI_CACHE_FILE: freshCachePath(),
-      // A run's test-stage attempt clears the stamp path its stage names, and a
-      // stubbed suite never writes it — so every spawned run points the seam at
-      // scratch, or this suite's own runs would delete the tree's real sidecar
-      // written by rendered-links' close-out. Cases that exercise the stamp
-      // override this with their own path (the default scratch path is the
-      // stamping stubs' target, which they overwrite — harmless in scratch).
-      CI_COVERAGE_STAMP_FILE: path.join(stubDir, "coverage-stamp-default.txt"),
+      // A run's test-stage attempt clears the reading paths its stage names, and a
+      // stubbed suite never writes them — so every spawned run points every declared
+      // reading's seam at scratch, or this suite's own runs would delete the tree's
+      // real sidecars written by rendered-links' close-out and by the frozen-scratch
+      // pass. The seams come from the registry, so a reading declared there is already
+      // redirected here. Cases that exercise a reading override its own path (the
+      // default scratch path is the stamping stubs' target, which they overwrite —
+      // harmless in scratch).
+      ...readingSeams(),
       ...env,
     },
   });
@@ -372,7 +409,7 @@ function runCiInBackground(args: string[], env: Record<string, string> = {}) {
       ...process.env,
       ...CI_MARKERS,
       CI_CACHE_FILE: freshCachePath(),
-      CI_COVERAGE_STAMP_FILE: path.join(stubDir, "coverage-stamp-default.txt"),
+      ...readingSeams(),
       ...env,
     },
   });
@@ -3965,6 +4002,98 @@ describe("the CI runner's typecheck and test stages", () => {
     expect(result.stderr).toContain("1 of 1 stage(s) failed: test");
   });
 
+  it("carries the armed alarm's published verdict into the report, and leaves no sidecar", () => {
+    // The armed alarm test publishes its judgment as data before the assertion reds — the
+    // judged total (the queue's settled size, inside the window as well as past it) and the
+    // rows (handles and waits, oldest first) the run page's alarm section is built from.
+    // The runner reads and deletes the sidecar like the soft sidecar: the verdict belongs
+    // to this attempt, and a next run's clear makes a stale file invisible. The seam the
+    // case points the runner through is the module's own, so the same env var this helper
+    // redirects by default is overridden here: one spelling.
+    const stampPath = path.join(stubDir, "queue-alarm-verdict-carried.json");
+    const stub = writeStub("vitest-alarm-verdict.mjs", [
+      "import { writeFileSync } from 'node:fs';",
+      "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
+      // The verdict, published before any assertion has a chance to red — the writer and
+      // the reader agree about the shape through the module, and the file's path comes
+      // through its own env seam.
+      `writeFileSync(process.env.${QUEUE_ALARM_ENV}, JSON.stringify({`,
+      "  maxAgeHours: 48,",
+      "  judgedAt: '2026-10-18T09:00:00.000Z',",
+      "  pending: 3,",
+      "  overdue: [{ id: '93000000-0000-4000-8000-000000000002', username: 'kenji', waitHours: 72 }],",
+      "}, null, 2));",
+      // Then a failing suite's report, the same shape the case above pins.
+      "writeFileSync(out, JSON.stringify({",
+      "  numTotalTests: 3,",
+      "  numFailedTests: 1,",
+      "  testResults: [{",
+      "    name: 'src/test/stub.test.ts',",
+      "    status: 'failed',",
+      "    assertionResults: [",
+      "      { status: 'passed', title: 'passes one' },",
+      "      { status: 'failed', title: 'renders the thing' },",
+      "    ],",
+      "  }],",
+      "}));",
+      "process.exit(1);",
+    ].join("\n"));
+
+    const result = runCi(["--json", "--only=test"], {
+      CI_TEST_SCRIPT: stub,
+      [QUEUE_ALARM_ENV]: stampPath,
+    });
+
+    const payload = JSON.parse(result.stdout);
+    expect(payload.queueAlarm).toEqual({
+      maxAgeHours: 48,
+      judgedAt: "2026-10-18T09:00:00.000Z",
+      pending: 3,
+      overdue: [{ id: "93000000-0000-4000-8000-000000000002", username: "kenji", waitHours: 72 }],
+    });
+    // Read-and-deleted like the soft sidecar: nothing of this attempt lingers at the path
+    // a next run or an unarmed suite would clear.
+    expect(existsSync(stampPath)).toBe(false);
+    // The run itself is the red the verdict came from — asserted on the payload the way
+    // a --json consumer reads it, not on the human progress line this mode leaves off.
+    expect(result.status).toBe(1);
+    expect(payload.gate).toBe("fail");
+  });
+
+  it("carries nothing when the sidecar is not a verdict", () => {
+    // The file name is a convention, not a contract: a stray or wrong-shape file at the
+    // path is the same state as an absent one — the close omits rather than renders a
+    // zero that pretends an alarm ran. The shape check is the module's, so the runner
+    // and the page cannot disagree about what counts.
+    const stampPath = path.join(stubDir, "queue-alarm-verdict-shape.json");
+    const stub = writeStub("vitest-alarm-shape.mjs", [
+      "import { writeFileSync } from 'node:fs';",
+      "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
+      `writeFileSync(process.env.${QUEUE_ALARM_ENV}, JSON.stringify({ overdue: 'all of them' }));`,
+      "writeFileSync(out, JSON.stringify({",
+      "  numTotalTests: 3,",
+      "  numFailedTests: 1,",
+      "  testResults: [{",
+      "    name: 'src/test/stub.test.ts',",
+      "    status: 'failed',",
+      "    assertionResults: [",
+      "      { status: 'passed', title: 'passes one' },",
+      "      { status: 'failed', title: 'renders the thing' },",
+      "    ],",
+      "  }],",
+      "}));",
+      "process.exit(1);",
+    ].join("\n"));
+
+    const result = runCi(["--json", "--only=test"], {
+      CI_TEST_SCRIPT: stub,
+      [QUEUE_ALARM_ENV]: stampPath,
+    });
+
+    const payload = JSON.parse(result.stdout);
+    expect(payload.queueAlarm).toBeUndefined();
+  });
+
   it("says the tests passed but the run failed when only a reporter failed it", () => {
     // The collect-time budget is a reporter: every test can pass and the run
     // still fail. The summary must not claim a test failed when none did.
@@ -6156,7 +6285,7 @@ describe("the CI runner's --status report", () => {
         stage: "runbook",
         whole: false,
       },
-      ".freebuff/^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure)\\.mjs$": {
+      ".freebuff/^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure|wait-drift-gate)\\.mjs$": {
         stage: "mutation",
         whole: false,
       },
@@ -6840,7 +6969,14 @@ describe("the runner's concurrent-edit suspects", () => {
   // the tree it left.
   const probeName = "ci-suspect-probe.mjs";
   const probe = path.join(projectRoot, ".freebuff", probeName);
-  const fixture = path.join(stubDir, "ci-suspect-pin.mjs");
+  // Resolved per test, not captured here: a describe body is evaluated while the file is
+  // *collected*, before the `beforeAll` above has made the scratch directory, so a `const`
+  // built from `stubDir` freezes the empty string it starts as — and `path.join("", name)`
+  // is a relative path, which is how this suite used to write its fixture into whatever the
+  // runner's working directory happened to be: the checkout's own root, over a tracked file
+  // of the same name. `stubDir` is the scratch directory `src/test/scratch.ts` documents and
+  // the one every other fixture in this file is written to.
+  const fixturePath = () => path.join(stubDir, "ci-suspect-pin.mjs");
   const watches = [
     ...DEFAULT_WATCHES,
     { dir: ".freebuff", pattern: `^${probeName.replace(/\./g, "\\.")}$` },
@@ -6860,14 +6996,14 @@ describe("the runner's concurrent-edit suspects", () => {
     );
     writeFileSync(probe, "export const seeded = 1;\n", "utf8");
     writeFileSync(
-      fixture,
+      fixturePath(),
       renderManifest({ algorithm: "sha1", watches, files: pin([], watches) }),
       "utf8",
     );
     try {
       const result = runCi(["--only=runbook", "--json"], {
         CI_RUNBOOK_SCRIPT: stub,
-        GATE_HASHES_FILE: fixture,
+        GATE_HASHES_FILE: fixturePath(),
         CI_SUSPECT_PROBE: probe,
         CI_PIN_SNAPSHOT_FILE: path.join(stubDir, "pin-snapshot-suspects.json"),
       });
@@ -6913,14 +7049,14 @@ describe("the runner's concurrent-edit suspects", () => {
     const stub = writeStub("suspect-clean-runbook.mjs", PASSING_RUNBOOK);
     writeFileSync(probe, "export const seeded = 1;\n", "utf8");
     writeFileSync(
-      fixture,
+      fixturePath(),
       renderManifest({ algorithm: "sha1", watches, files: pin([], watches) }),
       "utf8",
     );
     try {
       const result = runCi(["--only=runbook", "--json"], {
         CI_RUNBOOK_SCRIPT: stub,
-        GATE_HASHES_FILE: fixture,
+        GATE_HASHES_FILE: fixturePath(),
         CI_PIN_SNAPSHOT_FILE: path.join(stubDir, "pin-snapshot-clean.json"),
       });
 
@@ -6970,12 +7106,12 @@ describe("the runner's dated runbook bullet", () => {
   const fullGateStubs = (extra: Record<string, string> = {}): Record<string, string> => {
     if (fullGate === null) {
       fullGate = {
-        // The coverage-stamp seam, pointed at scratch for every case here: the
-        // real suite runs beside these tests, and its rendered-links close-out
-        // writes the tree's real stamp — a close that read it would fold a
-        // reading from a sibling test file into this test's bullet. Cases that
-        // exercise the stamp override this with their own scratch path.
-        CI_COVERAGE_STAMP_FILE: path.join(stubDir, "coverage-stamp-default.txt"),
+        // Every declared reading's seam, pointed at scratch for every case here: the real
+        // suite runs beside these tests, and its close-outs write the tree's real
+        // readings — a close that read one would fold a sibling test file's reading
+        // into this test's bullet or its report. Cases that exercise a reading
+        // override it with their own scratch path.
+        ...readingSeams(),
         CI_TYPECHECK_SCRIPT: writeStub("record-typecheck.mjs", PASSING_TYPECHECK),
         CI_RUNBOOK_SCRIPT: writeStub("record-runbook.mjs", PASSING_RUNBOOK),
         CI_LINT_SCRIPT: writeStub("record-lint.mjs", PASSING_LINT),
@@ -6990,11 +7126,30 @@ describe("the runner's dated runbook bullet", () => {
     return { ...fullGate, ...extra };
   };
 
-  // A test-stage stub that leaves a rendered-links stamp in the path the stamp
-  // seam names — the same close-out the real rendered-links guard performs,
-  // shrunk to one line, shared by every case whose bullet turns on the stamp.
-  const stampingGate = (name: string, stampPath: string): Record<string, string> => ({
-    CI_COVERAGE_STAMP_FILE: stampPath,
+  /** The rendered-links reading a stub suite leaves, as the guard's own close-out writes it. */
+  const RENDERED_LINKS_READING_LINE =
+    `${RENDERED_LINKS_READING.prefix} chrome — the stub 2 (2 unique destinations)`;
+
+  /**
+   * The line a stub leaves for one declared reading: the entry's own prefix, then a body saying
+   * which reading it is, so a line filed under the wrong entry is visibly the wrong one.
+   */
+  const readingLine = (entry: { prefix: string; id: string }): string =>
+    `${entry.prefix} the stub measured its ${entry.id} reading`;
+
+  /**
+   * A test-stage stub that leaves a rendered-links reading in the path that reading's own seam
+   * names — the same close-out the real rendered-links guard performs, shrunk to one line,
+   * shared by every case whose bullet turns on the reading. The seam's name and the line's
+   * prefix come from the registry's entry, so the stub and the runner agree by declaration; a
+   * case that wants a *wrong* line at the path (the stray-file cases) passes its own text.
+   */
+  const stampingGate = (
+    name: string,
+    sidecarPath: string,
+    line: string = RENDERED_LINKS_READING_LINE,
+  ): Record<string, string> => ({
+    [RENDERED_LINKS_READING.env]: sidecarPath,
     CI_TEST_SCRIPT: writeStub(name, [
       "import { writeFileSync } from 'node:fs';",
       "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
@@ -7002,7 +7157,7 @@ describe("the runner's dated runbook bullet", () => {
       "  numTotalTests: 1, numFailedTests: 0,",
       "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
       "}));",
-      "writeFileSync(process.env.CI_COVERAGE_STAMP_FILE, 'rendered-links coverage: chrome — the stub 2 (2 unique destinations)\\n');",
+      `writeFileSync(process.env.${RENDERED_LINKS_READING.env}, ${JSON.stringify(`${line}\n`)});`,
     ].join("\n")),
   });
 
@@ -7024,86 +7179,303 @@ describe("the runner's dated runbook bullet", () => {
     // The append sits as its own paragraph, and only one bullet was written.
     expect(text.startsWith("\n")).toBe(true);
     expect(text.match(/ci verdict:/g)).toHaveLength(1);
-    // And no coverage stamp: the stubbed test stage leaves none, so the close
+    // And no reading at all: the stubbed test stage leaves none, so the close
     // omits the line rather than quoting a reading it never measured.
-    expect(text).not.toContain("rendered-links coverage:");
+    expect(text).not.toContain(RENDERED_LINKS_READING.prefix);
   }, 20_000);
 
-  it("the rendered-links guard's coverage stamp rides the bullet", () => {
-    // The guard's close-out leaves the stamp where the test stage ran, and the
+  it("the rendered-links guard's reading rides the bullet and the report", () => {
+    // The guard's close-out leaves its reading where the test stage ran, and the
     // close folds it into the bullet verbatim — the reading of what the guard
     // audited, riding the same record as the verdict that measured it. The
     // stub stands in for the vitest stage that would have run the guard,
-    // writing the same sidecar to the scratch path the stamp seam names.
-    const stampPath = path.join(stubDir, "coverage-stamp.txt");
-    const stampingTest = [
-      "import { writeFileSync } from 'node:fs';",
-      "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
-      "writeFileSync(out, JSON.stringify({",
-      "  numTotalTests: 1, numFailedTests: 0,",
-      "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
-      "}));",
-      "writeFileSync(process.env.CI_COVERAGE_STAMP_FILE, 'rendered-links coverage: chrome — the stub 2 (2 unique destinations)\\n');",
-    ].join("\n");
+    // writing the same sidecar to the scratch path the reading's seam names.
     const record = freshRecord();
     const result = runCi(["--no-cache", "--json"], fullGateStubs({
       CI_RECORD_RUNBOOK_FILE: record,
-      CI_COVERAGE_STAMP_FILE: stampPath,
-      CI_TEST_SCRIPT: writeStub("record-test-stamp.mjs", stampingTest),
+      ...stampingGate("record-test-stamp.mjs", path.join(stubDir, "coverage-stamp.txt")),
     }));
 
     expect(result.status).toBe(0);
     const payload = JSON.parse(result.stdout);
     expect(payload.recorded).toBe("written");
-    // The same reading rides the report, so a consumer sees the guard's coverage
-    // without reading the runbook — and it is the line the bullet quotes, not a
-    // second reading of it.
-    expect(payload.coverageStamp).toBe(
-      "rendered-links coverage: chrome — the stub 2 (2 unique destinations)",
-    );
+    // The same reading rides the report under the registry's own id, so a consumer
+    // sees the guard's coverage without reading the runbook — and it is the line the
+    // bullet quotes, not a second reading of it.
+    expect(payload.readings[RENDERED_LINKS_READING.id]).toBe(RENDERED_LINKS_READING_LINE);
     const text = readFileSync(record, "utf8");
-    // The stamp rides verbatim, as the bullet's own line between the per-stage
+    // The reading rides verbatim, as the bullet's own line between the per-stage
     // marks and the day's suspects.
-    expect(text).toContain("  rendered-links coverage: chrome — the stub 2 (2 unique destinations).");
+    expect(text).toContain(`  ${RENDERED_LINKS_READING_LINE}.`);
   }, 20_000);
 
-  it("the report carries no coverage stamp when the suite left none", () => {
-    // The base stub set signs no stamp: the payload's field reads `null` rather
+  it("carries every declared reading, null for the ones this run's suite left none of", () => {
+    // The base stub set signs no reading: a reading's entry reads `null` rather
     // than an empty string or a zero — an omission the consumer can distinguish
-    // from a reading, never a fabricated number.
+    // from a measurement, never a fabricated number. Every reading the registry
+    // declares is named, so a guard that starts publishing one is a field here
+    // without a case being written for it, and `null` is never an absent field
+    // that would read as "no such reading".
     const record = freshRecord();
     const result = runCi(["--no-cache", "--json"], fullGateStubs({ CI_RECORD_RUNBOOK_FILE: record }));
 
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).coverageStamp).toBeNull();
+    const payload = JSON.parse(result.stdout);
+    expect(Object.keys(payload.readings).sort()).toEqual(READINGS.map((entry) => entry.id).sort());
+    for (const entry of READINGS) expect(payload.readings[entry.id]).toBeNull();
   }, 20_000);
 
-  it("a stray file at the stamp's path rides nothing", () => {
-    // The close reads a path the suite owns; a file there that is not the
-    // stamp is not a reading the close would quote. The prefix check is what
-    // keeps a scratch file's contents out of the runbook's prose.
-    const junkPath = path.join(stubDir, "coverage-junk.txt");
-    const junkTest = [
+  it("a stray file at the reading's path rides nothing", () => {
+    // The close reads a path the suite owns; a file there that is not the reading
+    // is not a line the close would quote. The registry's own prefix check is what
+    // keeps a scratch file's contents out of the runbook's prose and the report.
+    const record = freshRecord();
+    const result = runCi(["--no-cache", "--json"], fullGateStubs({
+      CI_RECORD_RUNBOOK_FILE: record,
+      ...stampingGate(
+        "record-test-junk.mjs",
+        path.join(stubDir, "coverage-junk.txt"),
+        "a scratch file at the reading's path",
+      ),
+    }));
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).readings[RENDERED_LINKS_READING.id]).toBeNull();
+    const text = readFileSync(record, "utf8");
+    expect(text).toContain("ci verdict:");
+    expect(text).not.toContain("a scratch file at the reading's path");
+    expect(text).not.toContain(RENDERED_LINKS_READING.prefix);
+  }, 20_000);
+
+  /**
+   * A test-stage stub that leaves a *frozen-scratch* reading in the path that reading's own
+   * seam names — the same close-out the guard performs, shrunk to one line. Beside
+   * `stampingGate` rather than folded into it because the two readings are two files with two
+   * prefixes: a stub that wrote this one into the rendered-links seam would be read as neither,
+   * which is the whole reason the registry gives each reading a sidecar and a prefix of its own.
+   */
+  const scratchStampingGate = (
+    name: string,
+    reading: string,
+    sidecarPath: string,
+  ): Record<string, string> => ({
+    [SCRATCH_PATHS_READING.env]: sidecarPath,
+    CI_TEST_SCRIPT: writeStub(name, [
       "import { writeFileSync } from 'node:fs';",
       "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
       "writeFileSync(out, JSON.stringify({",
       "  numTotalTests: 1, numFailedTests: 0,",
       "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
       "}));",
-      "writeFileSync(process.env.CI_COVERAGE_STAMP_FILE, 'scratch file at the stamp path\\n');",
-    ].join("\n");
+      `writeFileSync(process.env.${SCRATCH_PATHS_READING.env}, ${JSON.stringify(`${reading}\n`)});`,
+    ].join("\n")),
+  });
+
+  /** The frozen-scratch reading a stub suite leaves, as the guard's own close-out writes it. */
+  const SCRATCH_READING =
+    `${SCRATCH_PATHS_READING.prefix} 7 suite(s) keep a scratch directory and were judged — ` +
+    "src/test/ci-runner.test.ts, src/test/scratch.test.ts (170 test file(s) scanned)";
+
+  /**
+   * A test-stage stub that leaves a reading in *every* declared reading's seam at once — one
+   * close-out per entry, so the case that reads them back is a walk over the registry rather
+   * than a list of guards. The seams and the lines both come from the declaration, so a fourth
+   * reading is quoted by that case without a line being added either side.
+   */
+  const everyReadingGate = (name: string): Record<string, string> => ({
+    ...readingSeams(),
+    CI_TEST_SCRIPT: writeStub(name, [
+      "import { writeFileSync } from 'node:fs';",
+      "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
+      "writeFileSync(out, JSON.stringify({",
+      "  numTotalTests: 1, numFailedTests: 0,",
+      "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
+      "}));",
+      ...READINGS.map(
+        (entry) => `writeFileSync(process.env.${entry.env}, ${JSON.stringify(`${readingLine(entry)}\n`)});`,
+      ),
+    ].join("\n")),
+  });
+
+  it("carries the frozen-scratch guard's reading on the report and the run page", () => {
+    // The other half of what a green suite measured: the rendered-links reading says which
+    // links were resolved, and this one says which suites that keep a scratch directory the
+    // tree-wide pass judged — so the run page answers "none offended" with *who was judged*.
+    // The stub stands in for the vitest stage that would have run the scan, writing the
+    // sidecar to the scratch path this reading's seam names.
     const record = freshRecord();
-    const result = runCi(["--no-cache", "--json"], fullGateStubs({
-      CI_RECORD_RUNBOOK_FILE: record,
-      CI_COVERAGE_STAMP_FILE: junkPath,
-      CI_TEST_SCRIPT: writeStub("record-test-junk.mjs", junkTest),
-    }));
+    const result = runCi(
+      ["--no-cache", "--json"],
+      fullGateStubs({
+        CI_RECORD_RUNBOOK_FILE: record,
+        ...scratchStampingGate(
+          "record-test-scratch-stamp.mjs",
+          SCRATCH_READING,
+          path.join(stubDir, "scratch-stamp.txt"),
+        ),
+      }),
+    );
 
     expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    // The reading rides the report as the suite left it, verbatim, so a consumer sees what the
+    // scan judged without reading the run page.
+    expect(payload.readings[SCRATCH_PATHS_READING.id]).toBe(SCRATCH_READING);
+    // …and the run page prints both readings under the one coverage heading, through the real
+    // reporter: a reader of a green page can tell which suites were judged.
+    const page = renderReport(payload);
+    expect(page.status, page.stderr).toBe(0);
+    expect(page.stdout).toContain("### Coverage");
+    expect(page.stdout).toContain(`${SCRATCH_READING}.`);
+    // The record carries this reading too: the bullet is what the full gate measured, and the
+    // readings are all of it — one line each, in the registry's order — so a guard's coverage
+    // accrues beside the stage marks that measured it rather than only on the run page.
+    expect(readFileSync(record, "utf8")).toContain(`  ${SCRATCH_READING}.`);
+  }, 20_000);
+
+  it("quotes every declared reading the run carried, in the registry's order", () => {
+    // The bullet is where a full gate's measurements accrue, so it carries *all* of them rather
+    // than only the first reading the registry declares: one line per reading, in the registry's
+    // own order — the order the run page prints them in — so two nights' bullets can be read
+    // against each other guard by guard. The case walks `READINGS` in both halves, so a reading
+    // declared tomorrow is asserted here without the case being touched.
+    const record = freshRecord();
+    const result = runCi(
+      ["--no-cache", "--json"],
+      fullGateStubs({
+        CI_RECORD_RUNBOOK_FILE: record,
+        ...everyReadingGate("record-test-every-reading.mjs"),
+      }),
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).recorded).toBe("written");
     const text = readFileSync(record, "utf8");
-    expect(text).toContain("ci verdict:");
-    expect(text).not.toContain("scratch file at the stamp path");
-    expect(text).not.toContain("rendered-links coverage:");
+    // Each reading rides the bullet verbatim, and in the registry's own order — the same order
+    // the run page prints them in, so the two records read alike. The filter asks about the
+    // readings by name rather than about every indented line, so the day's suspects (or any
+    // line a later bullet grows) cannot be mistaken for one of them.
+    const lines = text.split("\n");
+    const quoted = lines.filter((line) =>
+      READINGS.some((entry) => line === `  ${readingLine(entry)}.`),
+    );
+    expect(quoted).toEqual(READINGS.map((entry) => `  ${readingLine(entry)}.`));
+    // …and the report and the run page agree with the record, reading by reading.
+    const payload = JSON.parse(result.stdout);
+    for (const entry of READINGS) expect(payload.readings[entry.id]).toBe(readingLine(entry));
+    const page = renderReport(payload);
+    expect(page.status, page.stderr).toBe(0);
+    for (const entry of READINGS) expect(page.stdout).toContain(`${readingLine(entry)}.`);
+  }, 20_000);
+
+  const ALARM_JUDGED_AT = "2026-10-18T09:00:00.000Z";
+
+  /**
+   * A test-stage stub that publishes an armed alarm's verdict before its passing report —
+   * the writer half of the armed suite, shrunk to one sidecar line: three applications
+   * judged through a 48h window, one of them owed. The seam is the verdict module's own,
+   * so the stub and the runner agree about the file by declaration.
+   */
+  const alarmVerdictGate = (name: string, verdictPath: string): Record<string, string> => ({
+    [QUEUE_ALARM_ENV]: verdictPath,
+    CI_TEST_SCRIPT: writeStub(name, [
+      "import { writeFileSync } from 'node:fs';",
+      "const out = process.argv.find((a) => a.startsWith('--outputFile=')).slice('--outputFile='.length);",
+      `writeFileSync(process.env.${QUEUE_ALARM_ENV}, JSON.stringify({`,
+      "  maxAgeHours: 48,",
+      `  judgedAt: '${ALARM_JUDGED_AT}',`,
+      "  pending: 3,",
+      "  overdue: [{ id: '93000000-0000-4000-8000-000000000002', username: 'kenji', waitHours: 72 }],",
+      "}));",
+      "writeFileSync(out, JSON.stringify({",
+      "  numTotalTests: 1, numFailedTests: 0,",
+      "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
+      "}));",
+    ].join("\n")),
+  });
+
+  it("the armed alarm's verdict rides the bullet as its one history line", () => {
+    // The queue's settled size is a measurement the same way the readings are: one line per
+    // night on one dated bullet, so a future night's bullet can be read against this one and
+    // a quiet queue is a number in the record rather than an empty page. The case drives the
+    // whole gate with the verdict-writing stub and asks the record for the line.
+    const record = freshRecord();
+    const verdictPath = path.join(stubDir, `queue-alarm-verdict-${(recordSeq += 1)}.json`);
+    const result = runCi(
+      ["--no-cache", "--json"],
+      fullGateStubs({
+        CI_RECORD_RUNBOOK_FILE: record,
+        ...alarmVerdictGate("record-test-alarm-verdict.mjs", verdictPath),
+      }),
+    );
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.queueAlarm).toEqual({
+      maxAgeHours: 48,
+      judgedAt: ALARM_JUDGED_AT,
+      pending: 3,
+      overdue: [{ id: "93000000-0000-4000-8000-000000000002", username: "kenji", waitHours: 72 }],
+    });
+    // The record names the moment judged, the window, the settled size, and the rows owed
+    // oldest first — the same facts the sidecar carried, read back off the file a reader of
+    // history opens rather than off a verdict sidecar the runner deleted.
+    expect(readFileSync(record, "utf8")).toContain(
+      "  queue-alarm: judged 2026-10-18T09:00:00.000Z against a 48h window — " +
+        "3 pending application(s), 1 owed past the window: @kenji 72h.",
+    );
+  }, 20_000);
+
+  it("an unarmed night's bullet carries no alarm line", () => {
+    // An armed run states what it judged; an unarmed one says nothing at all — the absence
+    // that keeps "the alarm is on duty" a line a record either carries or does not, rather
+    // than an “alarm: nothing” that would make a parked alarm read as a quiet one.
+    const record = freshRecord();
+    const result = runCi(["--no-cache", "--json"], fullGateStubs({ CI_RECORD_RUNBOOK_FILE: record }));
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).queueAlarm).toBeUndefined();
+    expect(readFileSync(record, "utf8")).not.toContain("queue-alarm: judged");
+  }, 20_000);
+
+  it("carries no frozen-scratch reading when the suite left none", () => {
+    // The base stub set signs no reading, so the payload's field reads `null` rather than an
+    // empty string — an omission a consumer can tell from a reading, never a fabricated zero.
+    const record = freshRecord();
+    const result = runCi(["--no-cache", "--json"], fullGateStubs({ CI_RECORD_RUNBOOK_FILE: record }));
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).readings[SCRATCH_PATHS_READING.id]).toBeNull();
+  }, 20_000);
+
+  it("a stray file at the frozen-scratch reading's path rides nothing", () => {
+    // The reader guards on the reading's own prefix — the same `startsWith` the rendered-links
+    // stamp's reader applies — so a file at that path that is not the scan's reading is not
+    // carried: the run page must not print a line of some other file's choosing.
+    const junkPath = path.join(stubDir, "scratch-junk.txt");
+    const record = freshRecord();
+    const result = runCi(
+      ["--no-cache", "--json"],
+      fullGateStubs({
+        CI_RECORD_RUNBOOK_FILE: record,
+        ...scratchStampingGate(
+          "record-test-scratch-junk.mjs",
+          "a scratch file at the reading's path",
+          junkPath,
+        ),
+      }),
+    );
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.readings[SCRATCH_PATHS_READING.id]).toBeNull();
+    const page = renderReport(payload);
+    expect(page.status, page.stderr).toBe(0);
+    // Tonight's readings section is absent, heading and all. The assertion names the heading's
+    // own line rather than the words: the page also charts the runbook's history under `###
+    // Coverage over time`, which is a record of earlier runs and not a reading this run left —
+    // and it is there whatever this run measured.
+    expect(page.stdout).not.toContain("### Coverage\n");
   }, 20_000);
 
   it("appends nothing the second time the same run closes", () => {
@@ -7143,7 +7515,7 @@ describe("the runner's dated runbook bullet", () => {
     expect(second.stderr).toContain("already holds this run's bullet");
     const text = readFileSync(record, "utf8");
     expect(text.match(/ci verdict:/g)).toHaveLength(1);
-    expect(text.match(/rendered-links coverage:/g)).toHaveLength(1);
+    expect(text.match(new RegExp(RENDERED_LINKS_READING.prefix, "g"))).toHaveLength(1);
   }, 20_000);
 
   it("a genuine run's record is not swallowed by an identical-looking earlier bullet", () => {
@@ -7173,8 +7545,8 @@ describe("the runner's dated runbook bullet", () => {
     const text = readFileSync(record, "utf8");
     // Both records sit in the file — the stand-in, and the genuine close under it.
     expect(text.match(/ci verdict:/g)).toHaveLength(2);
-    // The stamp line is the fact the old heading-only dedupe would have erased.
-    expect(text).toContain("  rendered-links coverage: chrome — the stub 2 (2 unique destinations).");
+    // The reading's line is the fact the old heading-only dedupe would have erased.
+    expect(text).toContain(`  ${RENDERED_LINKS_READING_LINE}.`);
   }, 20_000);
 
   it("--no-record leaves the runbook unwritten", () => {

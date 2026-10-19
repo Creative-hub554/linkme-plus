@@ -130,7 +130,7 @@ export interface RewriteTarget {
  * - jsonb configs that embed photo URLs (`cover_config` and friends), rewritten
  *   by casting the document to text, replacing, and casting back — a jsonb
  *   rebuild would need its shape, and the shape is the client's to change;
- * - `photo_urls`, the one `text[]` column, via `array_replace`;
+ * - URL arrays such as `photo_urls` and `evidence_urls`, via `array_replace`;
  * - the three free-text content columns, because a link pasted into a post,
  *   comment, or message is a stored URL too and would go dead with the object.
  *   The `like` predicates keep that cheap: a statement that matches nothing is
@@ -168,6 +168,8 @@ export const ARCHIVE_REWRITE_TARGETS: readonly RewriteTarget[] = [
   { table: "short_video_covers", column: "background_photo_url", kind: "text" },
   { table: "short_video_covers", column: "video_url", kind: "text" },
   { table: "short_video_covers", column: "photo_urls", kind: "array" },
+  // Verification evidence can include links to media hosted in our bucket
+  { table: "verification_requests", column: "evidence_urls", kind: "array" },
   // Free text that may hold a pasted link to one of our objects
   { table: "posts", column: "content", kind: "text" },
   { table: "comments", column: "content", kind: "text" },

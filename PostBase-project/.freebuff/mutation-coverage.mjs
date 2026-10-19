@@ -92,14 +92,26 @@
  * owns none of Vitest's flags.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // The lock a run holds while a script is weakened, and the recovery that puts one back
 // after a kill: the module owns the file and its shape, and the check that weakens the
 // scripts writes it, so the writer and the reader cannot drift apart. The guard sweep
 // holds the same lock — one file for both, since it means "this tree is being edited".
-import { recoverInterruptedRun } from "./mutation-lock.mjs";
+// The race wedge rides beside it for the same reason: the launcher plans its verdicts from
+// bytes it never reads again until after the check has struck, so the wedge is what makes
+// an outside edit inside that window a refused run rather than a report about two trees.
+import {
+  RACE_COMMENT,
+  envWithoutRaceSeam,
+  raceAfterLine,
+  raceFileInside,
+  raceMoved,
+  raceRowDetail,
+  raceWedge,
+  recoverInterruptedRun,
+} from "./mutation-lock.mjs";
 // The survivor words this report declares, and the two-way comparison its start-up refusal
 // acts on: declared once, in the vocabulary module the guard sweep and the preflight sweep
 // read their own tables from. The launcher's stamps stay here — what counts as a stamp is
@@ -427,13 +439,18 @@ function survivorsOf(cases) {
  * recovery — a healed tree is a fact about this run, and this report is where a run's
  * facts go, so `.freebuff/ci.mjs` can say what happened without reading a stderr.
  */
-function report({ cases, files, survivors, note, recovered }) {
+function report({ cases, checked = cases.length, files, survivors, note, recovered, racedStrikes = 0, racedFiles = [] }) {
   const exitCode = survivors.length === 0 ? 0 : note === undefined ? 1 : 2;
   const payload = {
     root: ROOT,
     gate: exitCode === 0 ? "pass" : "fail",
     exitCode,
-    checked: cases.length,
+    checked,
+    // The run's races, additive to the contract above: the same two fields and shapes the
+    // guard sweep and the preflight sweep carry, so a consumer reading a raced run needs
+    // to know neither one's shape.
+    racedStrikes,
+    racedFiles,
     files,
     survivors,
     recovered: recovered ? [recovered] : [],
@@ -517,13 +534,56 @@ if (vocabulary.unnamed.length > 0 || vocabulary.unspoken.length > 0) {
   refuseVocabulary(vocabulary, recovered);
 }
 
+// The race wedge, read from the shared race module beside the locking it sits inside: the
+// launcher's verdicts are recorded by the child check, whose per-case in-strike guard
+// catches an edit landing *during* one weakening — this is the between-strikes half. The
+// launcher plans from bytes it never reads again until after the child has struck, so it
+// wedges every gate and its test here and re-reads them after the child's last strike;
+// a file that no longer matches is one edited inside the run's window, and the cases that
+// answered it are voided below.
+//
+// `MUTATION_RACE_AT`/`MUTATION_RACE_FILE` land that edit deterministically — but only at
+// the run's end: the launcher cannot interleave with the child's per-case strikes, so the
+// seam's edit lands after the run's last strike, exactly the landing no per-strike gate
+// ever sees. It may stand only when `MUTATION_COVERAGE_ROOT` re-rooted the scripts — the
+// race file must sit inside that scratch tree, never inside the checkout.
+const raceAt = Number(process.env.MUTATION_RACE_AT ?? "0");
+const raceFile = process.env.MUTATION_RACE_FILE ?? "";
+if ((Number.isInteger(raceAt) && raceAt > 0) !== (raceFile !== "")) {
+  console.error(
+    "mutation-coverage: MUTATION_RACE_AT and MUTATION_RACE_FILE stand together — set both, or neither.",
+  );
+  process.exit(2);
+}
+const scriptRoot = process.env.MUTATION_COVERAGE_ROOT
+  ? resolve(process.env.MUTATION_COVERAGE_ROOT)
+  : ROOT;
+if (raceAt > 0 && (!process.env.MUTATION_COVERAGE_ROOT || !raceFileInside(process.env.MUTATION_COVERAGE_ROOT, raceFile))) {
+  console.error(
+    "mutation-coverage: MUTATION_RACE_* must land inside the scratch tree MUTATION_COVERAGE_ROOT " +
+      "re-rooted (set MUTATION_COVERAGE_ROOT, with the race file inside it) — " +
+      "the seam may not edit the checkout it would otherwise measure.",
+  );
+  process.exit(2);
+}
+const wedge = raceWedge(
+  COVERAGE_STRIKES.map((strike) => ({
+    key: strike.script,
+    files: [join(scriptRoot, strike.script), join(ROOT, strike.test)],
+  })),
+);
+
 if (existsSync(reportPath)) unlinkSync(reportPath);
 
 const entry = vitestEntry();
+// The race seam is this launcher's instrument, not the check file's: no child may inherit
+// the landing pair, both because it would refuse a run that never asked for a seam, and
+// because a race this launcher staged must never read as another run's own diagnosis.
+const childEnv = envWithoutRaceSeam(process.env);
 const child = spawnSync(
   process.execPath,
   [entry, "run", "--config", CONFIG, "--reporter=json", `--outputFile=${reportPath}`],
-  { cwd: ROOT, encoding: "utf8" },
+  { cwd: ROOT, encoding: "utf8", env: childEnv },
 );
 
 let vitestReport = null;
@@ -559,6 +619,53 @@ if (cases.length === 0) {
 // is what catches the deletion from inside the opt-in run: the default suite holds the table both
 // ways and anchor by anchor, but this is the run that actually weakens the gates.
 const survivors = survivorsOf(cases);
+
+// The run's last check over the wedge: an edit that lands after the child's last strike
+// follows no per-case gate, so the wedge passes over every measured pair before the report
+// is built — a raced file is refused there by the same record a per-strike gate keeps, one
+// row, the cases that answered it voided, exit 1. The seam's landing sits just before this
+// read, when `MUTATION_RACE_AT` names one.
+// `racedStrikes` stays zero here by contract, not by absence: it counts the strikes a
+// per-strike gate skipped, and the launcher's strikes all ran before this verify — the
+// race was caught after them, not before them — while `racedFiles` carries the rows.
+let racedStrikes = 0;
+const racedFiles = new Map(); // the file's project-relative path -> the row that names it
+if (raceAt > 0) {
+  writeFileSync(raceFile, readFileSync(raceFile, "utf8") + RACE_COMMENT);
+}
+let voidedChecks = 0;
+for (const strike of COVERAGE_STRIKES) {
+  const pair = { key: strike.script, files: [join(scriptRoot, strike.script), join(ROOT, strike.test)] };
+  const at = raceMoved(pair, wedge);
+  if (at === null) continue;
+  const which = at === 0 ? "the gate's source" : "the test the verdicts answer to";
+  const subjectLabel = rel(at === 0 ? join(scriptRoot, strike.script) : join(ROOT, strike.test));
+  if (racedFiles.has(subjectLabel)) continue; // one row per file, even across pairs
+  const row = {
+    path: subjectLabel,
+    line: null,
+    kind: "broken",
+    descriptor: "edited while the sweep ran",
+    // The same reason word every other race row carries, so a consumer filters a raced
+    // row out of any of the three payloads by the one word.
+    reason: "race",
+    detail: raceRowDetail(which, subjectLabel),
+  };
+  racedFiles.set(subjectLabel, row);
+  log(`mutation-coverage: RACED ${subjectLabel} — ${raceAfterLine(which)}`);
+  // Verdicts recorded before the edit landed are gone — they answer the wedged bytes — so
+  // the cases that ran against this gate leave the report and the count, refunded, and the
+  // row rides first the way the start-up refusals do: a file the run cannot speak for is
+  // the thing a reader hears about before the survivors that are truly there.
+  const marker = `when ${strike.script} is weakened`;
+  const voidedHere = [];
+  for (let i = survivors.length - 1; i >= 0; i -= 1) {
+    if ((survivors[i].descriptor ?? "").includes(marker)) voidedHere.push(survivors.splice(i, 1)[0]);
+  }
+  voidedChecks += voidedHere.length;
+  survivors.unshift(row);
+}
+
 // Only a run that would otherwise read as a pass is refused for the shortfall: a run that already
 // carries a survivor is red already, and the deleted-strike shape this catches is a *clean*, shorter
 // walk — every remaining case passes, and nothing else says a case is missing.
@@ -576,4 +683,12 @@ if (survivors.length === 0 && cases.length < COVERAGE_STRIKES.length) {
   });
 }
 
-report({ cases, files: (vitestReport.testResults ?? []).length, survivors, recovered });
+report({
+  cases,
+  checked: cases.length - voidedChecks,
+  files: (vitestReport.testResults ?? []).length,
+  survivors,
+  recovered,
+  racedStrikes,
+  racedFiles: [...racedFiles.values()].map((row) => row.path),
+});

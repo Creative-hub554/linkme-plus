@@ -385,6 +385,11 @@ export function getFolderForPurpose(purpose: string): string {
       return "short-video-covers";
     case "post":
       return "posts";
+    case "seed":
+      // The demo seeder's folder: the one putObject caller that is not a
+      // route. The seeder's keys and the eviction pass's listing both derive
+      // from this rule, so seeded orphans stay reachable by the pass.
+      return "seed";
     case "listing":
       return "listings";
     case "document":

@@ -116,10 +116,17 @@ describe("the server auth facade", () => {
     });
   });
 
-  test("the compatibility facade reads the same session from the cookies", async () => {
+  test("the compatibility facade returns only a Supabase-verified user", async () => {
     const session = await auth.api.getSession({ headers: new Headers() });
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
-    expect(session).toEqual({ user: { id: "user-1" } });
+    expect(mocks.getUser).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    expect(session).toEqual({ user: { id: "user-1", email: "theo@example.com" } });
+  });
+
+  test("the compatibility facade rejects an invalid stored session", async () => {
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null } });
+    await expect(auth.api.getSession({ headers: new Headers() })).resolves.toBeNull();
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   test("the compatibility handler says Supabase owns authentication", async () => {

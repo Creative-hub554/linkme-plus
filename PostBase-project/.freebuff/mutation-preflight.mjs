@@ -90,9 +90,22 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clearLock, recoverInterruptedRun, writeLock } from "./mutation-lock.mjs";
+import {
+  RACE_COMMENT,
+  clearLock,
+  envWithoutRaceSeam,
+  raceAfterLine,
+  raceFileInside,
+  raceMoved,
+  raceRowDetail,
+  raceSkipLine,
+  raceVoidLine,
+  raceWedge,
+  recoverInterruptedRun,
+  writeLock,
+} from "./mutation-lock.mjs";
 // The save a mutation is allowed to take: text that balances, or nothing. It sits beside the
 // lock because it is the other half of the same promise — the lock says how this file goes
 // back, this says what may be written to it in the first place.
@@ -122,6 +135,39 @@ const hash = (text) => createHash("sha1").update(text).digest("hex");
 const seam = (value, fallback) => (value ? (isAbsolute(value) ? value : join(ROOT, value)) : fallback);
 const TARGET = seam(process.env.MUTATION_PREFLIGHT_TARGET, join(ROOT, ".freebuff", "preview-preflight.mjs"));
 const TEST = seam(process.env.MUTATION_PREFLIGHT_TEST, join(ROOT, "src", "test", "preview-preflight.test.ts"));
+
+// The race seam, and the one thing it may not do — the same contract the guard sweep's
+// `MUTATION_RACE_AT`/`MUTATION_RACE_FILE` carry, read once in the shared lock module's
+// comment. The sweep plans from bytes it read at start-up; a session editing either half
+// of that pair inside the run's window makes the plan a lie twice over. The seam is how a
+// chassis test *lands* such an edit deterministically: the sweep itself appends the shared
+// comment to the named file just before the nth mutation's gate runs. It may stand only
+// when a target seam re-rooted its tree — the race file must sit inside the scratch tree
+// the target or the test was copied to, never inside the checkout the sweep would measure.
+const raceAt = Number(process.env.MUTATION_RACE_AT ?? "0");
+const raceFile = process.env.MUTATION_RACE_FILE ?? "";
+if ((Number.isInteger(raceAt) && raceAt > 0) !== (raceFile !== "")) {
+  refuse("MUTATION_RACE_AT and MUTATION_RACE_FILE stand together — set both, or neither.");
+}
+const targetScratchRoot = process.env.MUTATION_PREFLIGHT_TARGET ? dirname(TARGET) : null;
+const testScratchRoot = process.env.MUTATION_PREFLIGHT_TEST ? dirname(TEST) : null;
+if (
+  raceAt > 0 &&
+  !raceFileInside(targetScratchRoot, raceFile) &&
+  !raceFileInside(testScratchRoot, raceFile)
+) {
+  refuse(
+    "MUTATION_RACE_* must land inside a scratch tree one seam re-rooted (set MUTATION_PREFLIGHT_TARGET " +
+      "or MUTATION_PREFLIGHT_TEST, with the race file inside it) — " +
+      "the seam may not edit the checkout it would otherwise measure.",
+  );
+}
+
+// The run's race facts, declared here — before the start-up refusal, which reads them while
+// writing the payload a consumer already reads — so a refusal carries the same fields a
+// finished sweep does, empty: nothing was checked, nothing raced, nothing named.
+let racedStrikes = 0;
+const racedFiles = new Map(); // the file's project-relative label -> the row that names it
 
 const args = process.argv.slice(2);
 const listOnly = args.includes("--list");
@@ -539,11 +585,15 @@ function selectedCases() {
 function runTest(file) {
   const dir = mkdtempSync(join(tmpdir(), "mutation-preflight-"));
   const reportPath = join(dir, "report.json");
+  // The race seam is this sweep's instrument, not its children's: the gates' own suites
+  // drive other tree-editing sweeps from inside themselves, and no child may inherit the
+  // landing pair this process read — it would refuse a run that has nothing to do with us.
+  const childEnv = envWithoutRaceSeam(process.env);
   try {
     const child = spawnSync(
       process.execPath,
       [VITEST, "run", rel(file), "--reporter=json", `--outputFile=${reportPath}`],
-      { cwd: ROOT, encoding: "utf8", timeout: TIMEOUT_MS },
+      { cwd: ROOT, encoding: "utf8", timeout: TIMEOUT_MS, env: childEnv },
     );
     if (child.error?.code === "ETIMEDOUT") {
       return { inconclusive: true, reason: `the test run exceeded ${TIMEOUT_MS}ms and was stopped` };
@@ -702,6 +752,11 @@ function sweepPayload({ checked, caught, survivors, exitCode }) {
     cases: CASES.length,
     selected: plan.length,
     checked,
+    // The run's races, additive to the contract above — the same two fields, the same
+    // shapes (`racedFiles` is the paths the rows name), as the guard sweep's payload: a
+    // consumer reads a raced run identically from either sweep.
+    racedStrikes,
+    racedFiles: [...racedFiles.values()].map((row) => row.path),
     gate: exitCode === 0 ? "pass" : "fail",
     exitCode,
     recovered: recovered ? [recovered] : [],
@@ -871,9 +926,58 @@ if (unanchored.length > 0 || unnamed.length > 0 || unspoken.length > 0) {
   refuseStartUp({ unnamed, unspoken, unanchored });
 }
 
-// The hash the end-of-run check compares against: taken after the anchor refusal so a table
-// that does not fit never reaches the sweep, and before the first write either way.
-const targetHashAtStart = hash(readFileSync(TARGET, "utf8"));
+// The wedge, read from the shared race module beside the locking it sits inside: the two
+// files every verdict answers to — the mutated target and the test file the verdicts come
+// from — hashed once here, after the anchor refusal so a table that does not fit never
+// reaches the sweep, and re-read at every gate below and once more before the report.
+const wedge = raceWedge([{ key: TARGET, files: [TARGET, TEST] }]);
+
+// The half that moved, in this sweep's own words; the shared module answers with an index.
+const raceWhich = (at) => (at === 0 ? "the sweep's target" : "the test the sweep answers to");
+
+function landRaceSeam() {
+  writeFileSync(raceFile, readFileSync(raceFile, "utf8") + RACE_COMMENT);
+}
+
+// The run's race facts ride the payload additively — the same two fields the guard sweep's
+// `--json` carries — so a consumer reads a raced run identically from either sweep and
+// needs to know neither one's shape. (The declarations themselves sit beside the seam
+// validation above, because the start-up refusal writes them into its payload.)
+
+/**
+ * Carry one raced row and void the verdicts this run recorded for the file before the edit
+ * landed: they were true against bytes nobody can read back anymore, so they leave both the
+ * report and the count, and the checks that recorded them are refunded — the run measured
+ * nothing that still stands. One row per file however many cases it held.
+ */
+function recordRace(which) {
+  const subjectLabel = rel(TARGET);
+  if (racedFiles.has(subjectLabel)) return 0;
+  const row = {
+    path: subjectLabel,
+    line: null,
+    kind: "broken",
+    descriptor: "edited while the sweep ran",
+    // The same reason word the guard sweep's race row carries, so a consumer filters a
+    // raced row out of either payload by the one word.
+    reason: "race",
+    detail: raceRowDetail(which, subjectLabel),
+  };
+  racedFiles.set(subjectLabel, row);
+  survivors.push(row);
+  let voided = 0;
+  for (let i = survivors.length - 1; i >= 0; i -= 1) {
+    // The row above is a verdict ABOUT the file, not one recorded under it — it is the one
+    // entry with `path === subjectLabel` that stays, while every verdict recorded before
+    // the edit landed leaves both the list and the count.
+    if (survivors[i] !== row && survivors[i].path === subjectLabel) {
+      survivors.splice(i, 1);
+      voided += 1;
+    }
+  }
+  checked -= voided;
+  return voided;
+}
 
 // The active mutation, so the signal handlers below can put it back: a `finally` runs
 // nothing when the process is killed, and a mutated preflight left on disk is exactly the
@@ -902,11 +1006,34 @@ let checked = 0;
 
 log(`mutation-preflight: ${plan.length} mutation(s) against ${rel(TARGET)} via ${rel(TEST)}\n`);
 
-for (const item of plan) {
+for (const [caseIndex, item] of plan.entries()) {
+  // A chassis test's edit lands here, just before the gate below reads the files — the same
+  // window a real session's would, at a moment no `finally` owns. The seam's landing is
+  // keyed on the case the run is about to take, so `MUTATION_RACE_AT=n` is the nth
+  // mutation's gate, whichever slice `--only`/`--limit` left.
+  if (caseIndex + 1 === raceAt) landRaceSeam();
+
+  const prefix = `[${checked + 1}/${plan.length}]`;
+
+  // The gate, shared with the guard sweep and the coverage launcher: a file a verdict
+  // answers to that is not the wedged bytes anymore is one another session edited inside
+  // this run's window — the mutation is not applied, the verdicts recorded earlier for it
+  // are voided (and their checks refunded), and one row is carried for the file however
+  // many cases it holds. Splicing this case's `find`/`replace` into the moved file would
+  // measure a tree that exists on neither side of the edit.
+  const moved = raceMoved({ key: TARGET, files: [TARGET, TEST] }, wedge);
+  if (moved !== null) {
+    const which = raceWhich(moved);
+    const voided = recordRace(which);
+    racedStrikes += 1;
+    log(`${prefix} RACED     ${item.id}  ${item.what}`);
+    log(`             ${voided === 0 ? raceSkipLine(which) : raceVoidLine(which, voided)}`);
+    continue;
+  }
+
   checked += 1;
   const original = readFileSync(TARGET, "utf8");
   const anchor = anchorStatus(original, item);
-  const prefix = `[${checked}/${plan.length}]`;
 
   // The up-front refusal has already read every anchor, so this fires only when the source
   // moved between that read and this case — a concurrent edit. It is the same refusal in the
@@ -1023,16 +1150,41 @@ for (const item of plan) {
   }
 }
 
-// The target is put back after every entry, so anything different here is someone else's
-// edit arriving mid-sweep: the table's anchors are now statements about a file that no
-// longer exists, and the run says so rather than reporting a verdict about the old one.
-if (hash(readFileSync(TARGET, "utf8")) !== targetHashAtStart) {
+// When the slice is shorter than `MUTATION_RACE_AT` names, no case's gate ever landed the
+// edit, so it lands here instead — just before the run's last check reads the files — and
+// the end-of-run sweep is driven exactly as the per-case one is.
+if (raceAt > 0 && plan.length < raceAt) {
+  landRaceSeam();
+}
+
+// The run's last check over the wedge: an edit that lands after the target's last mutation
+// follows no gate, so the wedge passes once more before the report — a raced file is
+// refused by the same record the per-case gate keeps, one row, verdicts voided, exit 1.
+// This is also what answers an edit to the test file, which the bare target hash this
+// replaces never read.
+const movedAtEnd = raceMoved({ key: TARGET, files: [TARGET, TEST] }, wedge);
+if (movedAtEnd !== null) {
+  const which = raceWhich(movedAtEnd);
+  const alreadyNamed = racedFiles.has(rel(TARGET));
+  recordRace(which);
+  if (!alreadyNamed) {
+    log("");
+    log(`RACED       ${rel(TARGET)} — ${raceAfterLine(which)}`);
+  }
+  const racedExitCode = 1;
+  if (JSON_OUTPUT) {
+    process.stdout.write(
+      `${JSON.stringify(sweepPayload({ checked, caught, survivors, exitCode: racedExitCode }), null, 2)}\n`,
+    );
+    process.exit(racedExitCode);
+  }
   console.error(
-    `\nSTOP: ${rel(TARGET)} differs from the source this sweep started with — a concurrent edit? ` +
-      "Re-run to sweep the file as it is now, and inspect it by hand first: a mutation this " +
-      "sweep applied may have been absorbed into that edit rather than replaced by it.",
+    `\nSTOP: ${rel(TARGET)} was edited while the sweep ran; nothing in it is measured, and every verdict ` +
+      "this run recorded for it was voided before the report. Re-run to sweep the file as it is now, and " +
+      "inspect it by hand first: a mutation this sweep applied may have been absorbed into that edit — " +
+      "the lock is what tells those apart, and it is gone because every restore verified.",
   );
-  process.exit(2);
+  process.exit(racedExitCode);
 }
 
 const caughtElsewhere = caught.filter((item) => !item.named);

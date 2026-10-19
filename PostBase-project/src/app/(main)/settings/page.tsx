@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { AuthenticatorSecurity } from "@/components/auth/authenticator-security";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
+import { VerificationApplication } from "@/components/settings/verification-application";
 import { ProfileAvatarUpload } from "@/components/profile/profile-avatar-upload";
 import { UserRound, MapPin, Sparkles, Check, Loader2, Briefcase, GraduationCap, Phone, Mail } from "lucide-react";
 
@@ -290,6 +291,7 @@ export default function SettingsPage() {
       </div>
 
       <AppearanceSettings />
+      <VerificationApplication />
 
       {sectionError.load && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">

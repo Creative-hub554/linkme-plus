@@ -77,10 +77,132 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+/**
+ * The race wedge, shared by the three tree-editing checks.
+ *
+ * Every one of them plans its strikes from bytes it read at start-up and answers for files
+ * it will re-read, restore and re-test; a session that edits any of those files inside the
+ * run's window makes the plan a lie twice over — a splice taken from stale source is written
+ * over the editor's edit, and a verdict recorded before the edit survives onto a file nobody
+ * can read back. So the sweep hashes every file a verdict answers to while it plans (the
+ * **wedge**), re-reads them before each strike (the **gate**) and once more after the last
+ * one (the **end-of-run sweep**); a file that no longer matches its wedge is not measured,
+ * its verdicts are voided, and one `broken` row names it. The hashing, the comparison and
+ * the scratch-containment rule below live *here* — beside the locking they sit inside — so
+ * the three checks share one algorithm rather than three copies that can drift into
+ * disagreeing about what a race is.
+ */
+
+/** The comment the sweeps' own edit seam appends: one outside edit, spelled the same everywhere. */
+export const RACE_COMMENT = "\n/* an outside edit, injected by the sweep's race seam */\n";
+
+/** Hash text the way every wedge, gate and end-of-run sweep compare. */
+const raceHash = (text) => createHash("sha1").update(text).digest("hex");
+
+/**
+ * Hash the files each verdict answer to, before the first strike.
+ *
+ * `pairs` is one entry per measured subject: a `key` the caller can carry back to the list
+ * (a route and its test, a self target and its test, a script and its test — whatever the
+ * sweep's own identity is) and the absolute `files` the verdict answers to, in a fixed
+ * order the caller repeats at every gate. Returns a Map the caller passes unchanged to
+ * `raceMoved` below — readFileSync errors are deliberately not caught here: a file the
+ * sweep planned to measure that cannot be read is a refusal, not a skipped measurement.
+ */
+export function raceWedge(pairs) {
+  const hashes = new Map();
+  for (const pair of pairs) {
+    hashes.set(
+      pair.key,
+      pair.files.map((file) => raceHash(readFileSync(file, "utf8"))).join("\u0000"),
+    );
+  }
+  return hashes;
+}
+
+/**
+ * The gate, and the sweep's other end: which half of `pair` is no longer the wedged bytes.
+ *
+ * Returns the moved half's index (0 = the first file, 1 = the second, …) or `null` when
+ * every half still reads exactly what the wedge read — the names are the caller's to give
+ * the index, because each sweep's report says which half moved in its own words, and the
+ * sentence is spelled once in its own source. Only the pair's own files are read.
+ */
+export function raceMoved(pair, hashes) {
+  const recorded = hashes.get(pair.key);
+  if (recorded === undefined) return null;
+  const now = pair.files.map((file) => raceHash(readFileSync(file, "utf8")));
+  const then = recorded.split("\u0000");
+  const at = now.findIndex((current, index) => current !== then[index]);
+  return at === -1 ? null : at;
+}
+
+/**
+ * Whether `raceFile` sits strictly inside `root` — the answer the sweeps' edit seams ask
+ * before they write: a seam may append its comment only inside a scratch tree one walk was
+ * re-rooted to, never inside the checkout the sweep would otherwise measure.
+ */
+export function raceFileInside(root, raceFile) {
+  if (!root || !raceFile) return false;
+  const relPath = relative(resolve(root), resolve(raceFile));
+  return relPath !== "" && !relPath.startsWith("..") && !isAbsolute(relPath);
+}
+
+//
+// The sentences, one spelling each, because a race row is read by three consumers —
+// the guards sweep, the preflight sweep and the coverage launcher — and a reason
+// re-worded in one of them is a disagreement the chassis reds rather than two
+// truthful-sounding log lines. `subjectLabel` is the file's project-relative path the
+// sweep's own reports carry.
+//
+
+/** The `--json` detail a race row carries, built once for all three sweeps. */
+export function raceRowDetail(which, subjectLabel) {
+  return (
+    `an edit to ${which} (${subjectLabel}) landed inside the sweep's window; nothing in the ` +
+    "file is measured, and every verdict this run recorded for it was voided before the report"
+  );
+}
+
+/** The per-strike log line when nothing had been recorded for the file yet. */
+export function raceSkipLine(which) {
+  return `left whole; ${which} was edited while the sweep ran`;
+}
+
+/** The per-strike log line when verdicts recorded earlier for the file are taken back. */
+export function raceVoidLine(which, voided) {
+  return `left whole; the ${which} changed mid-run — ${voided} verdict(s) recorded earlier for it are void`;
+}
+
+/** The end-of-run sweep's log line: the edit landed after the file's last strike. */
+export function raceAfterLine(which) {
+  return `${which} changed after its last strike; its verdicts are void`;
+}
+
+/**
+ * The environment a sweep hands its children: a copy of this run's own with the race
+ * landing pair taken out.
+ *
+ * `MUTATION_RACE_AT`/`MUTATION_RACE_FILE` are how a chassis test lands an outside edit
+ * deterministically, and the one thing the seam must never do is reach a child — a child
+ * inherits its parent's environ, and a pinned suite that drives another tree-editing
+ * sweep from inside itself (the guard sweep's own test run spawns the preflight sweep,
+ * for the real case) would read a pair it was handed and refuse a run that has nothing
+ * to do with it. The strip used to be a hand-written copy-and-delete at every spawn site —
+ * the shape a fourth sweep omits without noticing — so it lives here, beside the seam it
+ * governs, and the sweeps bind `envWithoutRaceSeam(process.env)` wherever they spawn.
+ */
+export function envWithoutRaceSeam(env) {
+  const childEnv = { ...env };
+  delete childEnv.MUTATION_RACE_AT;
+  delete childEnv.MUTATION_RACE_FILE;
+  return childEnv;
+}
 
 /**
  * Where a run records the file it is mutating right now.

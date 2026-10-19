@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { reports, moderationActions, auditLogs, users, moderationActionEnum } from "@/lib/db/schema";
+import { reports, moderationActions, auditLogs, users, moderationActionEnum, posts, comments } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 /**
  * Resolve a report with a moderation action.
@@ -58,31 +58,49 @@ export async function POST(request: Request) {
       return errorResponse("Report is not pending", 409);
     }
 
-    // Create moderation action
-    const [modAction] = await db
-      .insert(moderationActions)
-      .values({
+    // A moderation decision is one state transition: the removal (when there
+    // is content), its action row, report status, and audit entry either all
+    // commit or all roll back.  A 500 must never leave content hidden while its
+    // report still looks pending and retryable.
+    const modAction = await db.transaction(async (tx) => {
+      if (action === "removal" && report.targetType === "post") {
+        await tx
+          .update(posts)
+          .set({ deletedAt: new Date() })
+          .where(and(eq(posts.id, report.targetId), isNull(posts.deletedAt)));
+      }
+      if (action === "removal" && report.targetType === "comment") {
+        await tx
+          .update(comments)
+          .set({ deletedAt: new Date() })
+          .where(and(eq(comments.id, report.targetId), isNull(comments.deletedAt)));
+      }
+
+      const [created] = await tx
+        .insert(moderationActions)
+        .values({
+          targetType: report.targetType,
+          targetId: report.targetId,
+          actorId: session.user.id,
+          action,
+          reason,
+        })
+        .returning();
+
+      await tx
+        .update(reports)
+        .set({ status: "resolved" })
+        .where(eq(reports.id, reportId));
+
+      await tx.insert(auditLogs).values({
+        actorId: session.user.id,
+        action: `moderation.${action}`,
         targetType: report.targetType,
         targetId: report.targetId,
-        actorId: session.user.id,
-        action,
-        reason,
-      })
-      .returning();
+        metadata: { reportId, reason },
+      });
 
-    // Update report status
-    await db
-      .update(reports)
-      .set({ status: "resolved" })
-      .where(eq(reports.id, reportId));
-
-    // Create audit log
-    await db.insert(auditLogs).values({
-      actorId: session.user.id,
-      action: `moderation.${action}`,
-      targetType: report.targetType,
-      targetId: report.targetId,
-      metadata: { reportId, reason },
+      return created;
     });
 
     return successResponse({ action: modAction }, 201);

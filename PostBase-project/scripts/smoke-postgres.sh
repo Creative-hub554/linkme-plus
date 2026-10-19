@@ -122,10 +122,16 @@ echo "smoke-postgres: seeding (DATABASE_URL set in the environment; it wins over
 DATABASE_URL="$DSN" npm run db:seed
 
 # --- the smoke ---------------------------------------------------------------
-echo "smoke-postgres: running the moderation live smokes (handlers + rendered dashboard) against $DSN"
-# The two files run as parallel workers against the same branch on purpose,
-# with deliberately disjoint row ids: the rendered smoke brings its own admin
-# and report, so nothing it touches is the handler smoke's to also touch.
+echo "smoke-postgres: running the moderation and verification live smokes (handlers + rendered boards) against $DSN"
+# The five files run as parallel workers against the same branch on purpose,
+# with deliberately disjoint row ids: each rendered smoke brings its own admin
+# and its own row (the `88000000`/`92000000` blocks for moderation, the
+# `94000000`/`95000000` blocks for verification), and the verification handler
+# smoke's own submit row keys off the seeded cast's free member — so nothing
+# one worker touches is another worker's to also touch.
 DATABASE_URL="$DSN" SMOKE_LIVE_POSTGRES=1 npx vitest run \
   src/lib/db/moderation-live-postgres.test.ts \
-  src/app/api/admin/moderation-flow-live-postgres.rendered-smoke.test.tsx
+  src/app/api/admin/moderation-flow-live-postgres.rendered-smoke.test.tsx \
+  src/app/api/admin/reports-board-live-postgres.rendered-smoke.test.tsx \
+  src/app/api/verification-flow-live-postgres.test.ts \
+  src/app/api/verification-flow-live-postgres.rendered-smoke.test.tsx

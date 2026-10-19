@@ -6,3 +6,6 @@ dist/
 .env
 .env.local
 .dev.vars
+
+# gstack (global install)
+.amazonq/rules/gstack.md

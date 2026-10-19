@@ -13,15 +13,33 @@ node_modules/
 # proposal the `collect:propose` job writes for its artifact/comment.
 .freebuff/.collect-budget-soft.json
 .freebuff/.collect-budget-run.json
+# The verification queue's armed alarm publishes its judgement here — the rows (handles
+# and waits, oldest first) the nightly report's alarm section renders, written by the
+# armed test, cleared by the runner per attempt, carried in the `--json` report. Transient,
+# like the reporter's sidecars above; the file's one spelling and shape are
+# `.freebuff/queue-alarm-verdict.mjs`'s.
+.freebuff/.ci-queue-alarm-verdict.json
 .freebuff/collect-budget-proposal.md
 .freebuff/.collect-budget-proposal.json
 .freebuff/collect-apply-pr.md
 .freebuff/.collect-budget-samples/
 .freebuff/collect-gates.md
-# The rendered-links guard's coverage stamp: written by the suite's own close-out,
-# cleared by the runner's test stage at each attempt, read by the runbook's close.
-# Transient like the reporter's sidecars above.
-.freebuff/.rendered-links-coverage.txt
+# The floor proposal the nightly job opens when a reading steps below the floor its records have
+# settled to: the writer step derives it from those records (`.freebuff/coverage-trend.mjs
+# --propose-low-water`) and the step after it opens the pull request with it as the body. A
+# transient of the run, like the collect-budget proposal above it, and regenerable by hand with
+# `npm run coverage:propose-low-water`.
+.freebuff/coverage-floor-proposal.md
+# The coverage readings the suite's guards publish — the rendered-links guard's
+# destinations, the frozen-scratch pass's roster of judged suites, the convention guards'
+# exercised roster. Each is declared once in `.freebuff/coverage-readings.mjs`: the id the
+# runner keys it by, the sidecar it lands in (`.<id>-coverage.txt`), the env seam a test
+# points elsewhere, the prefix its line carries. A dot-file of its own per reading, because
+# the readings have separate writers running in parallel workers — written by the guard's
+# own close-out, cleared by the runner's test stage at each attempt, read by the runner's
+# close and the run page. One rule for all of them, so a reading declared in the registry
+# needs no edit here: transient, like the reporter's sidecars above.
+.freebuff/.*-coverage.txt
 # The poster's record of what it redacted before posting a comment: written beside the body
 # it maps to, so CI uploads it with the artifact that holds the raw text. Generated, not kept.
 *.redactions.json

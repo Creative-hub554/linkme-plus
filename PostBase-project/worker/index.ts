@@ -10,9 +10,10 @@ import {
 import {
   createEvictionStorage,
   createEvictionStore,
+  evictionPrefixes,
   runEvictionPass,
 } from "../src/lib/media-eviction";
-import { getFolderForPurpose, PUBLIC_URL } from "../src/lib/r2";
+import { PUBLIC_URL } from "../src/lib/r2";
 import { authenticateWsUpgrade } from "../src/lib/realtime/ws-session";
 
 // The Durable Object class must be exported from the Worker entry for
@@ -67,9 +68,10 @@ const worker = {
   // The media cron (wrangler.jsonc's `17 * * *`), two passes in order:
   //
   // 1. **Eviction** reclaims uploads no post or comment ever referenced —
-  //    the files a client uploaded and then never published. It runs first
-  //    because its grace window is the shorter one: an orphan deleted here
-  //    never reaches the archive, which would otherwise ship it to Drive and
+  //    the files a client uploaded and then never published, and the demo
+  //    assets a re-seed stopped pointing at. It runs first because its
+  //    grace window is the shorter one: an orphan deleted here never
+  //    reaches the archive, which would otherwise ship it to Drive and
   //    keep it there forever.
   // 2. **The archive** moves everything R2 has held for longer than its grace
   //    period to Google Drive, rewrites the database to point at it there,
@@ -94,9 +96,11 @@ const worker = {
         store: createEvictionStore(),
         config: {
           publicUrlBase: PUBLIC_URL,
-          // The same folder `/api/posts/media` and a presigned post upload
-          // write to, so the pass and the upload routes cannot drift apart.
-          prefix: `${getFolderForPurpose("post")}/`,
+          // Every folder the pass covers, each derived from the same rule
+          // its writers derive their keys with: the post folder for
+          // `/api/posts/media` and presigned uploads, the seed folder for
+          // the demo seeder — the one putObject caller outside a route.
+          prefixes: evictionPrefixes(),
           // 24 hours is a generous publish window for an upload, and it must
           // stay below ARCHIVE_GRACE_DAYS (3) or orphans reach Drive first,
           // where this pass can no longer see them.

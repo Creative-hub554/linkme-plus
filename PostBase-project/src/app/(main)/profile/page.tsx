@@ -59,6 +59,7 @@ interface ProfilePost {
     name?: string | null;
     username?: string | null;
     avatarUrl?: string | null;
+    verified?: boolean;
   };
   media?: ProfileMediaItem[];
   /**
@@ -133,6 +134,8 @@ function ProfileContent() {
   const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [stats, setStats] = useState<{ followers: number; following: number } | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockedByViewer, setBlockedByViewer] = useState(false);
   /** Which member list is open, if any. */
   const [memberList, setMemberList] = useState<MemberListMode | null>(null);
   /** Latest follow change touching this profile, for the open list. */
@@ -191,6 +194,7 @@ function ProfileContent() {
     bio: "",
     location: "",
     joinedAt: "",
+    verified: false,
   });
 
   /** Either the requested member, or the signed-in member's own id. */
@@ -245,12 +249,15 @@ function ProfileContent() {
           bio: payload.user.bio || (typeof authMetadata.bio === "string" ? authMetadata.bio : ""),
           location: payload.user.location || (typeof authMetadata.location === "string" ? authMetadata.location : ""),
           joinedAt: payload.user.createdAt ? new Date(payload.user.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "",
+          verified: Boolean(payload.user.verified),
         });
         setStats({
           followers: Number(payload.stats?.followers ?? 0),
           following: Number(payload.stats?.following ?? 0),
         });
         setIsFollowing(Boolean(payload.isFollowing));
+        setIsBlocked(Boolean(payload.isBlocked));
+        setBlockedByViewer(Boolean(payload.blockedByViewer));
       } catch {
         // The default gradient remains available if the profile cannot load.
         if (!cancelled && requestedQuery) setProfileError("This profile is unavailable right now.");
@@ -789,6 +796,7 @@ function ProfileContent() {
           bio: profileDetails.bio || null,
           location: profileDetails.location || null,
           joinedAt: profileDetails.joinedAt || null,
+          verified: profileDetails.verified,
         }}
         cover={cover}
         isOwner={isOwnProfile}
@@ -812,6 +820,15 @@ function ProfileContent() {
                 }
               : previous,
           );
+        }}
+        isBlocked={isBlocked}
+        blockedByViewer={blockedByViewer}
+        onBlockChange={(blocked, counts) => {
+          setIsBlocked(blocked);
+          setBlockedByViewer(blocked);
+          if (blocked) setIsFollowing(false);
+          if (counts) setStats(counts);
+          setMessageOpen(false);
         }}
         onMessage={() => setMessageOpen(true)}
       />
@@ -906,7 +923,7 @@ function ProfileContent() {
                 <>
                   {profilePosts.map((post) => {
                     const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));
-                    return <PostCard key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} liked={post.viewerLiked} reaction={post.viewerReaction} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onReactionSettled={(type) => setProfilePosts((current) => current.map((row) => (row.id === post.id ? { ...row, viewerReaction: type, viewerLiked: type === "like" } : row)))} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
+                    return <PostCard key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined, verified: post.author.verified }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} liked={post.viewerLiked} reaction={post.viewerReaction} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onReactionSettled={(type) => setProfilePosts((current) => current.map((row) => (row.id === post.id ? { ...row, viewerReaction: type, viewerLiked: type === "like" } : row)))} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
                   })}
 
                   {(postsHasMore || postsMoreError) && (

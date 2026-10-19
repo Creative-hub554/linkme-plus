@@ -2,7 +2,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -861,5 +861,239 @@ describe("the coverage mutation launcher's survivor vocabulary", () => {
     expect(result.stdout).toContain('"forsaken" (FORSAKEN): 0 stamp(s) the bucket reads');
     expect(result.stdout).toContain('UNSPOKEN  the "forsaken" word');
     expect(result.stderr).toContain("vocabulary hole(s)");
+  });
+});
+
+/**
+ * The launcher's race window, driven against a scratch copy of the gate scripts.
+ *
+ * The launcher's verdicts are recorded by the child check, whose per-case in-strike guard
+ * catches an edit landing *during* one weakening; this is the between-strikes half. The
+ * launcher wedges every declared gate and its test before it spawns Vitest and re-reads
+ * them after the child's last strike: a moved half is **not measured** — the cases that
+ * answered the pair leave the report and the count — and one `broken` row (`reason:
+ * "race"`) names it, riding first the way the start-up refusals do. `racedStrikes` stays
+ * zero by contract (nothing was skipped — the verify catches the edit *after* the strikes),
+ * and `racedFiles` carries the paths, the same shapes the other two sweeps' payloads carry.
+ * The seam (`MUTATION_RACE_AT`/`MUTATION_RACE_FILE`) lands the edit deterministically after
+ * the run's last strike, and only inside a scratch tree `MUTATION_COVERAGE_ROOT` re-rooted.
+ */
+describe("the coverage launcher's race window", () => {
+  const RACE_COMMENT = "\n/* an outside edit, injected by the sweep's race seam */\n";
+  const GATES = [
+    ".freebuff/coverage-floor.mjs",
+    ".freebuff/coverage-headroom.mjs",
+    ".freebuff/coverage-scopes.mjs",
+    ".freebuff/coverage-report.mjs",
+    ".freebuff/coverage-propose.mjs",
+  ];
+
+  /** The five gate scripts, copied whole into a scratch tree the wedge reads instead. */
+  function makeScriptRoot(): string {
+    const root = mkdtempSync(path.join(tmpdir(), "coverage-race-"));
+    for (const script of GATES) {
+      const dest = path.join(root, script);
+      mkdirSync(path.dirname(dest), { recursive: true });
+      writeFileSync(dest, readFileSync(path.join(projectRoot, script), "utf8"));
+    }
+    return root;
+  }
+
+  /** The full stub report: one passing case per gate, named the way the check names them. */
+  const passingReport = () =>
+    stubReport([
+      {
+        path: "src/test/coverage-mutation.test.ts",
+        cases: GATES.map((script) => ({
+          title: `fails src/test/x.test.ts when ${script} is weakened`,
+          status: "passed" as const,
+        })),
+      },
+    ]);
+
+  /** Runs the launcher with the stub and the caller's env over it. */
+  function runRace(stubPath: string, env: Record<string, string | undefined> = {}) {
+    return spawnSync(process.execPath, [launcher, "--json"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      env: { ...process.env, MUTATION_LOCK_FILE: lockPath, MUTATION_COVERAGE_VITEST: stubPath, ...env },
+    });
+  }
+
+  it("refuses a race file in the checkout, and refuses half a seam", () => {
+    const stub = writeStub("race-refused.mjs", { report: passingReport() });
+
+    const refused = runRace(stub, {
+      MUTATION_RACE_AT: "1",
+      MUTATION_RACE_FILE: path.join(projectRoot, ".freebuff/coverage-floor.mjs"),
+    });
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toContain("may not edit the checkout it would otherwise measure");
+
+    const half = runRace(stub, { MUTATION_RACE_AT: "1" });
+    expect(half.status).toBe(2);
+    expect(half.stderr).toContain("stand together");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("carries a raced gate as a first row and voids the cases that answered it", () => {
+    // One gate's source is edited after the child's last strike — the window no per-case
+    // gate runs to catch — so the run's last check over the wedge names it, voids the case
+    // that answered the gate (its verdict rode the wedged bytes), and exits 1.
+    const root = makeScriptRoot();
+    const stub = writeStub("race-midrun.mjs", { report: passingReport() });
+
+    const result = runRace(stub, {
+      MUTATION_COVERAGE_ROOT: root,
+      MUTATION_RACE_AT: "1",
+      MUTATION_RACE_FILE: path.join(root, ".freebuff/coverage-floor.mjs"),
+    });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+      racedFiles: string[];
+      survivors: { kind: string; reason?: string; detail: string }[];
+    };
+    expect(payload.racedStrikes).toBe(0); // nothing was skipped: the verify catches the edit after the strikes
+    expect(payload.racedFiles).toHaveLength(1);
+    expect(payload.checked).toBe(5); // the cases the wedge does not void stay counted
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+    expect(result.stderr).toContain("changed after its last strike");
+    // The seam is the whole writer: the pool is the plan's bytes plus the one comment.
+    expect(readFileSync(path.join(root, ".freebuff/coverage-floor.mjs"), "utf8").endsWith(RACE_COMMENT)).toBe(true);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("voids a survived verdict the raced file's cases carried, and refunds its check", () => {
+    // A case that asserted the weakened gate fails — and its gate was still passing — is a
+    // survived mutation; when the wedge retroactively says its gate was edited inside the
+    // window, that verdict rides a subject nobody can read back, so it is voided and
+    // refunded with the raced row riding first over it.
+    const root = makeScriptRoot();
+    const stub = writeStub("race-void.mjs", {
+      report: stubReport([
+        {
+          path: "src/test/coverage-mutation.test.ts",
+          cases: [
+            {
+              title: `fails src/test/x.test.ts when ${GATES[0]} is weakened`,
+              status: "failed" as const,
+              messages: ["Running src/test/x.test.ts against the weakened gate still passed, so the mutation survived."],
+            },
+            ...GATES.slice(1).map((script) => ({
+              title: `fails src/test/x.test.ts when ${script} is weakened`,
+              status: "passed" as const,
+            })),
+          ],
+        },
+      ]),
+    });
+
+    const result = runRace(stub, {
+      MUTATION_COVERAGE_ROOT: root,
+      MUTATION_RACE_AT: "1",
+      MUTATION_RACE_FILE: path.join(root, GATES[0]),
+    });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      survivors: { kind: string; reason?: string }[];
+    };
+    expect(payload.checked).toBe(4); // the voided verdict's check is refunded
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+  });
+
+  it("runs a race-free checker exactly as before, so the wedge guards nothing when nothing moved", () => {
+    // The control: no seam anywhere, the child's report read whole, no raced row carried,
+    // and the exit is the clean pass it always was.
+    const root = makeScriptRoot();
+    const stub = writeStub("race-free.mjs", { report: passingReport() });
+
+    const result = runRace(stub, { MUTATION_COVERAGE_ROOT: root });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+      racedFiles: string[];
+      survivors: unknown[];
+    };
+    expect(payload.checked).toBe(5);
+    expect(payload.racedStrikes).toBe(0);
+    expect(payload.racedFiles).toEqual([]);
+    expect(payload.survivors).toEqual([]);
+  });
+});
+
+/**
+ * The spawn strip this chassis answers for, and the peers that witness it.
+ *
+ * The family-wide hold lives in the recovery chassis: it walks the whole `mutation-*.mjs`
+ * family, so a forgetful fourth sweep fails there. But a strip held only in a stranger's
+ * test suite is a strip this chassis says nothing about — and a pin and a sweep that are
+ * strangers can drift apart with nobody holding the pair. So each sweep's own chassis pins
+ * *its* sweep by name, by the shape the strip actually takes at the spawn site (the
+ * binding spelled once, one spawn site, the stripped environ passed there, no raw
+ * delete), and then all three chassis witness each other: deleting a pin here reads red
+ * in the other two files, so a chassis cannot drift from its sweep unnoticed.
+ */
+describe("the coverage sweep's spawn strip is pinned here and held against its peers", () => {
+  const source = readFileSync(launcher, "utf8");
+
+  it("spawns its one child with the strip the shared module owns", () => {
+    // Peer-matched on bytes, so the shape is the pin: the binding the lock module owns,
+    // exactly once — the sweep spawns once, so a second binding would be a dead one —
+    // the stripped environ passed at that site, and neither the raw environ nor a
+    // hand-spelled delete anywhere in the file.
+    expect(
+      source.match(/const childEnv = envWithoutRaceSeam\(process\.env\)/g) ?? [],
+      "mutation-coverage.mjs must bind envWithoutRaceSeam(process.env) exactly once",
+    ).toHaveLength(1);
+    expect(
+      source.match(/spawnSync\(/g) ?? [],
+      "mutation-coverage.mjs is expected to have one child spawn; the pin assumes it",
+    ).toHaveLength(1);
+    expect(
+      source.includes("env: childEnv"),
+      "mutation-coverage.mjs spawns its child without the stripped environ — the child " +
+        "inherits the landing pair and would refuse another sweep's run",
+    ).toBe(true);
+    expect(
+      source.includes("env: process.env"),
+      "mutation-coverage.mjs passes the raw environ at a spawn — strip it through " +
+        "envWithoutRaceSeam, as the other sweeps do",
+    ).toBe(false);
+    expect(
+      source.includes("delete childEnv.MUTATION_RACE"),
+      "mutation-coverage.mjs copies the landing pair out by hand instead of envWithoutRaceSeam",
+    ).toBe(false);
+  });
+
+  it("is held against the other sweeps' chassis, which pin their own strips", () => {
+    // The mutual witness: a strip pin that vanishes from any of the three chassis files
+    // is absent from nowhere. Each peer is read for the marker case name, its sweep by
+    // name, and the strip words the pin must speak — the exact bytes this file's own pin
+    // carries, matched back onto the file that carries them.
+    for (const [peerFile, peerSweep] of [
+      ["mutation-preflight.test.ts", "mutation-preflight.mjs"],
+      ["mutation-sweep-recovery.test.ts", "mutation-guards.mjs"],
+    ] as const) {
+      const peer = readFileSync(path.join(projectRoot, "src", "test", peerFile), "utf8");
+      expect(
+        peer.includes("spawns its one child with the strip the shared module owns"),
+        `${peerFile} no longer pins its sweep's spawn strip — name the sweep it answers for ` +
+          "and the strip it spawns with, as this chassis does",
+      ).toBe(true);
+      expect(
+        peer.includes(peerSweep),
+        `${peerFile} pin's case names no strip-holding sweep (${peerSweep})`,
+      ).toBe(true);
+      expect(peer.includes("envWithoutRaceSeam(process.env)"), `${peerFile} pin names no strip`).toBe(true);
+      expect(peer.includes("env: childEnv"), `${peerFile} pin says nothing about the spawn's environ`).toBe(true);
+    }
   });
 });

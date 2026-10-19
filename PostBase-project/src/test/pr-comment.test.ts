@@ -77,6 +77,7 @@ import {
   failureAnnouncement,
   lookupAnnouncement,
   missingSource,
+  nothingToUpdateAnnouncement,
   parseArgs,
   pickCommentId,
   recordPathFor,
@@ -113,6 +114,43 @@ const ARGS = [
   "Probe comment",
   "--producer",
   "Write the probe",
+];
+
+/**
+ * The same post, made fresh: no marker, because a fresh post updates nothing it has to find.
+ *
+ * This is the nightly job's floor-proposal nudge, which comments on the same open request every
+ * night it re-fires — editing a comment notifies nobody, so a new one each night is the point.
+ */
+const FRESH = [
+  "--body",
+  BODY,
+  "--fresh",
+  "--label",
+  "Probe comment",
+  "--producer",
+  "Write the probe",
+];
+
+/**
+ * The retraction, which is the one verb here that a *missing* comment answers happily.
+ *
+ * The nightly job's refuted-record comment is rewritten by the night its finding ends, because a red
+ * that outlives the record it was about reads as a standing one to the next person who opens the
+ * request. The request it is written on is the one the finding was reported on, so a request that
+ * never carried the red has nothing to retract — and that is why `--update-only` posts nothing there
+ * rather than handing a note about a repair to somebody nobody told about it.
+ */
+const UPDATE_ONLY = [
+  "--body",
+  BODY,
+  "--marker",
+  "<!-- refuted-settled-wait-record -->",
+  "--update-only",
+  "--label",
+  "Repaired settled-wait record",
+  "--producer",
+  "Retract the refuted record that was repaired",
 ];
 
 /** A directory, a stub `gh`, and a runner that spawns the real script in it. */
@@ -269,6 +307,69 @@ describe("posting the comment", () => {
     expect(calls().filter((call) => !listing(call))).toEqual([
       ["api", "-X", "POST", "repos/o/r/issues/7/comments", "-f", "body=## Proposal\n"],
     ]);
+  });
+
+  it("creates a new comment for `--fresh`, and looks for nothing to update", () => {
+    // The one invocation where a *second* comment is the answer rather than an accident: the
+    // nightly nudge posts one every night the same proposal re-fires, because an edit notifies
+    // nobody. It skips the lookup entirely — the marker is how a previous comment is
+    // *identified*, and a run that is not looking for one cannot update the wrong comment — so
+    // the listing the other cases make is absent here even when it would have answered.
+    const { run, calls, path } = harness();
+    writeFileSync(path(BODY), "## The floor proposal re-fired tonight — night 3\n");
+
+    const result = run(FRESH, { GH_LOOKUP: "42\n" });
+
+    expect(result.status, result.stderr).toBe(0);
+    // One call, and it is the post: a lookup returning 42 would have made this a PATCH.
+    expect(calls()).toEqual([
+      [
+        "api",
+        "-X",
+        "POST",
+        "repos/o/r/issues/7/comments",
+        "-f",
+        "body=## The floor proposal re-fired tonight — night 3\n",
+      ],
+    ]);
+  });
+
+  it("holds a fresh comment to the same scrub and the same record as an updating one", () => {
+    // A second *verb*, not a second poster: the body is still read here rather than by `gh`, still
+    // redacted, still filed beside itself, and still announced on the run page. Otherwise the one
+    // comment posted every night would be the one comment nobody had scrubbed.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## Proposal\n\nThe token lives in `.env.production`.\n");
+
+    const result = run(FRESH);
+
+    expect(result.status, result.stderr).toBe(0);
+    const posted = calls().filter((call) => !listing(call))[0]?.[5] ?? "";
+    expect(posted).toBe("body=## Proposal\n\nThe token lives in `<redacted>`.\n");
+    const record = JSON.parse(readFileSync(path("proposal.redactions.json"), "utf8"));
+    expect(record.substitutions).toEqual([
+      { rule: "secret-name", matched: ".env.production", replacement: "<redacted>" },
+    ]);
+    // The record names the verb and the URL that actually happened, which for a fresh post is the
+    // creation rather than an update of whatever a marker would have found.
+    expect(record.posted).toBe("POST repos/o/r/issues/7/comments");
+    expect(summaryText()).toContain("## Probe comment — ⚠️ the comment was redacted before posting");
+  });
+
+  it("cannot earn the duplicate note, because it never looks for a previous comment", () => {
+    // The lookup's one bad outcome is a second marked comment, and skipping the lookup is what
+    // removes the possibility rather than the note. A listing that fails changes nothing here —
+    // there is no note to write about a search nobody made.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## Proposal\n");
+
+    const result = run(FRESH, { GH_LIST_EXIT: "1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(calls()).toEqual([
+      ["api", "-X", "POST", "repos/o/r/issues/7/comments", "-f", "body=## Proposal\n"],
+    ]);
+    expect(summaryText()).toBe("");
   });
 
   it("updates the oldest comment when the listing returns more than one", () => {
@@ -647,6 +748,22 @@ describe("the dry run", () => {
     expect(calls()).toEqual([]);
   });
 
+  it("names the one verb a fresh post can use, because nothing decides it", () => {
+    // The half-answer above is honest for an update and is the *whole* answer here: `--fresh` looks
+    // nothing up, so the verb is known before the post instead of decided by a lookup a rehearsal
+    // cannot make — and printing both would be a rehearsal hedging about its own flag.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## Proposal\n");
+
+    const result = run([...FRESH, "--dry-run"]);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("-X POST repos/o/r/issues/7/comments");
+    expect(result.stdout).not.toContain("-X PATCH");
+    expect(calls()).toEqual([]);
+    expect(summaryText()).toBe("");
+  });
+
   it("shows the note a missing body would publish, and still exits 0", () => {
     // The empty branch is part of the path too, so a dry run shows the ❌ note it would write —
     // and exits 0 where a real run exits 1: a rehearsal has lost nothing, so it must not read as
@@ -787,15 +904,105 @@ describe("when the call itself fails", () => {
   });
 });
 
+describe("retracting a comment that outlived its finding", () => {
+  it("rewrites the marked comment, and says nothing about a retraction that landed", () => {
+    // The finding ended and the comment the night left is the only thing on the request still saying
+    // the record is broken, so it is rewritten in place — the red is answered, and the marker stays in
+    // the body so a later refutation of the same lines finds this comment rather than stacking a second.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## The settled-wait record is repaired\n");
+
+    const result = run(UPDATE_ONLY, { GH_LOOKUP: "42\n" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(calls().filter((call) => !listing(call))).toEqual([
+      [
+        "api",
+        "-X",
+        "PATCH",
+        "repos/o/r/issues/comments/42",
+        "-f",
+        "body=## The settled-wait record is repaired\n",
+      ],
+    ]);
+    // A retraction is not news once it is on the request: the run page is for the miss.
+    expect(summaryText()).toBe("");
+  });
+
+  it("posts nothing, and stays green, when the marker finds no comment to rewrite", () => {
+    // The one invocation where finding nothing is the answer rather than a loss: a request that never
+    // carried the red owes nothing, and a note about a repair nobody was told about would be worse than
+    // the silence. The lookup is the whole of it — so there is exactly one `gh` call, and it is a read.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## The settled-wait record is repaired\n");
+
+    const result = run(UPDATE_ONLY, { GH_LOOKUP: "" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "no comment carrying the marker is on #7 — nothing to update, so nothing was posted",
+    );
+    expect(calls()).toHaveLength(1);
+    expect(calls().filter((call) => !listing(call))).toEqual([]);
+    expect(summaryText()).toContain("## Repaired settled-wait record — ✅ nothing to retract");
+    expect(summaryText()).toContain("The step is green: the request it looked at owes nothing.");
+  });
+
+  it("falls through to a post when the lookup itself failed, rather than dropping the retraction", () => {
+    // A listing that failed is not the case above: nothing has said whether a red is standing on the
+    // request, and the two ways to be wrong are not equal — a note about a repair nobody was told about
+    // is noise, while a red that outlived its finding sends somebody to fix what is already fixed. So
+    // the unknown direction posts, which is the trade the marker post already makes, and the duplicate
+    // note is the run page saying the comment it rewrote may not be the one the marker would have found.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## The settled-wait record is repaired\n");
+
+    const result = run(UPDATE_ONLY, { GH_LIST_EXIT: "1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(calls().filter((call) => !listing(call))).toEqual([
+      [
+        "api",
+        "-X",
+        "POST",
+        "repos/o/r/issues/7/comments",
+        "-f",
+        "body=## The settled-wait record is repaired\n",
+      ],
+    ]);
+    expect(summaryText()).toContain("⚠️ the previous comment could not be looked up");
+  });
+
+  it("prints the verb it would take — and no request at all — in a dry run", () => {
+    // A rehearsal knows the verb here even with the lookup skipped, because `--update-only` never
+    // creates: this is the one path where the marker's absence and its failure have the same answer.
+    const { run, calls, path, summaryText } = harness();
+    writeFileSync(path(BODY), "## The settled-wait record is repaired\n");
+
+    const result = run([...UPDATE_ONLY, "--dry-run"]);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(calls()).toEqual([]);
+    expect(result.stdout).toContain("because --update-only posts nothing");
+    expect(summaryText()).toBe("");
+  });
+});
+
 describe("the invocation it refuses", () => {
   it.each([
     ["an unreadable flag", ["--body", BODY, "--producer", "x", "--label", "y", "--wat", "z"], "unknown flag --wat"],
     ["a flag with no value", ["--body", BODY, "--marker=", "--label", "y", "--producer", "x"], "--marker needs a value"],
     ["a missing flag", ARGS.slice(0, -2), "--producer is required"],
+    [
+      "a marker-less update",
+      ["--body", BODY, "--label", "y", "--producer", "x"],
+      "--marker is required (or --fresh posts a new comment each run)",
+    ],
     ["a stray argument", [...ARGS, "extra"], "unexpected argument 'extra'"],
     ["no body at all", ARGS.slice(2), "--body or --text is required"],
     ["both sources", [...ARGS, "--text", "t"], "--body and --text are alternatives; give one"],
     ["a switch given a value", [...ARGS, "--dry-run=true"], "--dry-run does not take a value"],
+    ["a switch given a value", [...FRESH, "--fresh=true"], "--fresh does not take a value"],
   ])("refuses %s rather than posting", (_case, args, message) => {
     const { run, ghLog } = harness();
 
@@ -851,6 +1058,8 @@ describe("the pieces it is read through", () => {
       marker: "<!-- probe-marker -->",
       label: "Probe comment",
       producer: "Write the probe",
+      fresh: false,
+      updateOnly: false,
       dryRun: false,
     });
     expect(parseArgs([`--body=${BODY}`, "--marker=m", "--label=l", "--producer=p"])).toEqual({
@@ -858,16 +1067,47 @@ describe("the pieces it is read through", () => {
       marker: "m",
       label: "l",
       producer: "p",
+      fresh: false,
+      updateOnly: false,
       dryRun: false,
     });
-    // The one switch: present or absent, and it moves nothing else about the invocation.
+    // The two switches: present or absent, and neither moves anything else about the invocation.
     expect(parseArgs([...ARGS, "--dry-run"])).toEqual({
       body: BODY,
       marker: "<!-- probe-marker -->",
       label: "Probe comment",
       producer: "Write the probe",
+      fresh: false,
+      updateOnly: false,
       dryRun: true,
     });
+    expect(parseArgs(UPDATE_ONLY)).toEqual({
+      body: BODY,
+      marker: "<!-- refuted-settled-wait-record -->",
+      label: "Repaired settled-wait record",
+      producer: "Retract the refuted record that was repaired",
+      fresh: false,
+      updateOnly: true,
+      dryRun: false,
+    });
+    // The other shape: `--fresh` is what makes a marker unnecessary, and it is read as its own
+    // flag rather than inferred from a marker that is not there — an update with no marker and no
+    // `--fresh` is refused above rather than posted as a second sticky comment.
+    expect(parseArgs(FRESH)).toEqual({
+      body: BODY,
+      marker: undefined,
+      label: "Probe comment",
+      producer: "Write the probe",
+      fresh: true,
+      updateOnly: false,
+      dryRun: false,
+    });
+    // …and the two are answers to the same question — is this a post or an update? — so asking for
+    // both is refused rather than resolved in one direction: `--fresh` looks nothing up, which would
+    // make `--update-only`'s promise to post nothing quietly untrue.
+    expect(() => parseArgs([...UPDATE_ONLY, "--fresh"])).toThrow(
+      "--fresh creates a comment and --update-only rewrites one; give one",
+    );
     expect(() => parseArgs(["--body", BODY])).toThrow(UsageError);
     expect(() => parseArgs(["--body", BODY, "--marker", "m", "--label", "l", "--producer"])).toThrow(
       "--producer needs a value",
@@ -894,6 +1134,25 @@ describe("the pieces it is read through", () => {
     expect(note).toContain("## Probe comment — ❌ nothing to post");
     expect(note).toContain("The 'Write the probe' step left no `proposal.md`");
     expect(note).toContain("Check that step's log on this run.");
+  });
+
+  it("writes the green note a retraction that found nothing leaves", () => {
+    // The other side of the failure note, and deliberately not a ❌: nothing was lost, because a
+    // request that never carried the red owes nothing — and what the reader is owed is the
+    // explanation for a red that is *not* here, which is either a previous night's retraction or a
+    // comment left on another request.
+    const note = nothingToUpdateAnnouncement({
+      label: "Repaired settled-wait record",
+      producer: "Retract the refuted record that was repaired",
+      pr: "7",
+    });
+
+    expect(note).toContain("## Repaired settled-wait record — ✅ nothing to retract");
+    expect(note).toContain(
+      "The 'Retract the refuted record that was repaired' step found no comment carrying the marker on #7",
+    );
+    expect(note).toContain("The step is green: the request it looked at owes nothing.");
+    expect(note).not.toContain("❌");
   });
 
   it("writes the failure note around what the pull request shows now", () => {

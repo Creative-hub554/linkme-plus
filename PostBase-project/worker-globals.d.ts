@@ -13,7 +13,40 @@
  * regenerate it and the binding list with `npm run types:worker`.
  *
  * Without `--include-runtime false`, `wrangler types` inlines the colliding runtime types.
+ *
+ * Wrangler generates the binding and configured-var fields in
+ * `worker-configuration.d.ts`, but secrets and optional cron tuning values are
+ * supplied outside `wrangler.jsonc` and therefore need a durable augmentation
+ * here rather than edits to that generated file.
  */
+
+interface Env {
+  GDRIVE_CLIENT_ID?: string;
+  GDRIVE_CLIENT_SECRET?: string;
+  GDRIVE_REFRESH_TOKEN?: string;
+  GDRIVE_FOLDER_ID?: string;
+  ARCHIVE_GRACE_DAYS?: string;
+  ARCHIVE_BATCH_LIMIT?: string;
+  ARCHIVE_DRY_RUN?: string;
+  EVICT_GRACE_HOURS?: string;
+  EVICT_BATCH_LIMIT?: string;
+  EVICT_DRY_RUN?: string;
+}
+
+declare namespace Cloudflare {
+  interface Env {
+    GDRIVE_CLIENT_ID?: string;
+    GDRIVE_CLIENT_SECRET?: string;
+    GDRIVE_REFRESH_TOKEN?: string;
+    GDRIVE_FOLDER_ID?: string;
+    ARCHIVE_GRACE_DAYS?: string;
+    ARCHIVE_BATCH_LIMIT?: string;
+    ARCHIVE_DRY_RUN?: string;
+    EVICT_GRACE_HOURS?: string;
+    EVICT_BATCH_LIMIT?: string;
+    EVICT_DRY_RUN?: string;
+  }
+}
 
 interface ExecutionContext<Props = unknown> {
   waitUntil(promise: Promise<unknown>): void;

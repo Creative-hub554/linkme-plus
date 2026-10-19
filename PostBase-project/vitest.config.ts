@@ -123,6 +123,11 @@ export default defineConfig({
         // cannot be exercised in-process. It is not reachable at runtime by the
         // app, so it is not part of the surface a coverage floor is about.
         "src/lib/db/seed.ts",
+        // The admin grant console is operational like the seed: it runs from a
+        // terminal with the database's own connection string and closes the
+        // pool on load-lifetime, so it cannot be exercised in-process and is
+        // not reachable by the app at runtime.
+        "src/lib/db/grant-admin.ts",
       ],
       reporter: ["text-summary", "json-summary"],
       reportsDirectory: "./.coverage",

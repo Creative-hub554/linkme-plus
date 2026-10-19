@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { useState } from "react";
+import { act, useState } from "react";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
 import { stubFetch, type StubEndpoint, type StubRequest } from "@/test/stub-fetch";
 import { PostCard, type PostActivity } from "./post-card";
@@ -76,6 +76,11 @@ afterEach(() => {
 });
 
 describe("the post card's reaction", () => {
+  test("shows the checkmark for a verified post author", async () => {
+    const ui = mountSurface(<PostCard {...CARD} author={{ ...CARD.author, verified: true }} />);
+    expect(ui.container.querySelector('[aria-label="Maya Chen\'s verified account badge"]')).not.toBeNull();
+  });
+
   test("likes with a POST carrying the post's id and the type, and takes the server's answer", async () => {
     const { ui, requests } = mountParentCard({
       "/api/posts/reactions": (request) => ({
@@ -875,5 +880,89 @@ describe("the comment thread's heart", () => {
     const { ui } = await openHeartThread(undefined, null);
 
     expect(ui.container.querySelectorAll('[aria-label^="like reaction"]').length).toBe(0);
+  });
+});
+
+describe("loading a post's comment thread", () => {
+  test("shows the empty state after a successful read with no comments", async () => {
+    stubFetch({ "/api/posts/comments": { data: [] } });
+    const ui = mountSurface(<PostCard {...CARD} />);
+
+    await ui.click(ui.byName("Comment on post"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("No comments yet. Start the conversation.") === true,
+      { description: "the empty comment thread" },
+    );
+
+    expect(ui.container.textContent).not.toContain("Comments couldn't be loaded.");
+    expect(ui.container.textContent).not.toContain("Loading comments...");
+  });
+
+  test("shows loading while the comments read is still pending", async () => {
+    let resolveComments!: (response: Response) => void;
+    const pendingResponse = new Promise<Response>((resolve) => {
+      resolveComments = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn(() => pendingResponse));
+    const ui = mountSurface(<PostCard {...CARD} />);
+
+    await ui.click(ui.byName("Comment on post"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("Loading comments...") === true,
+      { description: "the pending comment read" },
+    );
+
+    expect(ui.container.textContent).not.toContain("No comments yet.");
+    expect(ui.container.querySelector('[role="alert"]')).toBeNull();
+
+    await act(async () => {
+      resolveComments(new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+      await pendingResponse;
+    });
+    await ui.waitFor(
+      () => ui.container.textContent?.includes("No comments yet. Start the conversation.") === true,
+      { description: "the empty state after the read completes" },
+    );
+  });
+
+  test("distinguishes a failed load from an empty thread and retries successfully", async () => {
+    const loadedComment = {
+      id: "77777777-7777-4777-8777-777777777777",
+      content: "The thread came back.",
+      author: { id: "author-2", name: "Al Ramos", username: "al" },
+    };
+    let attempts = 0;
+    const requests = stubFetch({
+      "/api/posts/comments": () => {
+        attempts += 1;
+        return attempts === 1
+          ? new Response(JSON.stringify({ error: "Temporary failure" }), { status: 503 })
+          : { data: [loadedComment] };
+      },
+    });
+    const ui = mountSurface(<PostCard {...CARD} />);
+
+    await ui.click(ui.byName("Comment on post"));
+    await ui.waitFor(
+      () => ui.container.querySelector('[role="alert"]') !== null,
+      { description: "the comment load error" },
+    );
+
+    expect(ui.container.textContent).toContain("Comments couldn't be loaded.");
+    expect(ui.container.textContent).not.toContain("No comments yet.");
+    expect(requests.calls).toHaveLength(1);
+
+    await ui.click(ui.byName("Retry loading comments"));
+    await ui.waitFor(
+      () => ui.container.textContent?.includes(loadedComment.content) === true,
+      { description: "the comments after retry" },
+    );
+
+    expect(requests.calls).toHaveLength(2);
+    expect(ui.container.querySelector('[role="alert"]')).toBeNull();
+    expect(ui.container.textContent).not.toContain("No comments yet.");
   });
 });

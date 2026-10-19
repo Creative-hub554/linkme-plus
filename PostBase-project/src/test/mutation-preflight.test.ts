@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,9 +67,36 @@ function run(args: string[], env: Record<string, string> = {}) {
   });
 }
 
-/** A pid that is genuinely gone: a process spawned and already reaped. */
-function deadPid(): number {
-  return spawnSync(process.execPath, ["-e", ""]).pid ?? 0;
+/**
+ * A pid that is genuinely gone — not merely exited. `spawnSync` returns after the child
+ * exits, but on a loaded box the process table can still list a freshly exited pid for a
+ * beat, and the sweep judges the lock's pid dead-or-alive through exactly such a read
+ * (`isRunning` in mutation-lock.mjs: signal 0; EPERM still means alive). Previously
+ * learned in this workspace the hard way (see the runbook's stale-lock bullet): a
+ * "reaped" pid the sweep still reads as alive installs the wrong branch and the case
+ * reds on a verdict that called the tree held. So this waits for the exit `spawnSync`
+ * already pays for, then confirms the pid answers *gone* to the same probe the sweep
+ * judges with, re-spawning afresh until one does — bounded here at three candidates ×
+ * 30 polls of 100ms, and throwing rather than installing a pid the case cannot vouch
+ * for.
+ */
+async function deadPid(): Promise<number> {
+  for (let candidate = 0; candidate < 3; candidate++) {
+    const pid = spawnSync(process.execPath, ["-e", ""]).pid ?? 0;
+    for (let poll = 0; poll < 30; poll++) {
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        // Gone, as isRunning would read it: any throw that is not EPERM (EPERM is its
+        // alive side), and only for a pid it would not already dismiss as trivially
+        // absent (non-positive).
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EPERM" && pid > 0) return pid;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error("no pid could be confirmed absent by the liveness read the sweep judges with");
 }
 
 /**
@@ -265,11 +292,11 @@ describe("the preflight sweep's table against the tree it mutates", () => {
 });
 
 describe("the preflight sweep's recovery of a tree a killed run left mutated", () => {
-  it("puts the file back from the lock, and clears the lock", () => {
+  it("puts the file back from the lock, and clears the lock", async () => {
     const original = "const wedged = lockPidAlive;\n";
     const mutated = "const wedged = lockPidAlive && !anyReachable;\n";
     const file = scratchFile("left-mutated.mjs", mutated);
-    seedLock({ pid: deadPid(), path: file, original, mutated });
+    seedLock({ pid: await deadPid(), path: file, original, mutated });
 
     const result = run(["--recover"]);
 
@@ -278,12 +305,12 @@ describe("the preflight sweep's recovery of a tree a killed run left mutated", (
     expect(existsSync(lockFile)).toBe(false);
   });
 
-  it("leaves a file someone else edited alone, keeping the lock", () => {
+  it("leaves a file someone else edited alone, keeping the lock", async () => {
     const original = "const wedged = lockPidAlive;\n";
     const mutated = "const wedged = lockPidAlive && !anyReachable;\n";
     const theirs = "const wedged = somebodyElsesEdit;\n";
     const file = scratchFile("edited-since.mjs", theirs);
-    seedLock({ pid: deadPid(), path: file, original, mutated });
+    seedLock({ pid: await deadPid(), path: file, original, mutated });
 
     const result = run(["--recover"]);
 
@@ -551,9 +578,11 @@ describe("the preflight sweep's survivor vocabulary", () => {
     expect(payload.words.find((word) => word.word === "broken")?.mark).toBe("UNCHECKED");
 
     // The human report speaks the same table: the words, their marks, and the stamps with
-    // their line numbers.
+    // their line numbers. The fourth `broken` stamp is the race row's — a raced file reads
+    // as `broken` in this sweep the way it does in the guard sweep and the coverage
+    // launcher, so the vocabulary table counts it beside the refusal's own stamps.
     expect(plain.stdout).toContain('"survived" (SURVIVED): 1 stamp(s) the bucket reads');
-    expect(plain.stdout).toContain('"broken" (UNCHECKED): 3 stamp(s) the bucket reads');
+    expect(plain.stdout).toContain('"broken" (UNCHECKED): 4 stamp(s) the bucket reads');
     expect(plain.stdout).toContain("every declared word is stamped, and every stamp names a declared word.");
 
     // Report-only: no lock was taken, and the sweep ran no mutation — a vocabulary table
@@ -598,5 +627,249 @@ describe("the preflight sweep's survivor vocabulary", () => {
     expect(result.stdout).toContain('"forsaken" (FORSAKEN): 0 stamp(s) the bucket reads');
     expect(result.stdout).toContain('UNSPOKEN  the "forsaken" word');
     expect(result.stderr).toContain("vocabulary hole(s)");
+  });
+});
+
+/**
+ * The preflight sweep's race windows, driven against a scratch copy of the pair it
+ * answers for.
+ *
+ * The sweep plans from bytes it read up front — the mutated preflight and the test file
+ * every verdict comes from — and a session editing either half inside the run's window
+ * makes the plan a lie twice over. So the sweep re-reads both at every gate and once more
+ * before the report: a moved half is **not measured** — the mutation is not applied, the
+ * verdicts recorded earlier for the file are voided with their checks refunded, and one
+ * `broken` row (`reason: "race"`) names it, with `racedStrikes`/`racedFiles` additive to
+ * the `--json` contract exactly as the guard sweep's payload carries them. The seam that
+ * lands such an edit is the shared `MUTATION_RACE_AT`/`MUTATION_RACE_FILE` pair, refused
+ * unless a target seam re-rooted its tree: never the checkout the sweep would measure.
+ */
+describe("the preflight sweep's race windows", () => {
+  const RACE_COMMENT = "\n/* an outside edit, injected by the sweep's race seam */\n";
+
+  /** A scratch sweep: the real preflight as the target, and passing stub tests as its verdicts. */
+  function makeSweepRoot(): { target: string; test: string } {
+    const root = mkdtempSync(path.join(tmpdir(), "preflight-race-"));
+    const target = path.join(root, ".freebuff", "preview-preflight.mjs");
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, readFileSync(preflight, "utf8"));
+    const testPath = path.join(root, "src", "test", "stub-preflight.test.ts");
+    mkdirSync(path.dirname(testPath), { recursive: true });
+    writeFileSync(
+      testPath,
+      `import { it } from "vitest";\n\nit("the stub suite passes, so every measured case records a verdict", () => {});\n`,
+    );
+    return { target, test: testPath };
+  }
+
+  /** A lock of this describe's own: the recovery describe leaves its live-pid lock standing
+   *  as its record, and a race run that inherited it would stand down before its wedge ran. */
+  const raceLock = path.join(scratch, "race-lock.json");
+  afterEach(() => {
+    for (const file of [raceLock, `${raceLock}.tmp`]) rmSync(file, { force: true });
+  });
+
+  /** Runs the sweep over a scratch pair. The race seams stand together or not at all. */
+  function race(args: string[], tree: { target: string; test: string }, seam?: { at: number; file: string }) {
+    return run(args, {
+      MUTATION_LOCK_FILE: raceLock,
+      MUTATION_PREFLIGHT_TARGET: tree.target,
+      MUTATION_PREFLIGHT_TEST: tree.test,
+      MUTATION_PREFLIGHT_ALLOW_NESTED: "1",
+      ...(seam ? { MUTATION_RACE_AT: String(seam.at), MUTATION_RACE_FILE: seam.file } : {}),
+    });
+  }
+
+  it("refuses a race file in the checkout even when the target seam re-rooted its tree, and refuses half a seam", () => {
+    const tree = makeSweepRoot();
+
+    const refused = race(["--list"], tree, {
+      at: 1,
+      file: path.join(projectRoot, ".freebuff", "preview-preflight.mjs"),
+    });
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toContain("may not edit the checkout it would otherwise measure");
+
+    const half = race(["--list"], tree, { at: 1, file: "" });
+    expect(half.status).toBe(2);
+    expect(half.stderr).toContain("stand together");
+    expect(existsSync(raceLock)).toBe(false);
+  });
+
+  it("skips every mutation whose pair an outside edit moved, and measures nothing in it", () => {
+    const tree = makeSweepRoot();
+    const pool = readFileSync(tree.target, "utf8");
+
+    const result = race(["--limit=3", "--json"], tree, { at: 1, file: tree.target });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+      racedFiles: string[];
+      survivors: { kind: string; reason?: string; detail: string }[];
+    };
+    expect(payload.checked).toBe(0);
+    // Every case the slice holds reads the moved pair at its own gate and skips; the file
+    // is named once, and the `--json` fields ride beside the counts a consumer already reads.
+    expect(payload.racedStrikes).toBe(3);
+    expect(payload.racedFiles).toHaveLength(1);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+    // The seam is the whole writer: the pool is the plan's bytes plus the one comment.
+    expect(readFileSync(tree.target, "utf8")).toBe(pool + RACE_COMMENT);
+    expect(result.stderr).toContain("was edited while the sweep ran");
+    expect(existsSync(raceLock)).toBe(false);
+  });
+
+  it("voids a verdict recorded before a mid-run edit, and refunds the checks behind it", () => {
+    // Three of the slice: the first measures — its verdict answers the stub test file and
+    // is recorded — and the edit lands before the second's gate. That case is refused, the
+    // verdict before it is voided and its check refunded (`checked` returns to zero), and
+    // the case after it reads the same moved pair and skips too.
+    const tree = makeSweepRoot();
+
+    const result = race(["--limit=3", "--json"], tree, { at: 2, file: tree.target });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+      survivors: { kind: string; reason?: string; detail: string }[];
+    };
+    expect(payload.checked).toBe(0);
+    expect(payload.racedStrikes).toBe(2);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+    expect(result.stderr).toContain("verdict(s) recorded earlier for it are void");
+    expect(existsSync(raceLock)).toBe(false);
+  });
+
+  it("catches a late edit that follows the target's last mutation out the door", () => {
+    // Every case in the slice measures, its verdicts riding — then the edit lands past the
+    // slice, which no case's gate ever sees. The run's last check over the wedge is what
+    // catches it: the verdicts are voided, one row is carried, and the target's bytes are
+    // named there rather than a silent exit 2 the report could not explain.
+    const tree = makeSweepRoot();
+
+    const result = race(["--limit=2", "--json"], tree, { at: 3, file: tree.target });
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+ racedFiles: string[];
+      survivors: { kind: string; reason?: string; detail: string }[];
+    };
+    expect(payload.checked).toBe(0);
+    expect(payload.racedStrikes).toBe(0);
+    expect(payload.racedFiles).toHaveLength(1);
+    expect(payload.survivors).toHaveLength(1);
+    expect(payload.survivors[0]).toMatchObject({ kind: "broken", reason: "race" });
+    expect(result.stderr).toContain("changed after its last strike");
+    expect(existsSync(raceLock)).toBe(false);
+  });
+
+  it("runs a race-free slice exactly as before, so the wedge guards nothing when nothing moved", () => {
+    // The control: no seam anywhere, both cases measure, their verdicts ride — `checked`
+    // counts them and no raced row is carried at all. The cases above red precisely what
+    // this green does not.
+    const tree = makeSweepRoot();
+
+    const result = race(["--limit=2", "--json"], tree);
+
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout ?? "{}") as {
+      checked: number;
+      racedStrikes: number;
+      racedFiles: string[];
+      survivors: { kind: string; detail: string }[];
+    };
+    expect(payload.checked).toBe(2);
+    expect(payload.racedStrikes).toBe(0);
+    expect(payload.racedFiles).toEqual([]);
+    expect(payload.survivors).toHaveLength(2);
+    expect(payload.survivors.every((row) => row.kind === "survived")).toBe(true);
+    expect(existsSync(raceLock)).toBe(false);
+  });
+
+  it("spells the race reasons from the shared module, not from a sweep-local copy", () => {
+    // The one-spelling rule: the sentences live beside the wedge that gives them meaning,
+    // in the lock module all three tree-editing sweeps import, and this sweep reads them
+    // in rather than re-wording them.
+    const source = readFileSync(sweep, "utf8");
+    expect(source).toContain("detail: raceRowDetail(which, subjectLabel)");
+    expect(source).toContain("raceSkipLine(which)");
+    expect(source).toContain("raceVoidLine(which, voided)");
+    expect(source).toContain("raceAfterLine(which)");
+  });
+});
+
+/**
+ * The spawn strip this chassis answers for, and the peers that witness it.
+ *
+ * The family-wide hold lives in the recovery chassis: it walks the whole `mutation-*.mjs`
+ * family, so a forgetful fourth sweep fails there. But strip-only-in-another-sweep's-test
+ * is a strip the preflight chassis says nothing about — and a chassis whose pin and whose
+ * sweep are strangers can drift apart with nobody holding the pair. So each sweep's own
+ * chassis pins *its* sweep by name, by the shape the strip actually takes at the spawn
+ * site (the binding spelled once, one spawn site, the stripped environ passed there, no
+ * raw delete), and then all three chassis witness each other: deleting a pin here reads
+ * red in the other two files, so the pins cannot drift apart in this file alone.
+ */
+describe("the preflight sweep's spawn strip is pinned here and held against its peers", () => {
+  const source = readFileSync(sweep, "utf8");
+
+  it("spawns its one child with the strip the shared module owns", () => {
+    // Peer-matched on bytes, so the shape is the pin: the binding the lock module owns,
+    // exactly once — the sweep spawns once, so a second binding would be a dead one —
+    // the stripped environ passed at that site, and neither the raw environ nor a
+    // hand-spelled delete anywhere in the file.
+    expect(
+      source.match(/const childEnv = envWithoutRaceSeam\(process\.env\)/g) ?? [],
+      "mutation-preflight.mjs must bind envWithoutRaceSeam(process.env) exactly once",
+    ).toHaveLength(1);
+    expect(
+      source.match(/spawnSync\(/g) ?? [],
+      "mutation-preflight.mjs is expected to have one child spawn; the pin assumes it",
+    ).toHaveLength(1);
+    expect(
+      source.includes("env: childEnv"),
+      "mutation-preflight.mjs spawns its child without the stripped environ — the child " +
+        "inherits the landing pair and would refuse another sweep's run",
+    ).toBe(true);
+    expect(
+      source.includes("env: process.env"),
+      "mutation-preflight.mjs passes the raw environ at a spawn — strip it through " +
+        "envWithoutRaceSeam, as the other sweeps do",
+    ).toBe(false);
+    expect(
+      source.includes("delete childEnv.MUTATION_RACE"),
+      "mutation-preflight.mjs copies the landing pair out by hand instead of envWithoutRaceSeam",
+    ).toBe(false);
+  });
+
+  it("is held against the other sweeps' chassis, which pin their own strips", () => {
+    // The mutual witness: a strip pin that vanishes from any of the three chassis files
+    // is absent from nowhere. Each peer is read for the marker case name, its sweep by
+    // name, and the strip words the pin must speak — the exact bytes this file's own pin
+    // carries, matched back onto the file that carries them.
+    for (const [peerFile, peerSweep] of [
+      ["mutation-coverage.test.ts", "mutation-coverage.mjs"],
+      ["mutation-sweep-recovery.test.ts", "mutation-guards.mjs"],
+    ] as const) {
+      const peer = readFileSync(path.join(projectRoot, "src", "test", peerFile), "utf8");
+      expect(
+        peer.includes("spawns its one child with the strip the shared module owns"),
+        `${peerFile} no longer pins its sweep's spawn strip — name the sweep it answers for ` +
+          "and the strip it spawns with, as this chassis does",
+      ).toBe(true);
+      expect(
+        peer.includes(peerSweep),
+        `${peerFile} pin's case names no strip-holding sweep (${peerSweep})`,
+      ).toBe(true);
+      expect(peer.includes("envWithoutRaceSeam(process.env)"), `${peerFile} pin names no strip`).toBe(true);
+      expect(peer.includes("env: childEnv"), `${peerFile} pin says nothing about the spawn's environ`).toBe(true);
+    }
   });
 });

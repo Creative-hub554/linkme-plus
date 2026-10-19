@@ -4,15 +4,15 @@
 
 1. **Cloudflare Account** - Sign up at https://dash.cloudflare.com
 2. **Node.js 18+** - Install from https://nodejs.org
-3. **Wrangler CLI** - Install globally: `npm install -g wrangler`
+3. **Wrangler CLI** - Installed locally with the project; use it through the npm scripts below.
 4. **PostgreSQL Database** - Use Neon, Supabase, or Railway
 
 ## Initial Setup
 
-### 1. Login to Cloudflare
+### 1. Authenticate Wrangler
 
 ```bash
-wrangler login
+npx wrangler login
 ```
 
 ### 2. Create R2 Bucket
@@ -121,6 +121,40 @@ Requires Docker. When you are done with the branch, tear it down:
 
 `docker rm -f linkme-smoke-pg`
 
+### The verification queue's nightly alarm
+
+Verification is never self-awarded: a member submits an application from
+Settings, and only an administrator's approve at `/admin` → Verification flips
+the public badge. That makes an unwatched queue the one state the admin surface
+cannot rescue by itself, so the nightly gate is where someone is watching.
+
+`nightly.yml` runs the full CI gate on a schedule, and its queue-alarm test
+(`src/test/verification-queue-alarm.test.ts`) reads the pending applications and
+fails the night when one has waited past its review window — 48 hours by
+default; `QUEUE_ALARM_MAX_HOURS` moves it. The gate's red is the paging channel:
+the failure message names the handles owed, oldest first, and the action —
+approve at `/admin` → Verification, or grant an admin first if nobody holds the
+role (`npm run admin:grant -- <email>`); the nightly report's same-named section
+renders the judgment as rows. The alarm stops paging the moment a reviewer has
+acted, so nothing else has to be told.
+
+Arming the alarm for the production database is one secret,
+`NIGHTLY_QUEUE_DATABASE_URL`, defined in the repository's GitHub Actions secrets
+— not `.env.local` and not the Worker secret store, because the alarm rides the
+gate the nightly job runs, not the app runtime. Its value is a
+least-privilege DSN that can only read `verification_requests` and `users`: mint
+the role at the same provider that holds the production `DATABASE_URL`, and on a
+provider with row-level security on by default (Supabase), add the two
+role-scoped SELECT policies the same block names. The full mint, verify probe,
+refusal assertions, and arm-check are pinned statement for statement in
+`.freebuff/run.md`'s "The verification queue's nightly alarm" section, and
+`npm run alarm:drill` replays that grant set against the smoke Postgres so the
+claims stay earned whenever the schema moves near the alarm's read surface.
+Leave the secret undefined and the alarm skips — it pages nobody and never
+pretends green about a queue it cannot read; the suite line on any night's log
+(`6 tests` when armed vs `6 tests | 1 skipped` when parked) says which state it
+is in to anyone reading the run page.
+
 ## Production Deployment
 
 ### 1. Set Production Secrets
@@ -155,18 +189,23 @@ npm run deploy
 
 ## Staging Environment
 
-### 1. Create Staging wrangler config
+Staging needs its own Cloudflare resource identifiers. Do not deploy the
+production configuration with `--env staging`: Worker environment bindings are
+not inherited, and that can connect a staging Worker to production KV, R2, or
+Durable Object state. Add an `env.staging` block to `wrangler.jsonc` only after
+creating and recording all of the following staging resources:
+
+- a staging Worker name and route or preview domain;
+- a staging KV namespace ID;
+- a staging R2 bucket name;
+- a staging Durable Object binding and migration; and
+- staging secrets (including a non-production database URL).
+
+Then build with `CLOUDFLARE_ENV=staging` and deploy the same named environment:
 
 ```bash
-cp wrangler.jsonc wrangler.staging.jsonc
-```
-
-Update the name and bindings for staging.
-
-### 2. Deploy to Staging
-
-```bash
-npm run deploy:staging
+CLOUDFLARE_ENV=staging npm run build
+npx wrangler deploy --env staging
 ```
 
 ## Environment Variables Reference
@@ -264,6 +303,10 @@ wrangler tail
 2. **Worker Logs** - `wrangler tail`
 3. **Error Tracking** - Set up Sentry integration
 4. **Uptime Monitoring** - Use Cloudflare Health Checks
+5. **The nightly CI gate and its verification-queue alarm** - `nightly.yml` on a
+   schedule, paged through the gate's red (see "The verification queue's nightly
+   alarm" above); the same run also carries the moderation report and coverage
+   trend for the next operator
 
 ## Cost Estimation
 

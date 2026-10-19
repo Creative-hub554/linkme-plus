@@ -61,6 +61,10 @@ jobs:
     # `contents: read` stays the default for everything else.
     permissions:
       contents: write
+      # ...and the one other thing this job does with a token: the floor proposal the trend
+      # step's failure earns is a pull request, so the job that opens it needs to be able to
+      # write one. Nothing else here touches a pull request.
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,6 +81,7 @@ jobs:
       # ahead of the JSON and break the parse — while stdout carries exactly the
       # one report object and stderr (the runner's progress) goes to the log.
       - name: Run the full CI gate
+        id: gate
         env:
           CI: ""
           # The verification queue's own alarm, keyed on the one secret it needs:
@@ -109,11 +114,12 @@ jobs:
             echo "The gate never produced a JSON report — check the run log." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # The coverage trend, one committed row per run: the stamp the gate's
-      # report carries as `coverageStamp` is folded into the history file, so
-      # the rendered-links guard's readings accrue over time instead of living
-      # one run at a time. A red run records its row too — the stamp is a
-      # reading, not a verdict — and a suite that left none records nothing:
+      # The coverage trends, one committed row per run: every reading the gate's report
+      # carries in its `readings` map — `.freebuff/coverage-readings.mjs` is the one
+      # declaration of the readings, their ids and their columns — is folded into the
+      # history file side by side, so each guard's coverage accrues as a column of its
+      # own over time instead of living one run at a time. A red run records its row
+      # too — a reading is not a verdict — and a suite that left none records nothing:
       # the script exits 0 on that omission, the same omission the run page
       # and the runbook make. Recorded even when the gate failed, for the same
       # reason the report above is published `if: always()`.
@@ -126,6 +132,309 @@ jobs:
             echo "No report was written — no coverage row to record."
           fi
 
+      # What became of the proposals the nights before this one opened, recorded where the next night
+      # — and a person reviewing this job's own loudness — can read it: how many nights each sat
+      # before it was merged or dropped. The list is GitHub's own, and `--state all` rather than
+      # `--state closed` on purpose: a request dropped unmerged is a settlement too, and asking for
+      # the closed ones alone would be this step deciding which answers count. The ones still open
+      # carry no `closedAt` and are left to the module, which cannot read an age out of them either.
+      # The *recording* is the module's for the reason the nudge is: one line per request, written
+      # once, keyed on the line's own dated head — so this step runs every night and only the first
+      # night after a settlement writes anything. It runs before the commit-back below, which is what
+      # carries the line to the branch. `continue-on-error` because it is a recording aid: a night
+      # that could not read GitHub or write the runbook shows a red step and says why in its log, and
+      # it does not turn a green gate red over a record — the doctrine the runner's own runbook write
+      # follows. The step being red is the signal that the history has stopped accruing.
+      #
+      # The record's other half is written where the run keeps it. A run page is read once, by whoever
+      # opens that run, and a settlement is a fact a person is meant to read a year later — so the same
+      # section the page gets, the ages and the distribution they make, is written to a file the
+      # artifact below uploads. Nothing is written on a night with no settlements to state, which is
+      # how the page treats one too.
+      #
+      # `--github-annotations` is the one thing on that page a night is meant to *say* rather than
+      # leave to be read: when the middle of the ages rises past the worst the history has held — which
+      # is the reading that moves before a single request has crossed either threshold — the module
+      # prints the finding as a workflow command, so the run carries an annotation a person watching
+      # the job sees without opening its page. It is the same sentence the step's log gets, from the
+      # module that computed it rather than from a second reading of the numbers here, and the flag is
+      # the repository's own name for it (`.freebuff/ci.mjs`'s). Nothing about it is a verdict: the
+      # night still passes, and the two thresholds stay the only numbers that escalate anything.
+      #
+      # …and the one channel of the three that reaches a person rather than a page. The annotation is
+      # read by whoever is watching the job and the run page by whoever opens it; neither reaches an
+      # inbox. So the same finding is left as a *comment* on the floor proposal that is still open: the
+      # module renders it (`--comment`, from the one entry of the list above that states no close) and
+      # the step below posts it. The posting is deliberately not here, for the reason the nudge's is
+      # not — a comment that never arrived has to be able to fail the night, and the step of its own is
+      # what `.freebuff/comment-gate.mjs` reads. Which request it is comes back on this step's
+      # `wait-request` output, empty on every night nothing is owed, which is the ordinary state: the
+      # night a proposal is answered is usually the night its branch stops being open, so a risen wait
+      # often has no open request to be said on. An empty output skips the poster rather than running it
+      # to post nothing, and the gate passes a step that was never owed a comment.
+      #
+      # …and the finding is recorded as an *event* while it is said: the same read of the runbook that
+      # decides whether tonight owes a comment (`--comment`) appends **one line per crossing** to
+      # `.freebuff/run.md` — the night the comment was left, the request it was left on, and the level the
+      # middle of the ages passed, with the night that level had stood since. What a later night is held
+      # to is that *level*, not the date of the last run: the page and the annotation go on stating a wait
+      # that stands every night it does, while the comment is left once per crossing, so a median that has
+      # climbed but has not passed somewhere it was already told about is not commented on again.
+      # `recordWaitCrossing` is total — a re-run of this night, or a night whose median is no longer above
+      # the level on record, writes nothing and says so — and a night that rose with no open request to say
+      # it on records nothing at all, which leaves the crossing owed rather than silently spent. The line
+      # lands before the commit-back below, which is what carries it to the branch the next night reads.
+      #
+      # …and the same section is a *judgment* as well as a page, which this step cannot be the place for.
+      # The drift block it renders — the crossing lines these settlements cannot produce — is a verdict,
+      # and a `continue-on-error` step is the wrong step to take one on: a night has to record, comment
+      # and upload whatever the record turns out to say. So the finding travels as a count on this step's
+      # `wait-drift` output and the step at the end of the job reads it back, which is the division the
+      # comment steps already have with `.freebuff/comment-gate.mjs`: stated where it is found, red where
+      # it is judged. The block itself is written out as a file of its own (`--drift`) for the reason the
+      # count travels: the step that judges it keeps a *record* in the artifact, and that record quotes
+      # these lines rather than pointing at a page that will not be there in a month.
+      - name: Record the floor proposals that have been answered
+        id: settle-floor
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          gh pr list --head "coverage/floor-proposal" --state all --limit 20 \
+            --json number,createdAt,closedAt,mergedAt > .ci/floor-settlements.json
+          node .freebuff/coverage-trend.mjs --settle-floor \
+            --github-annotations \
+            --settled .ci/floor-settlements.json \
+            --runbook .freebuff/run.md \
+            --output .ci/floor-settlements.md \
+            --drift .ci/wait-drift-lines.md \
+            --comment .ci/coverage-floor-proposal-wait.md
+
+      # The same record for the other kind of request this job's neighbourhood raises, one question
+      # over: what became of the collect-budget proposals the pull requests earned. A collect proposal
+      # is not a request of this job's own — it is a comment the `collect-propose` job in `ci.yml`
+      # leaves on the pull request whose collect time moved (`.freebuff/collect-apply.mjs`'s
+      # `PROPOSAL_MARKER`) — and it is answered by a reply on that pull request (`APPLY_REPLY_MARKER`,
+      # posted by the apply job) or ended by the pull request closing with the proposal still
+      # unanswered. Either way the age is the age of the *comment*, not of the pull request, so a
+      # proposal made a week into a branch is not recorded as a week of being ignored. Reading those
+      # two comments out of a pull request is the one thing this step cannot do in shell, which is what
+      # the module's `--settle-collect` is for.
+      #
+      # The list is every pull request rather than one head: a collect proposal is posted wherever it
+      # was earned, so there is no branch to filter by. `--state all` for the reason the floor step's
+      # is — a request that closed with the proposal unanswered settled it too, and the ones still open
+      # are left to the module, which cannot read an age out of a proposal nothing has answered — and
+      # `sort:updated-desc` is deliberate: an old pull request somebody answered today is a pull request
+      # *updated* today, which is what keeps it inside the window, while the default order walks back
+      # through creation dates and drops exactly those.
+      #
+      # The recording, the run page and the artifact are the module's, and `continue-on-error` is the
+      # floor step's doctrine: a recording aid does not flip the night's verdict, so a night that could
+      # not read GitHub shows a red step and says why in its log — the red being the signal that the
+      # history has stopped accruing. Nothing is written on a night with no collect settlements to
+      # state, which is how the page treats one too. `--github-annotations` is the floor step's too, and
+      # for the same reason: this kind's own wait is watched on its own history, and a rise past the
+      # worst it has held is said as a workflow command rather than left for somebody to notice.
+      #
+      # …and this kind judges its own record as well as writing it, which is what `id` and the two
+      # outputs below are for: the crossing lines its section states that its settlements cannot
+      # produce travel as a count on `wait-drift` for the same step at the end of the job the floor
+      # kind's do, and the block of those lines travels as a file (`--drift`) for that step to quote
+      # into the artifact's record. The whole floor doctrine applies unchanged — including the `null`
+      # rather than a `0` for a kind with no crossing record of its own — and the two kinds are
+      # counted on their own outputs because a crossing is a level *one series* has been told about:
+      # one shared count would let a refuted collect record pass on a floor night that held.
+      - name: Record the collect-budget proposals that have been answered
+        id: settle-collect
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          gh pr list --state all --limit 50 --search "sort:updated-desc" \
+            --json number,closedAt,comments > .ci/collect-settlements.json
+          node .freebuff/coverage-trend.mjs --settle-collect \
+            --github-annotations \
+            --settled .ci/collect-settlements.json \
+            --runbook .freebuff/run.md \
+            --output .ci/collect-settlements.md \
+            --drift .ci/collect-wait-drift-lines.md
+
+      # The verdict on the two records the settle steps above both wrote and judged, in a step of its own
+      # because those steps are recording aids: a red there would say the night's history stopped accruing,
+      # which is a different fact from a record these settlements cannot produce. What travels is the
+      # count each module published — how many crossing lines the section it rendered names as exactly
+      # that — so the block a reader meets on the page and the verdict that stops the night are one answer
+      # rather than two readings of one file. `0` is the ordinary night and an empty value means the settle
+      # step never read a record (in which case the trend step below judges the file itself); a value the
+      # gate cannot read as a count fails the run rather than passing as one.
+      #
+      # One entry per kind, and that is the whole of why the counts are read off two step ids rather than
+      # one: a crossing is a level *one series* has been told about, so the two waits are watched on their
+      # own histories and a `0` a kind has not earned cannot stand in for a refuted record of the other.
+      # Each entry carries the label its own settlement section announces the finding under, and each
+      # `--drift` names a file *and* that same label — the pairing is by label rather than by position, so
+      # a night whose steps were re-ordered cannot come to quote one kind's lines under the other's name.
+      #
+      # …and it now writes the night's *record of that verdict*, because a verdict read once is not one
+      # kept: the run page rolls away, while a refuted crossing line is a finding about the runbook — a
+      # line a person edits and somebody re-reads months later — so it belongs in the artifact. `--record`
+      # writes it and `--summary` appends the same text to `.ci/summary.md`, the file that *is* the night's
+      # review, so a reader of the artifact meets the finding without having to know which of its files to
+      # open; each `--drift` is a block a settle step published, which the record quotes *under that
+      # step's own label* so the lines are in the file rather than only pointed at. The record is written
+      # on the ordinary night too — a night the check *held* and a night it never ran have to be tellable
+      # apart, and a missing file says neither — while a night both settle steps skipped writes nothing at
+      # all. That is why this step sits *before* the upload rather than after it, and it is still the job's
+      # verdict: the upload is `if: always()`, so a red here does not take the artifact with it.
+      #
+      # …and *above the commit-back* now, which is the one ordering this step is held to for another
+      # reason: the comment below is said once per refuted line rather than every night it stands, and what
+      # makes it once is the line this step appends to `.freebuff/run.md` when it writes the body — the
+      # record of what a person has already been told. A line that never reached the branch would die with
+      # the runner and make tomorrow's night say it all again, so the step that writes it sits above the
+      # commit that carries the runbook, exactly where the settle steps' own lines are written. The report
+      # line is this module's own and no arithmetic reads it (`gate-drift` reads the runbook's crossings
+      # and settlements by their own heads), so the commit stages the same three files it always has.
+      #
+      # It also renders the night's *comment* on the same verdict (`--comment`), and the step below posts
+      # it: the two surfaces above are a file and an annotation, and the repair this finding asks for is an
+      # edit to `.freebuff/run.md` made by hand, so the night says it once more where a person is. Nothing
+      # is written when nothing is refuted, which is what keeps the poster `skipped` on the ordinary night.
+      #
+      # …and the *third* body a night can owe is rendered here too: the ending of a comment whose request has
+      # been answered (`--end`). A comment left on a request somebody else merged or dropped is the one surface
+      # there a person meets without opening anything, and the night's reason to touch it is to tell somebody
+      # something — so nothing about the *finding* is written into it (no retraction, and the finding goes to the
+      # request this night has open, or is owed rather than spent), while the one fact only the runbook knows is
+      # said into it: that the thread is over, in the record's own word and date for it. The step below posts it
+      # with `--update-only`, because that comment is the one this job left there and an ending must not put a
+      # new comment on a request nobody is reading; and like the retraction it is said *once* rather than
+      # nightly, which the runbook makes true — the ending is a line of this module's own in the same file, so a
+      # later night reads the comment as already carrying it and stays quiet.
+      #
+      # Three more entries are what keep it *once*, and what ends it. Each `--set` is the lines its own
+      # record is refuted by, as the settle step that judged it named them (`wait-drift-set`: a request and
+      # a night, or the series and a night); `--runbook` is the record of what the comment the night leaves
+      # currently says — the lines it names and the request it stands on; and `--request` is the request
+      # this night has open, for the one night that has no comment standing yet. A line the standing comment
+      # already names is not named again, so a record left refuted for a week is one comment rather than
+      # seven while the night stays red on all seven; a line that joins the refutation, or one the comment
+      # names that its record no longer holds, is what rewrites it; and the night the last of those lines
+      # goes, the same step renders the *retraction* (`--retract`) that the step below writes into the same
+      # comment. Both lines it records land in the runbook above the commit below, and the request in a
+      # report line is the one the comment is on, so a later night goes back to it rather than to whatever
+      # is open by then.
+      - name: Fail on a crossing line the records do not produce
+        id: wait-drift
+        if: always()
+        run: |
+          node .freebuff/wait-drift-gate.mjs \
+            --drift "Settled-wait drift=.ci/wait-drift-lines.md" \
+            --drift "Collect-wait drift=.ci/collect-wait-drift-lines.md" \
+            --set "Settled-wait drift=${{ steps.settle-floor.outputs.wait-drift-set }}" \
+            --set "Collect-wait drift=${{ steps.settle-collect.outputs.wait-drift-set }}" \
+            --runbook .freebuff/run.md \
+            --request "${{ steps.settle-floor.outputs.open-request }}" \
+            --record .ci/wait-drift.md \
+            --summary .ci/summary.md \
+            --comment .ci/wait-drift-repair.md \
+            --retract .ci/wait-drift-retract.md \
+            --end .ci/wait-drift-end.md \
+            "Settled-wait drift=${{ steps.settle-floor.outputs.wait-drift }}" \
+            "Collect-wait drift=${{ steps.settle-collect.outputs.wait-drift }}"
+
+      # …and the same verdict said where a person is, which neither of those two is: the record is a file in
+      # an artifact and the annotation a line on this run's checks list, while the repair the finding asks
+      # for is an edit to `.freebuff/run.md` by hand. The step is gated on `reported` — the verdict step's own
+      # output, `true` only when it wrote a refutation body — rather than on the count or on the outcome,
+      # because the question is not whether the night is red (a refuted record makes it red on every night it
+      # stands, while `reported` is `true` only on the night that has something to say the comment does not
+      # already) but whether there is a body to put up at all: a refuted record the standing comment already
+      # describes leaves this step `skipped`, the same value a night that owed no comment has, which is the
+      # distinction `comment-gate.mjs` at the end of the job reads to tell a loss from a night nothing was
+      # owed on. **It marks rather than posts fresh** — the body carries `<!-- refuted-settled-wait-record -->`
+      # and the step finds that marker on the request, so there is *one* comment per request: it is rewritten
+      # when the finding changes and rewritten again into the retraction below when it ends, which is only a
+      # single defined action if there is a single comment to act on. What that costs is said rather than
+      # implied: a line joining a standing refutation updates the comment and notifies nobody, where a fresh
+      # post would have, and the run page, the annotation and the artifact are what say it nightly. The
+      # request it is left on is the one the comment *stands* on — `comment-request`, which the verdict step
+      # publishes whether or not this night has a request open, so an update stays where the finding was
+      # first reported — and on the first night of a refutation that is the floor settle step's
+      # `open-request`, the only place this job can reach anybody at all. A night with neither skips this
+      # step, and the finding is still on the page, in the annotations and in the artifact's record.
+      - name: Comment the refuted record on the open request
+        id: comment-wait-drift
+        if: steps.wait-drift.outputs.reported == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.wait-drift.outputs.comment-request }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --marker '<!-- refuted-settled-wait-record -->' \
+            --body .ci/wait-drift-repair.md \
+            --label 'Refuted settled-wait record' \
+            --producer 'Comment the refuted record on the open request'
+
+      # …and the same comment rewritten on the night its finding ends, which is the half of a red a pull
+      # request cannot be left to judge for itself: `.freebuff/run.md` is repaired by an edit and the comment
+      # the night left is the one thing on the request still saying the record is broken, so a person opening
+      # it cannot tell a live red from one whose fix has landed. The verdict step renders the note
+      # (`--retract`, quoting the lines that left and the record's own words for why) and this step writes it
+      # into the same comment, found by the same marker the retraction body keeps. `--update-only`, because a
+      # request that never carried the red has nothing to retract and must not be handed a note about a
+      # repair nobody was told about — that run is green, which is what the script answers when the marker
+      # finds nothing. It runs on a *green* night, since the repair is what makes the record hold, so its
+      # gate is the request the comment stands on rather than any count; and it is `continue-on-error` like
+      # every comment here, because what fails the night is `comment-gate.mjs` reading this step's outcome —
+      # a retraction that never arrived leaves the stale red this pair exists to end.
+      - name: Retract the refuted record that was repaired
+        id: retract-wait-drift
+        if: steps.wait-drift.outputs.retract != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.wait-drift.outputs.retract }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --update-only \
+            --marker '<!-- refuted-settled-wait-record -->' \
+            --body .ci/wait-drift-retract.md \
+            --label 'Repaired settled-wait record' \
+            --producer 'Retract the refuted record that was repaired'
+
+      # …and the ending into the comment that stands on the request that ended, which is the third poster and
+      # the one gate here that reads a *request* rather than a count: `ended-request` is published only on the
+      # night the verdict step wrote that body, and it names the request the comment stands on — where the red
+      # was left, not necessarily the request this night has open. `--update-only` for the retraction's reason
+      # and one more: the ending rewrites a comment this job left there, so a request that never carried the mark
+      # has no red for it to explain, and the run is green with that said on the page rather than a note handed
+      # to somebody who was never told anything. A poster that *failed* is red, which `comment-gate.mjs` at the
+      # end of the job reads: an ending that never arrived leaves the red this whole channel exists to take down
+      # standing on a thread nobody will read again.
+      - name: Comment the ending on the request that ended
+        id: end-wait-drift
+        if: steps.wait-drift.outputs.ended-request != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.wait-drift.outputs.ended-request }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --update-only \
+            --marker '<!-- refuted-settled-wait-record -->' \
+            --body .ci/wait-drift-end.md \
+            --label 'Ended settled-wait record' \
+            --producer 'Comment the ending on the request that ended'
+
       # ...and the row lands where the next night can see it: committed and
       # pushed back to the ref this run checked out, which is why the job
       # holds `contents: write` above. The commit says `[skip ci]` so the push
@@ -134,9 +443,13 @@ jobs:
       # manifest beside the history because that is the doctrine every
       # workflow that commits is held to: whatever commits, commits the
       # manifest with it (the rule `collect-budget.test.ts` states over the
-      # whole directory). A push a protected branch refuses turns the job red
-      # on purpose: a history that silently stops accruing is the failure this
-      # step exists to prevent.
+      # whole directory). The runbook rides in the same commit for the same
+      # reason the history does: the settlement lines the settle steps above
+      # appended and the report line the verdict step above writes when it
+      # leaves a comment are records the next night reads back, and one that
+      # dies with the runner is the thing this pass exists to stop. A push a protected branch
+      # refuses turns the job red on purpose: a history that silently stops
+      # accruing is the failure this step exists to prevent.
       - name: Commit the coverage history
         if: always()
         env:
@@ -144,11 +457,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .freebuff/coverage-history.md .freebuff/gate-hashes.mjs
+          git add .freebuff/coverage-history.md .freebuff/gate-hashes.mjs .freebuff/run.md
           if git diff --cached --quiet; then
-            echo "The coverage history is unchanged — nothing to commit."
+            echo "The coverage history and the runbook are unchanged — nothing to commit."
           else
-            git commit -m "chore(coverage): record the nightly rendered-links reading ($(date -u +%F)) [skip ci]"
+            git commit -m "chore(coverage): record the nightly coverage readings and the proposals answered ($(date -u +%F)) [skip ci]"
             # The ruleset grants github-actions no bypass on a personal repository: the token's
             # push is declined with "Changes must be made through a pull request". A deploy key
             # *is* a listed bypass actor, so this one push authenticates as the key the secret
@@ -166,6 +479,220 @@ jobs:
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
+      # The trends, *answered* rather than only charted: each reading the record now holds is held
+      # against the low-water mark of the nights before it (`.freebuff/coverage-trend.mjs`), and
+      # the job goes red when one stepped below — which is the run this fails, because the gate
+      # above closed by appending its own record to the working tree. The report goes onto the run
+      # page beside the summary, since the answer is what a reader wants in the morning and the
+      # chart only shows the shape after the fact. The exit code is carried by hand: a `| tee`
+      # would hand the step `tee`'s status instead of the command's, and a regression would
+      # publish itself green.
+      #
+      # …and the second thing on this page that can fail the run, which is not a reading at all: the
+      # settled-wait record the settle steps above write into `.freebuff/run.md`. Those lines are the
+      # *bar* this job's own decision is written in — a comment is left while the median is above the
+      # level a line says one has already been about — so each one is held against the settlement lines
+      # it claims to describe, and a crossing the records do not produce is a level nothing has held.
+      # Both directions are a night's failure: a bar above what the records held silences a crossing
+      # that is really new, and a bar below it invites a comment about one already said. The record is a
+      # person-readable file in a repository people edit, so the run refutes it and stops rather than
+      # trusting it, and the repair is the record's own: re-derive the line from the settlements, or
+      # delete it and let the next rise say the crossing again.
+      #
+      # …and it is stated in two places on purpose, both of them verdicts now. The settle step above
+      # renders its settlement section with those same crossings in hand, so the finding also stands where
+      # the record is *discussed* — beside the history the lines were derived from, on the page a person
+      # opening the run reads first — and the verdict step below reads that section's own count back as a
+      # red job of its own. This step is the check over the *whole file*, and it is the one that catches a
+      # line tonight's own run wrote, since that line did not exist when the section was rendered: two
+      # readings of one function rather than two functions, so a reader who meets the sentence on the page
+      # is not looking at a second refutation.
+      - name: Check the coverage trend
+        id: trend
+        if: always()
+        run: |
+          mkdir -p .ci
+          set +e
+          node .freebuff/coverage-trend.mjs > .ci/trend.txt 2>&1
+          status=$?
+          cat .ci/trend.txt >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # ...and what the night does about it, rather than leaving the red for whoever notices.
+      # The repair a step down asks for is `npm run coverage:low-water`, which used to mean a
+      # person reading a red run and running the recorder by hand; this does that arithmetic
+      # here and leaves the answer for review: the same derivation the recorder makes, written
+      # to the floor file the commit below carries, plus the proposal the pull request is
+      # opened with. It runs on the reds that can mean the floors have stopped stating the
+      # records, and asks the question rather than assuming which one it is: the trend's own
+      # verdict, and the gate's — where the suite's byte comparison lands when a record sits
+      # below the level the chart draws under its series. That verdict is now two questions rather
+      # than one — a reading below its floor, and the settled-wait record the step above also
+      # judges, where nothing regressed at all — and this step answers the second the way its last
+      # sentence says: the command writes no floor at all unless the committed file is not what the
+      # records derive, and a refuted crossing line cannot move a derivation. That second red is the one this step
+      # was missing: the trend holds a floor against the *newest* record, so a dip an older
+      # night carried — a bullet committed by hand, a backfilled night — leaves the file
+      # stating a level the records no longer reach, reddens the comparison above, and would
+      # otherwise sit there until somebody ran the recorder. A green answer has nothing to
+      # record and a red about anything else records nothing either: the command writes no
+      # floor at all unless the committed file is not what the records derive.
+      - name: Propose the floors the records now derive
+        id: propose-floor
+        if: steps.gate.outcome == 'failure' || steps.trend.outcome == 'failure'
+        run: |
+          mkdir -p .ci
+          node .freebuff/coverage-trend.mjs --propose-low-water \
+            --file .freebuff/coverage-low-water.json \
+            --output .ci/coverage-floor-proposal.md
+
+      # The alarm, over the exact tree the commit will carry. Nothing else checks this one: a
+      # pull request opened with `GITHUB_TOKEN` starts no workflows, so `ci.yml`'s drift stage
+      # never runs on the commit this branch lands. A check that disagrees stops the job before
+      # the commit rather than opening a request over a tree the pin already refuses.
+      - name: Check the pin describes the tree the proposal will carry
+        id: verify-floor
+        if: steps.propose-floor.outputs.changed == 'true'
+        run: node .freebuff/gate-drift.mjs
+
+      # A floor is a gate, so recording a lower one is a merge and not a push: the branch *is*
+      # the proposal, and the body the step above rendered is the whole of what it argues. One
+      # branch, rewritten on purpose — a step down nobody adopted is still a step down tomorrow,
+      # so a later night lands tonight's numbers on the same branch and updates the request it
+      # already has rather than opening a second one, which leaves the reviewer reading the
+      # current derivation instead of the one from the first night it fell. The lease is the
+      # head this run read a moment earlier, so a push that arrived in between is refused
+      # rather than overwritten.
+      #
+      # A request that is already open gets two things the first night did not have, and the
+      # second is what makes the first one matter. `--nudge` reads how long it has sat and renders
+      # the night's comment, which the step *after* this one posts — a new comment each night,
+      # because editing a body or a comment notifies nobody, and a proposal nobody has read is the
+      # failure this is about. The same mode names it on this run's page from the night it is past
+      # `STALE_NIGHTS` on, so the page a person reads in the morning says the red above is this
+      # request's business rather than a new finding.
+      #
+      # Its age is what decides how loud that gets, and the loudest thing this mode can do is name
+      # somebody: past `ESCALATED_NIGHTS` the *comment* names the repository's owner, because a
+      # mention reaches the person who can answer it and this page reaches nobody's inbox. The
+      # handle is passed rather than left to the script's own default, so what the escalation names
+      # is visible here, with the rest of the step's flags.
+      #
+      # The push authenticates as the deploy key, for the reason the commit-back step above
+      # does: the repository's ruleset declines the workflow token and lets a deploy key
+      # through. That step installs the key as part of committing, and a night whose history
+      # row did not change never reaches it — so this step installs it too rather than
+      # depending on a fact about another step's run, and refuses out loud when the secret is
+      # not there instead of failing as an opaque ssh error.
+      - name: Open the floor proposal
+        id: open-floor
+        if: steps.propose-floor.outputs.changed == 'true' && steps.verify-floor.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NIGHTLY_DEPLOY_KEY: ${{ secrets.NIGHTLY_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          branch="coverage/floor-proposal"
+          remote="git@github.com:${GITHUB_REPOSITORY}.git"
+          if [ -z "$NIGHTLY_DEPLOY_KEY" ]; then
+            echo "NIGHTLY_DEPLOY_KEY is not set — the floor proposal cannot be pushed." >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$NIGHTLY_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+          lease=$(git ls-remote "$remote" "refs/heads/$branch" | cut -f1)
+          git checkout -b "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The pin manifest rides with the floor file, the doctrine every commit in these
+          # workflows is held to. The floor file matches no watch rule today, so naming it here
+          # is what keeps the two moving together on the night a rule does cover it.
+          git add .freebuff/coverage-low-water.json .freebuff/gate-hashes.mjs
+          git commit -m "chore(coverage): propose the floor the latest records derive ($(date -u +%F)) [skip ci]"
+          if [ -n "$lease" ]; then
+            git push --force-with-lease="refs/heads/$branch:$lease" "$remote" "$branch"
+          else
+            git push "$remote" "$branch"
+          fi
+          open=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            number=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+            gh pr edit "$number" --body-file .ci/coverage-floor-proposal.md
+            # The age comes from the request itself rather than from this branch, which is force-pushed
+            # every night and so always reads as tonight: `createdAt` is when the *proposal* was opened,
+            # which is the question "how long has this sat" is asking.
+            created=$(gh pr view "$number" --json createdAt --jq '.createdAt')
+            node .freebuff/coverage-trend.mjs --nudge \
+              --number "$number" \
+              --created "$created" \
+              --owner "$GITHUB_REPOSITORY_OWNER" \
+              --output .ci/coverage-floor-proposal-nudge.md
+            # What the step below needs and only this step knows: that the request re-fired at all, which
+            # request it is, and when it opened. The *posting* is deliberately not here — it is a step of
+            # its own, `continue-on-error` like every comment step in `ci.yml`, with
+            # `.freebuff/comment-gate.mjs` reading its outcome at the end of the job — so a comment that
+            # never arrived fails the night instead of leaving a red line in a log nobody opens.
+            echo "refired=true" >> "$GITHUB_OUTPUT"
+            echo "number=$number" >> "$GITHUB_OUTPUT"
+            echo "created=$created" >> "$GITHUB_OUTPUT"
+            echo "Updated the floor proposal in #$number — the diff is tonight's derivation." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "refired=false" >> "$GITHUB_OUTPUT"
+            gh pr create \
+              --base "$GITHUB_REF_NAME" \
+              --head "$branch" \
+              --title "chore(coverage): record the floor the latest records derive" \
+              --body-file .ci/coverage-floor-proposal.md
+          fi
+
+      # The night's comment, in a step of its own for one reason: a comment that never arrived has to
+      # be able to fail the night. The poster is `continue-on-error`, like every comment step in
+      # `ci.yml` — a lost comment must not take the artifact uploads with it — and the gate at the end
+      # of the job is what turns that into a red run instead of a red line in a log. `--fresh` is the
+      # mode that posts a new comment each night rather than updating the one a marker finds: an edit
+      # notifies nobody, and the notification is the half of this that reaches a person.
+      - name: Comment the re-fired proposal on the pull request
+        id: comment-floor
+        if: steps.open-floor.outputs.refired == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.open-floor.outputs.number }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --fresh \
+            --body .ci/coverage-floor-proposal-nudge.md \
+            --label 'Floor proposal nudge' \
+            --producer 'Comment the re-fired proposal on the pull request'
+
+      # The risen-wait comment, in a step of its own for the reason the one above has one, and *not* a
+      # paragraph in that comment's body: the two are different findings with different triggers. The
+      # nudge above is about how long this request has sat and exists only on a night the floors moved;
+      # this one is about the *record* — the middle of every age the runbook holds, past the worst any
+      # earlier night had held — and is owed on any night that stands above that line with a proposal
+      # still open to answer it, whether or not the floors moved. A night can carry both comments, so
+      # each has to be readable as itself; and the step above must not be assumed to have run, which is
+      # why the condition here is the settle step's own output rather than anything about the proposal.
+      # What that output names is the request, read out of the settlement list the same step already had
+      # — the entry with no close — so the number is bound here rather than guessed. A night the settle
+      # step could not read GitHub is `skipped` here too, which is right: no settlement was recorded, so
+      # no wait was computed and nothing was owed.
+      - name: Comment the risen wait on the floor proposal
+        id: comment-wait
+        if: steps.settle-floor.outputs.wait-request != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.settle-floor.outputs.wait-request }}
+        run: |
+          node .freebuff/pr-comment.mjs \
+            --fresh \
+            --body .ci/coverage-floor-proposal-wait.md \
+            --label 'Risen settled wait' \
+            --producer 'Comment the risen wait on the floor proposal'
+
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -174,7 +701,48 @@ jobs:
           path: |
             PostBase-project/.ci/report.json
             PostBase-project/.ci/summary.md
+            PostBase-project/.ci/wait-drift.md
+            PostBase-project/.ci/wait-drift-repair.md
+            PostBase-project/.ci/wait-drift-repair.redactions.json
+            PostBase-project/.ci/wait-drift-retract.md
+            PostBase-project/.ci/wait-drift-retract.redactions.json
+            PostBase-project/.ci/wait-drift-end.md
+            PostBase-project/.ci/wait-drift-end.redactions.json
+            PostBase-project/.ci/trend.txt
+            PostBase-project/.ci/coverage-floor-proposal.md
+            PostBase-project/.ci/coverage-floor-proposal-nudge.md
+            PostBase-project/.ci/coverage-floor-proposal-nudge.redactions.json
+            PostBase-project/.ci/coverage-floor-proposal-wait.md
+            PostBase-project/.ci/coverage-floor-proposal-wait.redactions.json
+            PostBase-project/.ci/floor-settlements.json
+            PostBase-project/.ci/floor-settlements.md
+            PostBase-project/.ci/collect-settlements.json
+            PostBase-project/.ci/collect-settlements.md
             PostBase-project/.ci/ci.log
             PostBase-project/.freebuff/coverage-history.md
           if-no-files-found: ignore
           retention-days: 30
+
+      # The verdict on the comment steps above, exactly as the two jobs in `ci.yml` have one. The
+      # poster exits non-zero whenever the comment is not on the pull request, `steps.<id>.outcome` is what
+      # the step *did* rather than what `continue-on-error` let the job make of it, and
+      # `.freebuff/comment-gate.mjs` holds the judgment — `failure` and `cancelled` fail the job and
+      # are named on the run page, while `skipped` passes, because a night whose proposal did not change owed
+      # no comment at all. The retraction is the fourth pair for the same reason and its own: a red the night
+      # cannot take down is a request carrying a finding its record no longer has, which is the one state this
+      # whole pair of comments exists to make impossible. The ending is the fifth for the third body's reason,
+      # which is the same fact one step further out: that comment is the only place its reader meets the
+      # ending, so an ending that never arrived leaves a red standing on a thread nobody will read again — and
+      # a night that owed one and posted none is red for the same four words as a lost comment. It runs last,
+      # so that every file this job keeps is in the upload before it — the drift verdict above writes the
+      # artifact's own record and so sits *before* the upload, while this one judges only steps already behind
+      # it and stays the job's last word.
+      - name: Fail when a comment this run owed was not posted
+        if: always()
+        run: |
+          node .freebuff/comment-gate.mjs \
+            "Floor proposal nudge=${{ steps.comment-floor.outcome }}" \
+            "Risen settled wait=${{ steps.comment-wait.outcome }}" \
+            "Refuted settled-wait record=${{ steps.comment-wait-drift.outcome }}" \
+            "Repaired settled-wait record=${{ steps.retract-wait-drift.outcome }}" \
+            "Ended settled-wait record=${{ steps.end-wait-drift.outcome }}"

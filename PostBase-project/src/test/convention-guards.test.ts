@@ -1,10 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CONVENTION_GUARDS } from "@/test/convention-guards";
+// The one declaration of this guard's reading: its sidecar, the env seam that can point a run
+// at scratch, and the prefix the line carries. Publishing a third reading cost this file an
+// import and a close-out — the runner, the run page, the payload shape, the history and
+// `.gitignore` all learned nothing about it.
+import {
+  CONVENTION_GUARDS_READING,
+  metricOf,
+  readingPath,
+} from "../../.freebuff/coverage-readings.mjs";
 import { EXPECTED_GUARDS } from "./declared-strikes";
 import { makeScratchDir, removeScratchDir } from "./scratch";
 
@@ -12,7 +21,8 @@ import { makeScratchDir, removeScratchDir } from "./scratch";
  * The meta-test for the convention guards.
  *
  * Each guard — mount, settle, body-clear, stylesheet, beat-seam, beat-clock,
- * runbook, client-env, public-vocabulary, client-config, stale-stage-lists — reads a file's source
+ * runbook, client-env, public-vocabulary, client-config, stale-stage-lists, frozen-scratch,
+ * relative-fixture — reads a file's source
  * and fails when it breaks a rule no rendered test can see. A guard is
  * only worth its noise while its detector still *catches* something, and a
  * detector is exactly the kind of code that can stop catching without anyone
@@ -40,6 +50,38 @@ import { makeScratchDir, removeScratchDir } from "./scratch";
  * `src/test/declared-strikes.test.ts`. A guard the registry gains without a declaration,
  * or a declaration no registered guard carries, is a failure in one of the two.
  */
+
+/**
+ * Where this guard's close-out leaves its reading: the sidecar its registry entry names.
+ *
+ * Built from the entry rather than spelled, so the file and the seam a test can point at
+ * scratch (`CI_CONVENTION_GUARDS_STAMP_FILE`) are the same declaration the runner reads the
+ * line back through.
+ */
+const readingSidecar = readingPath(
+  CONVENTION_GUARDS_READING,
+  fileURLToPath(new URL("../..", import.meta.url)),
+);
+
+/**
+ * The line this guard publishes: which convention guards were exercised, and how many.
+ *
+ * The answer this file already gives — every guard fired on its forbidden shape and left its
+ * clean shape alone — says nothing about *which* guards it drove, and a guard that quietly
+ * left `CONVENTION_GUARDS` (or arrived in it with no fixture pair) would leave that sentence
+ * exactly as green. The roster is the answer to that: the ids the meta-test actually walked,
+ * stated on the run page the way the frozen-scratch pass states the suites it judged. `null`
+ * for an empty registry, so the reading is an answer to a question this run asked, never a
+ * line written for its own sake.
+ */
+function conventionGuardsReading(guards: readonly { id: string }[]): string | null {
+  if (guards.length === 0) return null;
+  const roster = guards.map((guard) => guard.id).sort();
+  return (
+    `${CONVENTION_GUARDS_READING.prefix} ${roster.length} guard(s) exercised on both of their shapes — ` +
+    roster.join(", ")
+  );
+}
 
 describe("every convention guard", () => {
   it("is registered, so none can fall out of the meta-check", () => {
@@ -73,6 +115,33 @@ describe("every convention guard", () => {
         guard.clean,
       );
       expect(guard.failure, `${guard.id}: the guard states no failure`).not.toBe("");
+    }
+  });
+
+  it("states the count the trend charts, in a line the entry's metric reads", () => {
+    // The reading is prose the run page prints and a record's number is what the trend plots, so
+    // the two have to agree about the same line: the entry declares which number is the
+    // measurement, and this is the line the close-out writes — held here, where it is built,
+    // rather than assumed by the chart.
+    const reading = conventionGuardsReading(CONVENTION_GUARDS);
+    expect(reading).not.toBeNull();
+    expect(metricOf(CONVENTION_GUARDS_READING, reading as string)).toBe(CONVENTION_GUARDS.length);
+  });
+
+  // The reading rides the same channel the rendered-links and frozen-scratch readings do: the
+  // console line for a developer's own run, and the sidecar for the CI close, which the runner
+  // clears at each attempt and carries in its report by the registry's id. Published from the
+  // hook rather than from a case, so a red run still says which guards it judged on its way to
+  // the red; fail-silent, because a tree that cannot host the sidecar costs the run page one
+  // line and never this guard a test.
+  afterAll(() => {
+    const reading = conventionGuardsReading(CONVENTION_GUARDS);
+    if (reading === null) return;
+    console.log(reading);
+    try {
+      writeFileSync(readingSidecar, `${reading}\n`, "utf8");
+    } catch {
+      return;
     }
   });
 });

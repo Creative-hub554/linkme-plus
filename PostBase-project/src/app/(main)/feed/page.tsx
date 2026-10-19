@@ -128,6 +128,7 @@ interface FeedPost {
     name?: string | null;
     username?: string | null;
     avatarUrl?: string | null;
+    verified?: boolean;
   };
   /**
    * Present when a Page published the post, and the identity the card should
@@ -1349,7 +1350,7 @@ function FeedContent() {
                 getKey={getPostKey}
                 highlightKey={highlightId}
                 renderItem={(post) => {
-                  const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));              return <PostCard id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} liked={post.viewerLiked} reaction={post.viewerReaction} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} sponsored={post.sponsored && post.campaignId ? { campaignId: post.campaignId, pageUsername: post.page?.username ?? null, targetLocation: post.targetLocation ?? null } : undefined} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onReactionSettled={(type) => patchPost(post.id, { viewerReaction: type, viewerLiked: type === "like" })} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined } />;
+                  const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));              return <PostCard id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined, verified: post.author.verified }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} liked={post.viewerLiked} reaction={post.viewerReaction} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} sponsored={post.sponsored && post.campaignId ? { campaignId: post.campaignId, pageUsername: post.page?.username ?? null, targetLocation: post.targetLocation ?? null } : undefined} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onReactionSettled={(type) => patchPost(post.id, { viewerReaction: type, viewerLiked: type === "like" })} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined } />;
                 }}
               />
 

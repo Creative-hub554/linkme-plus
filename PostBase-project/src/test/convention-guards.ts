@@ -1519,6 +1519,404 @@ export function staleStageLists(source: string, canonicalOrder: string[]): numbe
 }
 
 /* -------------------------------------------------------------------------- */
+/* The frozen-scratch-path guard                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The hooks that fill a fixture path before the tests that read it.
+ *
+ * The four hook names and nothing else: a `describe` callback that fills the binding fills it
+ * while the file is being *collected*, which is the failure this guard exists for rather than a
+ * fifth spelling of the fix, and a test callback runs after the hooks, which is where the read
+ * belongs.
+ */
+const SCRATCH_HOOKS = ["beforeAll", "beforeEach", "afterAll", "afterEach"];
+
+/**
+ * Whether `text` names `binding`: the identifier itself, or the name inside a template's `${…}`.
+ *
+ * A template is one token, so `` `${scratch}/pin.json` `` carries the name only here — a read
+ * this guard would otherwise miss entirely, and one that freezes exactly as the identifier does.
+ */
+function namesBinding(text: string, binding: string): boolean {
+  let named = text === binding;
+  if (text[0] === "`" && text.indexOf("${" + binding + "}") !== -1) named = true;
+  return named;
+}
+
+/** Whether token `index` sits inside any of the `[from, to]` token spans. */
+function withinSpans(spans: [number, number][], index: number): boolean {
+  let found = false;
+  for (const [from, to] of spans) if (from <= index && index <= to) found = true;
+  return found;
+}
+
+/**
+ * The narrowest span in `spans` that contains `index`, or nothing when none does.
+ *
+ * Narrowest rather than any: the spans nest, and which function a read belongs to is the question
+ * — a helper defined inside a `describe` body reads the binding from *its own* body, which runs
+ * when a test calls it, not from the describe body it is written in.
+ */
+function narrowestSpan(spans: [number, number][], index: number): [number, number] | undefined {
+  let best: [number, number] | undefined;
+  for (const span of spans) {
+    if (span[0] > index || index > span[1]) continue;
+    if (best === undefined || span[1] - span[0] < best[1] - best[0]) best = span;
+  }
+  return best;
+}
+
+/**
+ * The `{` that opens the body of the function whose parameter list opens at token `from`.
+ *
+ * Not simply the next `{`: a TypeScript return type is written between the parameters and the
+ * body, and it is spelled with braces (`: { status: number | null }`), as a default value is
+ * (`env: Record<string, string> = {}`) — so the body is the first `{` at depth zero whose own
+ * closer is not itself followed by one of the tokens a type can leave hanging. `tokens.length`
+ * when the file ends first, which callers treat as no body.
+ */
+function functionBody(tokens: Token[], from: number): number {
+  let index = matchingBracket(tokens, from) + 1;
+  while (index < tokens.length) {
+    if (tokens[index].text === "{") {
+      const after = tokens[matchingBracket(tokens, index) + 1]?.text;
+      const type = after === "{" || after === "|" || after === "&" || after === ">";
+      if (!type) return index;
+    }
+    index += 1;
+  }
+  return tokens.length;
+}
+
+/**
+ * The token span of every function body: a `=>` and the body it introduces, or a `function` and
+ * the braces it opens.
+ *
+ * The body of an expression arrow runs to the end of its statement, which is what
+ * `statementEnd` is for — an arrow written over several lines is still one body, and
+ * `const fixture = () => path.join(scratch, name)` is the fix this guard exists to keep. A
+ * `function`'s body is the one `functionBody` finds behind its parameters and return type. Both
+ * approximate the file the way the shared lexer does: a `=>` written in a *type* annotation reads
+ * as a body, which can only exempt a read and never flag one.
+ */
+function functionSpans(tokens: Token[]): [number, number][] {
+  const spans: [number, number][] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    // The lexer keeps every operator one character wide, so an arrow is the `=` and the `>`
+    // beside it — the same pair `declaresFunction` reads, and never `>=`, which is `>` then `=`.
+    if (tokens[index].text === "=" && tokens[index + 1]?.text === ">") {
+      const body = index + 2;
+      const end =
+        tokens[body]?.text === "{" ? matchingBracket(tokens, body) : statementEnd(tokens, body);
+      spans.push([index, end]);
+      continue;
+    }
+    if (tokens[index].text !== "function") continue;
+    let at = index + 1;
+    if (tokens[at]?.text === "*") at += 1;
+    if (isIdentifier(tokens[at]?.text)) at += 1;
+    while (at < tokens.length && tokens[at].text !== "(") at += 1;
+    if (at >= tokens.length) continue;
+    const body = functionBody(tokens, at);
+    if (body < tokens.length) spans.push([index, matchingBracket(tokens, body)]);
+  }
+  return spans;
+}
+
+/**
+ * The `(` of the call a `describe`/`it`/`test` names: its own, or the one its modifier chain ends
+ * in.
+ *
+ * `describe("…", cb)` is the call, `describe.skip("…", cb)` and `describe.only(…)` are the call
+ * with a modifier in front of it, and `describe.each([…])("…", cb)` is a *factory* — the case list
+ * is the first call's argument and the callback hangs off the second. All three are the same body
+ * to this reading, so the chain is walked to wherever it ends rather than the modifiers being
+ * listed in a vocabulary that goes stale the next time one is added. Nothing at all when the call
+ * is not one of these three (a `describe` in a string is not a token, and a call that fits no
+ * chain is not a suite).
+ */
+function modifierCall(tokens: Token[], index: number): number {
+  const at = index + 1;
+  if (tokens[at]?.text === "(") return at;
+  if (
+    tokens[at]?.text !== "." ||
+    !isIdentifier(tokens[at + 1]?.text) ||
+    tokens[at + 2]?.text !== "("
+  ) {
+    return -1;
+  }
+  // Past the modifier's own call: a factory hands the callback to the call that follows it,
+  // while `skip(…)`/`only(…)` are the call themselves.
+  const after = matchingBracket(tokens, at + 2) + 1;
+  if (tokens[after]?.text === "(") return after;
+  return at + 2;
+}
+
+/**
+ * The callback span of each suite call: the first `=>` or `function` inside it, which is the body
+ * that runs while the file is being collected.
+ *
+ * The first one at the call's own depth, not the largest start inside it: a helper defined in the
+ * describe body is a function too, and reading the binding from one of those is the fix. Which
+ * call that is — plain, modified, or the second half of a `describe.each` — is `modifierCall`'s
+ * question; this one only reads the arguments it was handed.
+ */
+function suiteCallbacks(
+  tokens: Token[],
+  suites: [number, number][],
+  functions: [number, number][],
+): [number, number][] {
+  const callbacks: [number, number][] = [];
+  for (const [from, to] of suites) {
+    let depth = 1;
+    let found = -1;
+    for (let index = from + 1; index < to; index += 1) {
+      const text = tokens[index].text;
+      if (text === "(" || text === "[") depth += 1;
+      if (text === ")" || text === "]") depth -= 1;
+      const arrow = text === "=" && tokens[index + 1]?.text === ">";
+      if (depth === 1 && (arrow || text === "function")) {
+        found = index;
+        break;
+      }
+    }
+    for (const span of functions) if (span[0] === found) callbacks.push(span);
+  }
+  return callbacks;
+}
+
+/**
+ * The 1-based line numbers where a test file reads a binding a hook has not filled yet — the
+ * fixture path built at collection time, from the empty string the binding is declared as.
+ *
+ * A suite that runs a real process or a real gate keeps its scratch directory in a binding a
+ * `beforeAll` fills (`makeScratchDir`, `src/test/scratch.ts`), and every fixture path is built
+ * from it. The body of a `describe` runs while the file is *collected*, before any hook, so a
+ * path built there freezes the empty string the binding starts as — and `join("", name)` is a
+ * relative path, which resolves against whatever directory the runner happens to be in. That is
+ * how `ci-runner.test.ts` came to write its `ci-suspect-pin.mjs` fixture over a tracked file in
+ * the checkout's own root, and it reds no suite: the write succeeds, into the wrong tree.
+ *
+ * A read is too early when it happens outside every hook and test callback *and* either inside a
+ * suite callback or outside every function at all — a module-scope `const` built from the binding
+ * is the same freeze as the one in a describe body. A suite is whatever a `describe` names: the
+ * plain call, a `describe.skip`/`.only`, and the second call of a `describe.each`, whose case list
+ * is the first's argument — all three bodies run at collection. A read from a helper defined in the
+ * file is not: the helper runs when a test calls it, after the hook. The reading is on the
+ * token stream, so a path split across lines, concatenated, or carried by a template is one
+ * read of the binding wherever it is written, and a read inside a fixture *string* — this guard's
+ * own fixtures, and the strings every suite quotes at its stubs — is not a read at all.
+ *
+ * The fix is the one the suspects suite took: resolve the path where it is used
+ * (`const fixturePath = () => path.join(scratch, name)`) rather than once at collection time.
+ */
+export function frozenScratchPaths(source: string): number[] {
+  const tokens = tokenize(source);
+  const empties: string[] = [];
+  const filled: string[] = [];
+  const hooks: [number, number][] = [];
+  const deferred: [number, number][] = [];
+  const suites: [number, number][] = [];
+
+  // What the file declares and which hooks fill it: an empty-string binding, and the calls that
+  // make one. One pass over the tokens, so both read the same file.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const text = tokens[index].text;
+    if (text === "let" || text === "var") {
+      const name = tokens[index + 1]?.text;
+      if (
+        name !== undefined &&
+        isIdentifier(name) &&
+        tokens[index + 2]?.text === "=" &&
+        stringLiteral(tokens[index + 3]?.text) === "" &&
+        empties.indexOf(name) === -1
+      ) {
+        empties.push(name);
+      }
+      continue;
+    }
+    if (SCRATCH_HOOKS.indexOf(text) === -1 || tokens[index + 1]?.text !== "(") continue;
+    const end = matchingBracket(tokens, index + 1);
+    if (end < tokens.length) hooks.push([index + 1, end]);
+  }
+
+  // The suites and the tests, through whatever modifiers they carry. A body inside a suite runs
+  // while the file is collected and a body inside a test runs after the hooks, and which of the
+  // two a read belongs to is the whole reading — so the chain is walked rather than the bare call
+  // looked for, and `describe.each([…])(…)` is a suite exactly as `describe(…)` is.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const text = tokens[index].text;
+    if (text !== "describe" && text !== "it" && text !== "test") continue;
+    const call = modifierCall(tokens, index);
+    if (call === -1) continue;
+    const end = matchingBracket(tokens, call);
+    if (end >= tokens.length) continue;
+    if (text === "describe") suites.push([call, end]);
+    else deferred.push([call, end]);
+  }
+
+  // Which of those bindings a hook really fills. A `===` tokenizes as three `=`, so the second
+  // one is the difference between an assignment and a comparison.
+  for (const [from, to] of hooks) {
+    for (let index = from; index <= to; index += 1) {
+      const name = tokens[index].text;
+      if (empties.indexOf(name) === -1) continue;
+      if (tokens[index + 1]?.text !== "=" || tokens[index + 2]?.text === "=") continue;
+      if (tokens[index - 1]?.text === ".") continue;
+      if (filled.indexOf(name) === -1) filled.push(name);
+    }
+  }
+
+  const functions = functionSpans(tokens);
+  const callbacks = suiteCallbacks(tokens, suites, functions);
+  const offenders: number[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    let named = false;
+    for (const name of filled) if (namesBinding(tokens[index].text, name)) named = true;
+    if (!named) continue;
+    // The declaration itself is not a read of the binding: `let scratch = ""` names it to make it.
+    if (tokens[index - 1]?.text === "let" || tokens[index - 1]?.text === "var") continue;
+    if (withinSpans(hooks, index) || withinSpans(deferred, index)) continue;
+    const enclosing = narrowestSpan(functions, index);
+    const suite = narrowestSpan(callbacks, index);
+    if (enclosing !== undefined && suite?.[0] !== enclosing[0]) continue;
+    const line = lineNumberAt(source, tokens[index].start);
+    if (offenders.indexOf(line) === -1) offenders.push(line);
+  }
+  return offenders;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The relative-fixture-path guard                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The filesystem calls whose argument names the path a fixture is read or written at.
+ *
+ * The `node:fs` surface a suite touches for a fixture, sync-only because that is what a test can
+ * use without becoming a test of its own scheduler. `mkdtempSync` is in it for the same reason as
+ * the rest: its argument is a path, and a bare one makes the directory under the working directory
+ * rather than under `os.tmpdir()`.
+ */
+const FIXTURE_CALLS = [
+  "readFileSync",
+  "writeFileSync",
+  "appendFileSync",
+  "mkdirSync",
+  "mkdtempSync",
+  "rmSync",
+  "unlinkSync",
+  "existsSync",
+  "readdirSync",
+  "copyFileSync",
+  "renameSync",
+  "statSync",
+  "openSync",
+];
+
+/**
+ * Whether a literal path is one the working directory resolves.
+ *
+ * Rooted is what a path may be instead: `/tmp/fixture.json`, a Windows drive, or a `file://` URL
+ * — each names a place of its own, and none of them moves when the runner is started somewhere
+ * else. Anything else the literal spells, including `../` and `./`, is the working directory's.
+ */
+function spellsRelative(value: string | undefined): boolean {
+  let relative = true;
+  if (value === undefined || value === "") relative = false;
+  else if (value[0] === "/" || value[0] === "\\") relative = false;
+  else if (/^[A-Za-z]:[\\/]/.test(value)) relative = false;
+  else if (value.indexOf("file://") === 0) relative = false;
+  return relative;
+}
+
+/**
+ * The path a literal argument spells: a string's own text, or a template's leading literal chunk.
+ *
+ * A template is one token, so the reading takes the part before its first `${…}` — `` `./${name}` ``
+ * spells a relative path and `` `${root}/name` `` does not, and the difference is visible without
+ * resolving anything. Nothing at all for an argument that is not a literal: a path a call *built*
+ * (`path.join(scratch, name)`) is a value this guard has no reading of, and the frozen-scratch
+ * guard is the one that reads where it was built.
+ */
+function literalPath(tokens: Token[], at: number): string | undefined {
+  const text = tokens[at]?.text;
+  if (text === undefined) return undefined;
+  if (text[0] === '"' || text[0] === "'") return stringLiteral(text);
+  if (text[0] !== "`") return undefined;
+  let leading = text.slice(1, -1);
+  const substitution = text.indexOf("${");
+  if (substitution !== -1) leading = text.slice(1, substitution);
+  return leading;
+}
+
+/**
+ * The index of the first `,` at the call's own depth, or -1 when the call takes one argument.
+ *
+ * `copyFileSync` and `renameSync` name two paths, and the second is as much a fixture's address as
+ * the first — a copy whose *destination* is a bare relative literal lands in the checkout just as
+ * surely as one whose source does.
+ */
+function argumentBreak(tokens: Token[], open: number, close: number): number {
+  let depth = 0;
+  for (let index = open; index <= close; index += 1) {
+    const text = tokens[index].text;
+    if (text === "(" || text === "[" || text === "{") depth += 1;
+    else if (text === ")" || text === "]" || text === "}") depth -= 1;
+    else if (text === "," && depth === 1) return index;
+  }
+  return -1;
+}
+
+/**
+ * The 1-based line numbers where a test file names a fixture at a path the working directory
+ * resolves, rather than under the scratch directory the suite made for it.
+ *
+ * This is the other spelling of the leak the frozen-scratch guard reads. There the path was
+ * *built* from a binding a hook had not filled yet (`path.join("", name)`); here it is written
+ * out — `writeFileSync("ci-suspect-pin.mjs", …)`, `readFileSync("fixtures/seed.json")` — and
+ * resolves against the runner's working directory exactly as the empty string did, which is the
+ * checkout. `ci-runner.test.ts`'s suspects suite wrote its `ci-suspect-pin.mjs` fixture over a
+ * tracked file in the checkout's root this way once, and reds no suite: the write succeeds, into
+ * the wrong tree, and the fixture it leaves behind is one the next run reads.
+ *
+ * A read counts beside a write: a fixture loaded from a relative literal is loaded from wherever
+ * the runner stands, so the same literal can pass on a developer's machine and fail in CI, or —
+ * worse here — read the *real* file the suite was meant to shadow. `mkdtempSync`/`mkdirSync` are
+ * the same mistake made earlier: the directory appears in the checkout instead of under the temp
+ * dir, and everything written through it after that follows.
+ *
+ * Left alone, deliberately: a path a call builds (a `path.join`, a variable, an argument that is
+ * not a literal at all), a rooted literal (`/tmp/…`, a drive letter), a template whose first chunk
+ * is a substitution (`` `${root}/x` `` — the root is somebody else's decision), and every argument
+ * that is not a path — the `"utf8"` encoding and the literal contents beside it are not read, so
+ * a suite may still write a payload it spells out. The one place such a path is legitimate is a
+ * fixture under the suite's own scratch directory, which is built rather than spelled.
+ */
+export function relativeFixturePaths(source: string): number[] {
+  const tokens = tokenize(source);
+  const offenders: number[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const text = tokens[index].text;
+    if (FIXTURE_CALLS.indexOf(text) === -1 || tokens[index + 1]?.text !== "(") continue;
+    const end = matchingBracket(tokens, index + 1);
+    if (end >= tokens.length) continue;
+    const paths = [index + 2];
+    if (text === "copyFileSync" || text === "renameSync") {
+      const comma = argumentBreak(tokens, index + 1, end);
+      if (comma !== -1) paths.push(comma + 1);
+    }
+    for (const at of paths) {
+      if (!spellsRelative(literalPath(tokens, at))) continue;
+      const line = lineNumberAt(source, tokens[index].start);
+      if (offenders.indexOf(line) === -1) offenders.push(line);
+    }
+  }
+  return offenders;
+}
+
+/* -------------------------------------------------------------------------- */
 /* The registry                                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -1730,5 +2128,70 @@ export const CONVENTION_GUARDS: ConventionGuard[] = [
     detect: (source) => staleStageLists(source, STAGE_NAMES).map((line) => `line ${line}`),
     forbidden: "// stages: 3 stage(s), `lint`, `typecheck`",
     clean: "// stages: 2 stage(s), `typecheck`, `lint`",
+  },
+  {
+    id: "frozen-scratch",
+    failure:
+      "a test file builds a fixture path at collection time from a binding only a hook fills — " +
+      "the empty string it is declared as, which `join(\"\", name)` makes relative to the runner's " +
+      "own working directory",
+    detect: (source) => frozenScratchPaths(source).map((line) => `line ${line}`),
+    // The pair differs in one thing — where the path is built — and the hook that fills the
+    // binding is stated as the `beforeEach` a per-test fixture would use, so the vocabulary the
+    // limb strike below widens out is the one this fixture pins.
+    forbidden: [
+      'let scratch = "";',
+      "",
+      "beforeEach(() => {",
+      '  scratch = makeScratchDir("suite-");',
+      "});",
+      "",
+      'describe("the fixture", () => {',
+      '  const fixture = path.join(scratch, "pin.json");',
+      "});",
+    ].join("\n"),
+    clean: [
+      'let scratch = "";',
+      "",
+      "beforeEach(() => {",
+      '  scratch = makeScratchDir("suite-");',
+      "});",
+      "",
+      'describe("the fixture", () => {',
+      '  const fixture = () => path.join(scratch, "pin.json");',
+      "});",
+    ].join("\n"),
+  },
+  {
+    id: "relative-fixture",
+    failure:
+      "a test file names a fixture at a relative path literal, so the file is read or written " +
+      "wherever the runner happens to be standing — the checkout — instead of under the scratch " +
+      "directory the suite made for it",
+    detect: (source) => relativeFixturePaths(source).map((line) => `line ${line}`),
+    // The pair differs in the path and nothing else, so what the detector reads is the one thing
+    // that changed: the literal, against the same path built from the scratch directory.
+    forbidden: [
+      'let scratch = "";',
+      "",
+      "beforeAll(() => {",
+      '  scratch = makeScratchDir("suite-");',
+      "});",
+      "",
+      'it("writes its fixture", () => {',
+      '  writeFileSync("ci-suspect-pin.mjs", "{}");',
+      "});",
+    ].join("\n"),
+    clean: [
+      'let scratch = "";',
+      "",
+      "beforeAll(() => {",
+      '  scratch = makeScratchDir("suite-");',
+      "});",
+      "",
+      'it("writes its fixture", () => {',
+      '  writeFileSync(path.join(scratch, "ci-suspect-pin.mjs"), "{}");',
+      "});",
+    ].join("\n"),
   },
 ];

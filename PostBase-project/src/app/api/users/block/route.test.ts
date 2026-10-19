@@ -30,10 +30,10 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-import { POST } from "./route";
-import { blocks } from "@/lib/db/schema";
+import { GET, POST } from "./route";
+import { blocks, follows, users } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
-import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
+import { expectGatedDelete, expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
 const TARGET_ID = "11111111-1111-4111-8111-111111111111";
 const BLOCK_ID = "66666666-6666-4666-8666-666666666666";
@@ -50,6 +50,36 @@ beforeEach(() => {
   resetFakeDb();
   vi.clearAllMocks();
   session.userId = "blocker-1";
+});
+
+describe("GET /api/users/block", () => {
+  it("requires a session before reading block state", async () => {
+    session.userId = null;
+
+    const response = await GET(new Request(`http://localhost/api/users/block?userId=${TARGET_ID}`));
+
+    expect(response.status).toBe(401);
+    expectGatedNone("reads");
+  });
+
+  it("reports the viewer's block state after validating the target", async () => {
+    fakeDb.selectReturns(users, [{ id: TARGET_ID }]).selectReturns(blocks, [{ id: BLOCK_ID }]);
+
+    const response = await GET(new Request(`http://localhost/api/users/block?userId=${TARGET_ID}`));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ blocked: true });
+    expectGatedSequence("reads", ["users", "blocks"]);
+  });
+
+  it("answers 404 for a missing target", async () => {
+    fakeDb.selectReturns(users, []);
+
+    const response = await GET(new Request(`http://localhost/api/users/block?userId=${TARGET_ID}`));
+
+    expect(response.status).toBe(404);
+    expectGatedSequence("reads", ["users"]);
+  });
 });
 
 describe("POST /api/users/block", () => {
@@ -90,35 +120,76 @@ describe("POST /api/users/block", () => {
     expectGatedNone("reads");
   });
 
-  it("blocks a member the caller does not already block", async () => {
-    fakeDb.selectReturns(blocks, []);
+  it("blocks a member, removes follows in either direction, and returns fresh counts", async () => {
+    fakeDb
+      .selectReturns(users, [{ id: TARGET_ID }])
+      .selectReturns(blocks, [])
+      .insertReturns(blocks, [{ id: BLOCK_ID }])
+      .selectReturns(follows, [{ followers: 3 }])
+      .selectReturns(follows, [{ following: 4 }]);
 
     const response = await POST(block({ userId: TARGET_ID }));
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ blocked: true });
+    expect(await response.json()).toEqual({ blocked: true, followers: 3, following: 4 });
     expectGatedSequence("writes", [
       { table: "blocks", values: { blockerId: "blocker-1", blockedId: TARGET_ID } },
     ]);
+    expectGatedSequence("deletes", ["follows"]);
+    expectGatedDelete(follows, {
+      where: [
+        '"follows"."follower_id" = $1',
+        '"follows"."following_id" = $2',
+        '"follows"."follower_id" = $3',
+        '"follows"."following_id" = $4',
+      ],
+      params: ["blocker-1", TARGET_ID, TARGET_ID, "blocker-1"],
+    });
   });
 
-  it("unblocks by deleting the existing row, writing nothing else", async () => {
-    fakeDb.selectReturns(blocks, [{ id: BLOCK_ID }]);
+  it("unblocks without restoring either follow, and returns fresh counts", async () => {
+    fakeDb
+      .selectReturns(users, [{ id: TARGET_ID }])
+      .selectReturns(blocks, [{ id: BLOCK_ID }])
+      .selectReturns(follows, [{ followers: 2 }])
+      .selectReturns(follows, [{ following: 1 }]);
 
     const response = await POST(block({ userId: TARGET_ID }));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ blocked: false });
+    expect(await response.json()).toEqual({ blocked: false, followers: 2, following: 1 });
     expectGatedSequence("deletes", ["blocks"]);
     expectGatedNone("writes");
+    expectGatedDelete(blocks, {
+      where: '"blocks"."id" = $1',
+      params: [BLOCK_ID],
+    });
   });
 
-  it("answers 500 when the lookup fails, writing nothing", async () => {
-    fakeDb.failNextSelect(blocks);
+  it("answers 500 when the block lookup fails, writing nothing", async () => {
+    fakeDb.selectReturns(users, [{ id: TARGET_ID }]).failNextSelect(blocks);
 
     const response = await POST(block({ userId: TARGET_ID }));
 
     expect(response.status).toBe(500);
+    expectGatedNone("writes");
+  });
+
+  it("answers 500 when the target lookup fails, writing nothing", async () => {
+    fakeDb.failNextSelect(users);
+
+    const response = await POST(block({ userId: TARGET_ID }));
+
+    expect(response.status).toBe(500);
+    expectGatedNone("writes");
+  });
+
+  it("answers 404 for an unknown target without writing", async () => {
+    fakeDb.selectReturns(users, []);
+
+    const response = await POST(block({ userId: TARGET_ID }));
+
+    expect(response.status).toBe(404);
     expectGatedNone("writes");
   });
 });

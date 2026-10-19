@@ -14,6 +14,12 @@
  *     --label 'Collect-budget apply reply' \
  *     --producer 'Reply on the pull request'
  *
+ *   node .freebuff/pr-comment.mjs \
+ *     --body .ci/coverage-floor-proposal-nudge.md \
+ *     --fresh \
+ *     --label 'Floor proposal nudge' \
+ *     --producer 'Open the floor proposal'
+ *
  * Every pull-request comment the workflows post goes through here: the three
  * comment steps in `.github/workflows/ci.yml` — the collect-budget summary, the
  * coverage-threshold proposal and the collect-budget proposal — which each
@@ -112,6 +118,30 @@
  * move with the text — a reordered first line would post a second comment instead
  * of updating the one already there. `src/test/collect-budget.test.ts` holds each
  * step's `--body`/`--marker` pair beside the constant of the script that writes it.
+ *
+ * **`--fresh`** is the second shape, and the one case where a *new* comment is the
+ * point rather than the accident: the nightly job's floor-proposal nudge, which
+ * comments on the same open request on every night it re-fires. Updating a comment
+ * notifies nobody, so a proposal nobody has read stays exactly as quiet as it was —
+ * a comment the night *adds* is the loudness, and the run page names the request
+ * separately once it has sat past a few nights. It posts with no marker and skips
+ * the lookup entirely, which is also why no duplicate note can appear: there is no
+ * previous comment being looked for, so finding two is not a state this can reach.
+ * The one thing it does not skip is the scrub — a fresh comment goes out redacted,
+ * with the same record beside the body and the same notes on the run page — and the
+ * exit codes answer the same question as ever: whether the comment arrived.
+ *
+ * **`--update-only`** is the third shape, and it belongs to the one comment whose
+ * *ending* has to be said where its finding was: the nightly job's refuted-record
+ * comment, which the night rewrites into a note saying the record is repaired. A
+ * retraction has nothing to say on a pull request that never carried the red, so a
+ * run that finds no marked comment posts nothing at all — the marker lookup is the
+ * whole of the answer, and a `POST` here would put a note about a repair onto a
+ * request nobody was ever told about it on. It is green when it finds nothing (no
+ * comment stands, so there is no stale red to answer for), and it keeps the same
+ * exit contract otherwise: `PATCH` did not land, so the step's outcome says so and
+ * `comment-gate.mjs` fails the job for it — which is the point, because a retraction
+ * that never arrived leaves a red on the pull request that its finding has outlived.
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -119,15 +149,15 @@ import { pathToFileURL } from "node:url";
 import { redact, suspectTokens } from "./redact.mjs";
 
 export const USAGE =
-  "usage: pr-comment.mjs (--body <path> | --text <markdown>) --marker <marker> " +
-  "--label <name> --producer <step name> [--dry-run]";
+  "usage: pr-comment.mjs (--body <path> | --text <markdown>) [--marker <marker> | --fresh] " +
+  "[--update-only] --label <name> --producer <step name> [--dry-run]";
 
 /** The flags this accepts, and the ones it cannot do without. */
-const FLAGS = ["body", "marker", "label", "producer", "text", "dry-run"];
-const REQUIRED = ["marker", "label", "producer"];
+const FLAGS = ["body", "marker", "label", "producer", "text", "dry-run", "fresh", "update-only"];
+const REQUIRED = ["label", "producer"];
 
 /** The flags that are switches rather than values: present or absent, and nothing else. */
-const BOOLEAN_FLAGS = ["dry-run"];
+const BOOLEAN_FLAGS = ["dry-run", "fresh", "update-only"];
 
 /**
  * The seams the tests drive it through, named rather than guessed at.
@@ -196,12 +226,27 @@ export function parseArgs(argv) {
   const sources = ["body", "text"].filter((name) => values.has(name));
   if (sources.length === 0) throw new UsageError("--body or --text is required");
   if (sources.length > 1) throw new UsageError("--body and --text are alternatives; give one");
+  // The marker is what the *update* finds the previous comment by, so a post that always creates
+  // one has nothing to look for and nothing to name: `--fresh` is the one way to say that, and it
+  // is required otherwise rather than defaulted, because a step that meant to update in place and
+  // silently stacked a second comment is a review thread nobody can follow.
+  if (!values.has("marker") && values.get("fresh") !== true) {
+    throw new UsageError("--marker is required (or --fresh posts a new comment each run)");
+  }
+  // The two are opposite answers to the same question — is this a post or an update? — so a step that
+  // asked for both is refused rather than resolved in one direction: `--fresh` never looks a comment up,
+  // which would make `--update-only`'s promise to post nothing quietly untrue.
+  if (values.get("fresh") === true && values.get("update-only") === true) {
+    throw new UsageError("--fresh creates a comment and --update-only rewrites one; give one");
+  }
   return {
     body: values.get("body"),
     text: values.get("text"),
     marker: values.get("marker"),
     label: values.get("label"),
     producer: values.get("producer"),
+    fresh: values.get("fresh") === true,
+    updateOnly: values.get("update-only") === true,
     dryRun: values.get("dry-run") === true,
   };
 }
@@ -255,6 +300,21 @@ export function announcement({ source, label, producer }) {
  */
 export function missingSource({ body }) {
   return body === undefined ? "produced no reply text" : `left no \`${body}\``;
+}
+
+/**
+ * What the run page says when a retraction found no comment to make.
+ *
+ * A ✅ rather than a ❌, for the reason the duplicate note in the settle steps is: nothing was lost. What
+ * the reader is owed is the explanation for a red that is not on this request — either the night already
+ * retracted it, or the comment is on another request — so the note names both and says the step is green.
+ */
+export function nothingToUpdateAnnouncement({ label, producer, pr }) {
+  return note(`## ${label} — ✅ nothing to retract`, [
+    `The '${producer}' step found no comment carrying the marker on #${pr}, so there is no red on it to ` +
+      "rewrite. Either a previous night already retracted it, or it was left on another request.",
+    "The step is green: the request it looked at owes nothing.",
+  ]);
 }
 
 /**
@@ -541,10 +601,21 @@ function dryRun({ args, repo, pr, payload, substitutions, suspects, page }) {
       "no run-page line, and no redaction record.",
   );
   console.log(`pr-comment: dry run — the payload it would send: ${payload.join(" ")}`);
+  // The one invocation whose verb a rehearsal *can* know: `--fresh` looks nothing up, so it always
+  // creates, and printing both verbs for it would be the half-answer below where the whole one is
+  // available.
   console.log(
-    "pr-comment: dry run — the verb is the marker lookup's answer and the lookup is skipped: " +
-      `\`-X POST repos/${repo}/issues/${pr}/comments\`, or ` +
-      `\`-X PATCH repos/${repo}/issues/comments/<id>\` when the marker finds a comment.`,
+    args.fresh
+      ? "pr-comment: dry run — the verb is known: " +
+          `\`-X POST repos/${repo}/issues/${pr}/comments\`, because --fresh looks nothing up and ` +
+          "always creates a new comment."
+      : args.updateOnly
+        ? "pr-comment: dry run — the verb is the marker lookup's answer and the lookup is skipped: " +
+            `\`-X PATCH repos/${repo}/issues/comments/<id>\` when the marker finds a comment, and no ` +
+            "request at all when it does not, because --update-only posts nothing."
+        : "pr-comment: dry run — the verb is the marker lookup's answer and the lookup is skipped: " +
+            `\`-X POST repos/${repo}/issues/${pr}/comments\`, or ` +
+            `\`-X PATCH repos/${repo}/issues/comments/<id>\` when the marker finds a comment.`,
   );
   // The one note a dry run can know: the scrub happens here, before `gh`, so a body that would
   // have been changed says so. The duplicate note cannot appear — no lookup ran to fail — and
@@ -615,7 +686,25 @@ function main(argv) {
   if (args.dryRun) return dryRun({ args, repo, pr, payload, substitutions, suspects, page });
 
   const gh = ghCommand();
-  const { id, lookup } = findComment(gh, { repo, pr, marker: args.marker });
+  // A fresh post has no previous comment to find, so the lookup is skipped — and with it the one
+  // note a lookup can earn. Skipping it is not a shortcut around the guard: the marker is what the
+  // guard *identifies* a previous comment by, and a run that is not looking for one cannot update
+  // the wrong comment.
+  const { id, lookup } = args.fresh
+    ? { id: "", lookup: "" }
+    : findComment(gh, { repo, pr, marker: args.marker });
+  // Nothing to rewrite is the whole of what a retraction can find: no marked comment stands on this
+  // request, so the red it was written about is already gone from it and this step owed nothing. Green,
+  // and said on the run page — a step that quietly did nothing and a step that could not run have to be
+  // tellable apart, and this is the first of those. A lookup that *failed* is not this case and keeps the
+  // duplicate-before-the-comment trade the marker post already makes: it falls through to a `POST`.
+  if (args.updateOnly && id === "" && lookup === "") {
+    console.log(
+      `pr-comment: no comment carrying the marker is on #${pr} — nothing to update, so nothing was posted.`,
+    );
+    page(nothingToUpdateAnnouncement({ ...args, pr }));
+    return 0;
+  }
   const verb = id ? "PATCH" : "POST";
   const url = id ? `repos/${repo}/issues/comments/${id}` : `repos/${repo}/issues/${pr}/comments`;
   const result = spawnSync(gh.command, [...gh.prefix, "api", "-X", verb, url, ...payload], {

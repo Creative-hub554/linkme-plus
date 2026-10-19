@@ -199,4 +199,42 @@ describe("POST /api/posts/boost", () => {
 
     expect(response.status).toBe(201);
   });
+
+  it("refuses a post that is no longer on the site, before any Page is asked about", async () => {
+    // A soft-deleted post is the one eligibility case whose refusal is a 404
+    // rather than a 400: the payment target simply is not there any more. The
+    // words matter too - they name the state the post is in, and are not the
+    // generic missing-post answer.
+    fakeDb.selectReturns(posts, [publishedPagePost({ deletedAt: new Date() })]);
+
+    const response = await POST(boost(validBody));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "This post is no longer on the site" });
+    expectGatedNone("writes");
+  });
+
+  it("answers 400 for a body that is not a boost request", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/posts/boost", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "not json [[",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "A boost request is required" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("answers 500 when the post cannot be read", async () => {
+    fakeDb.failNextSelect(posts, new Error("db down"));
+
+    const response = await POST(boost(validBody));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to book this boost" });
+  });
 });

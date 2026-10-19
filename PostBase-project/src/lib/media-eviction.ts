@@ -7,15 +7,19 @@
  * comes (the composer was abandoned, the tab was lost, the publish failed
  * client-side), the object is stranded: it sits in the bucket, it costs
  * storage, and the hourly archive would eventually move it to Google Drive and
- * keep it there forever. This pass is the reaper for those orphans, and it
- * runs in the same cron *before* the archive so an orphan is deleted rather
- * than archived.
+ * keep it there forever. The demo seeder strands objects the same way — it
+ * uploads every asset before the rows that reference them are written, and a
+ * re-seed with fewer posts or members leaves the old objects referenced by
+ * nothing. This pass is the reaper for those orphans, and it runs in the same
+ * cron *before* the archive so an orphan is deleted rather than archived.
  *
  * The shape of one pass, and why:
  *
- * 1. **List** the objects under the post folder. The caller supplies the
- *    prefix; the Worker derives it from `getFolderForPurpose("post")` — the
- *    same folder the upload routes write to, so the pass and the routes
+ * 1. **List** the objects under every folder the pass covers: the post
+ *    folder the upload routes write to, and the demo seeder's folder — the
+ *    one `putObject` caller outside a route. `evictionPrefixes()` supplies
+ *    the list, each entry derived from `getFolderForPurpose`, the same
+ *    function the writers build their keys with, so the pass and the writers
  *    cannot drift apart in code.
  * 2. **Age** them past a grace period: the window a slow publisher gets
  *    between uploading a photo and creating the post that claims it. This
@@ -58,6 +62,7 @@ import {
   quoteIdent,
   type StoredObject,
 } from "@/lib/media-archive";
+import { getFolderForPurpose } from "@/lib/r2";
 
 /** How one pass talks to R2: prefix-scoped listing plus delete. */
 export interface EvictionStorage {
@@ -76,8 +81,8 @@ export interface EvictionStore {
 export interface EvictionConfig {
   /** The R2 public URL base (no trailing slash) stored rows are prefixed with. */
   publicUrlBase: string;
-  /** The key prefix whose objects live and die by post/comment references. */
-  prefix: string;
+  /** The key prefixes whose objects live and die by the reference check. */
+  prefixes: readonly string[];
   /** Hours an object may sit unreferenced before it is an eviction candidate. */
   graceHours: number;
   batchLimit: number;
@@ -159,6 +164,27 @@ export function buildReferenceQueries(
   });
 }
 
+/**
+ * The folders one pass covers — the value for `EvictionConfig.prefixes`.
+ *
+ * Two kinds of writer exist: the upload routes (`/api/posts/media` and the
+ * presigned `/api/uploads`), which write to the `post` folder, and the demo
+ * seeder — the only `putObject` caller outside a route — which writes to the
+ * `seed` folder. Both entries come from `getFolderForPurpose`, the same
+ * function those writers derive their keys with, so the pass cannot drift
+ * away from a folder whose objects it should reap; a new writer joins the
+ * pass by joining this list.
+ *
+ * Folders whose writer records the reference inside the same request that
+ * uploads the file (avatars, covers, processed media) are not listed: the
+ * publish-window race this pass exists for does not apply to them, and the
+ * archive's whole-bucket sweep still moves anything they strand to Drive
+ * rather than leaving it in R2 forever.
+ */
+export function evictionPrefixes(): string[] {
+  return [getFolderForPurpose("post"), getFolderForPurpose("seed")].map((folder) => `${folder}/`);
+}
+
 function emptyReport(): EvictionReport {
   return {
     skipped: null,
@@ -192,12 +218,16 @@ export async function runEvictionPass(deps: EvictionPassDeps): Promise<EvictionR
     return report;
   }
 
-  let objects: StoredObject[];
+  const objects: StoredObject[] = [];
   try {
-    objects = await storage.listByPrefix(config.prefix);
+    // Every folder must list: a listing that dies after the first folder
+    // must never read as "the rest of the bucket is empty" — one healthy
+    // prefix beside a failed one still evicts nothing this hour.
+    for (const prefix of config.prefixes) {
+      objects.push(...(await storage.listByPrefix(prefix)));
+    }
   } catch (error) {
-    // Fail closed: with no listing there is nothing to judge, and a partial
-    // listing must never be read as "the rest of the bucket is empty".
+    // Fail closed: with no complete listing there is nothing to judge.
     report.failed.push({ key: "(list)", error: errorText(error) });
     log(`media-eviction: listing failed, nothing evicted: ${errorText(error)}`);
     return report;

@@ -65,12 +65,16 @@ export async function signInWithOAuth(provider: "google" | "facebook") {
 
 /**
  * Compatibility facade for API routes that use the former auth API shape.
- * The application now authenticates through Supabase, so sessions are read
- * from the request cookies by the server client above.
+ * Server-side authorization must validate the cookie-backed identity with
+ * `getUser()` rather than trusting the locally stored session returned by
+ * `getSession()`.
  */
 export const auth = {
   api: {
-    getSession: async ({ headers: _headers }: { headers: Headers }) => getSession(),
+    getSession: async ({ headers: _headers }: { headers: Headers }) => {
+      const user = await getUser();
+      return user ? { user } : null;
+    },
   },
   handler: async (_request: Request) =>
     NextResponse.json({ error: "Authentication is handled by Supabase" }, { status: 404 }),

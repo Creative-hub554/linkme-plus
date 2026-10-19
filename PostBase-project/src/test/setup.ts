@@ -1,7 +1,10 @@
 import { watchForLeaks } from "./leak-watch";
 
-// Mock environment variables
-process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+// Mock environment variables. The database URL is only a placeholder: when a
+// run brings its own `DATABASE_URL` (the live-Postgres smokes, which point the
+// same real handlers at a scratch branch), it wins, because the point of those
+// runs is that Drizzle executes real SQL against their own database.
+process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 process.env.AUTH_SECRET = "test-secret";
 process.env.R2_BUCKET_NAME = "test-bucket";
 process.env.R2_PUBLIC_URL = "https://test.r2.dev";

@@ -23,6 +23,7 @@ import {
   listingMedia,
   marketplaceListings,
   messages,
+  moderationActions,
   notifications,
   pageFollows,
   pageRoles,
@@ -31,7 +32,9 @@ import {
   posts,
   profiles,
   reactions,
+  reports,
   users,
+  verificationRequests,
 } from "./schema";
 
 /**
@@ -107,6 +110,18 @@ function pagePostId(index: number) {
 }
 function listingMediaId(index: number) {
   return `d1000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+/** A pending report the moderation queue judges — content or an account. */
+function reportId(index: number) {
+  return `91000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+/** An action already recorded in the moderation history's ledger. */
+function moderationActionId(index: number) {
+  return `92000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+/** A pending request the reviewer queue judges — the badge's application. */
+function verificationRequestId(index: number) {
+  return `93000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
 
 /**
@@ -827,12 +842,30 @@ async function seed() {
       };
     });
   });
+
+  // The one reply the seed's own record below says was removed: it is born
+  // soft-deleted inside the comments edge, so the thread hides it from the
+  // first seed onward. Every row carries `deleted_at` — null except the
+  // removed one — because the edge's repair reads its owned columns off the
+  // FIRST row: a column absent there is never re-asserted, and on an
+  // already-seeded database the removal would silently not apply.
+  //
+  // The removal date is then held like the created dates: it is derived from
+  // this run's clock, so left unheld it would differ from the stored value on
+  // every re-run and rewrite the row forever. Held, the thread's removal
+  // anchor and the trust action that records it age together, and a re-run
+  // repairs nothing.
+  const removedCommentId = commentId(3);
+  const shippedCommentRows = commentRows.map((row) => ({
+    ...row,
+    deletedAt: row.id === removedCommentId ? new Date(now - 5 * DAY) : null,
+  }));
   await writeEdge({
     label: "comments",
     table: comments,
     target: comments.id,
-    hold: [comments.createdAt],
-    rows: commentRows,
+    hold: [comments.createdAt, comments.deletedAt],
+    rows: shippedCommentRows,
   });
 
   await writeEdge({
@@ -1041,6 +1074,204 @@ async function seed() {
     }));
   });
   await writeEdge({ label: "cast likes", table: reactions, target: reactions.id, rows: reactionRows });
+
+  // ─── Trust & safety: a queue worth judging, a record worth reading ─────
+  //
+  // Reports open the queue `pending` — the content kind (a post, a comment)
+  // and the account kind, so the moderation queue behind /admin → Content
+  // opens with live decisions in it — each with the excerpt and author the
+  // reports route attaches, and one row with no target text to show (the
+  // account) so every queue shape is exercised. Three more sit already
+  // decided so the Reports board's status filters have content too: one
+  // `resolved` — the report *behind* the recorded warning below, filed
+  // before its warning lands, so board, queue and history tell one story —
+  // and two `dismissed`, a comment and an account judged unfounded. The app
+  // writes `resolved` when a decision is made and has no dismissal path at
+  // all, so the dismissed rows are the record itself, exactly what a
+  // moderator's board reads. The recorded actions cover the four
+  // kinds the moderation enum takes — warning, removal, suspension, ban —
+  // so the history card (and its CSV handover) demos every sentence the
+  // ledger reads: what was done, to what, by whom, why, when.
+  //
+  // Nothing else simulates a suspension or a ban on a member — the users
+  // table carries no such column, so these ledger rows are the record
+  // itself, exactly what a dashboard decision writes. The one recorded
+  // removal is real: it names the comment born soft-deleted in the
+  // comments edge above, so threads agree with the record. Both edges hold
+  // `created_at`: the dates anchor at the first seed.
+  const removedActionAt = new Date(now - 5 * DAY);
+  const trustReportRows = [
+    {
+      id: reportId(1),
+      reporterId: members[1].id,
+      targetType: "post",
+      targetId: postId(2),
+      reason: "Spam",
+      description: "Pushes crypto links that keep returning under new names.",
+      status: "pending",
+      createdAt: new Date(now - 6 * DAY),
+    },
+    {
+      id: reportId(2),
+      reporterId: members[3].id,
+      targetType: "comment",
+      // The reply loop's ids are `commentId(postIndex * 3 + replyIndex)` with a
+      // random reply count, so the mapping is sparse and not every index in a
+      // post's three-wide block is written. A target here must be one the loop
+      // actually wrote, by its own seed's record: an open report on a reply the
+      // seed never wrote is a hole no one created, not a demo of anything — the
+      // route shows a missing target as "no longer available", but the app
+      // never hard-deletes a comment, so on a seeded database that line can
+      // only ever mean seed drift. This names commentId(10), the second reply
+      // on post index 3 — written to a post members[3] (this report's own
+      // reporter) authored, and by members[5], the account report below
+      // escalates to the member itself. (Report 5's target stays
+      // commentId(4), which this run's draw writes.)
+      // `src/test/seed-trust-report-targets.test.ts` holds this pin: it
+      // re-derives the reply loop's ids and fails if a change to the loop or
+      // to the rows below ever names a comment that is not written.
+      targetId: commentId(10),
+      reason: "Harassment",
+      description: "Keeps hounding the author from thread to thread.",
+      status: "pending",
+      createdAt: new Date(now - 4 * DAY),
+    },
+    {
+      id: reportId(3),
+      reporterId: members[4].id,
+      targetType: "user",
+      targetId: members[5].id,
+      reason: "Harassment",
+      description: "The account itself: a pattern across messages, not one post.",
+      status: "pending",
+      createdAt: new Date(now - 26 * HOUR),
+    },
+    {
+      id: reportId(4),
+      reporterId: members[2].id,
+      targetType: "post",
+      targetId: postId(1),
+      reason: "Self-promotion",
+      description: "Same links in every reply thread this week.",
+      // Resolved, not pending: this is the report the recorded warning below
+      // answers, so the board's resolved filter and the history's ledger agree.
+      status: "resolved",
+      createdAt: new Date(now - 8 * DAY),
+    },
+    {
+      id: reportId(5),
+      reporterId: members[5].id,
+      targetType: "comment",
+      targetId: commentId(4),
+      reason: "Spam",
+      description: "Judged fine: the link is on topic and the reply is their own words.",
+      status: "dismissed",
+      createdAt: new Date(now - 15 * DAY),
+    },
+    {
+      id: reportId(6),
+      reporterId: members[4].id,
+      targetType: "user",
+      targetId: members[7].id,
+      reason: "Impersonation",
+      description: "Judged unfounded: no claim held up under the history.",
+      status: "dismissed",
+      createdAt: new Date(now - 13 * DAY),
+    },
+  ];
+  const trustActionRows = [
+    {
+      id: moderationActionId(1),
+      targetType: "post",
+      targetId: postId(1),
+      actorId: members[0].id,
+      action: "warning",
+      reason: "First warning: repeated self-promotion in replies.",
+      createdAt: new Date(now - 3 * DAY),
+    },
+    {
+      id: moderationActionId(2),
+      targetType: "comment",
+      targetId: removedCommentId,
+      actorId: members[0].id,
+      action: "removal",
+      reason: "Spam links in the reply.",
+      createdAt: removedActionAt,
+    },
+    {
+      id: moderationActionId(3),
+      targetType: "user",
+      targetId: members[2].id,
+      actorId: members[3].id,
+      action: "suspension",
+      reason: "Harassment pattern across threads; first suspension.",
+      createdAt: new Date(now - 10 * DAY),
+    },
+    {
+      id: moderationActionId(4),
+      targetType: "user",
+      targetId: members[6].id,
+      actorId: members[3].id,
+      action: "ban",
+      reason: "Scam coordination across accounts; permanent.",
+      createdAt: new Date(now - 12 * DAY),
+    },
+  ];
+  await writeEdge({
+    label: "trust reports",
+    table: reports,
+    target: reports.id,
+    hold: [reports.createdAt],
+    rows: trustReportRows,
+  });
+  await writeEdge({
+    label: "trust actions",
+    table: moderationActions,
+    target: moderationActions.id,
+    hold: [moderationActions.createdAt],
+    rows: trustActionRows,
+  });
+
+  // ─── Verification: applications worth reviewing ──────────────────
+  //
+  // Two pending requests make the reviewer queue (`/admin` → Verification)
+  // open with live reviews in front of it — one from each of the two members
+  // the moderation queue already exercises — and give the member route's own
+  // status view a pending row to answer with. The links are the member
+  // route's own approved shape (public https, deduped), so the queue
+  // demonstrates what a submitted application actually looks like.
+  // Timestamps are held like the reports': the queue reads newest first, and
+  // re-running the seed must not slide that order forward.
+  //
+  // Nothing here decides a request. `verified` comes only from a reviewer's
+  // action through the admin route — the application proves identity, the
+  // badge is the decision — so the seed writes two applications and awards
+  // no badge for anyone.
+  await writeEdge({
+    label: "verification requests",
+    table: verificationRequests,
+    target: verificationRequests.id,
+    hold: [verificationRequests.createdAt],
+    rows: [
+      {
+        id: verificationRequestId(1),
+        userId: members[5].id,
+        evidenceUrls: [
+          "https://example.com/sofia-portfolio",
+          "https://example.com/sofia-instagram",
+        ],
+        status: "pending",
+        createdAt: new Date(now - 8 * HOUR),
+      },
+      {
+        id: verificationRequestId(2),
+        userId: members[2].id,
+        evidenceUrls: ["https://example.com/jordan-github"],
+        status: "pending",
+        createdAt: new Date(now - 20 * HOUR),
+      },
+    ],
+  });
 
   // ─── The demo graph, wired to the accounts already here ───────────
   // Everything above belongs to the demo cast. The surfaces below are scoped to
@@ -1365,6 +1596,9 @@ async function seed() {
   console.log(`  comments         ${commentRows.length}, follows ${followRows.length}`);
   console.log(`  pages            ${demoPages.length} (${demoPages.map((page) => page.username).join(", ")}), ${pagePostRows.length} posts`);
   console.log(`  reactions        ${reactionRows.length}`);
+  console.log(
+    `  trust            ${trustReportRows.length} reports in the queue, ${trustActionRows.length} recorded actions in the history`,
+  );
   console.log(`  listing photos   ${listingPhotoRows.length} across ${listingRows.length} listings`);
   console.log(
     `  adopted accounts ${hosts.length}${hosts.length > 0 ? " (each follows the cast and its Pages, and has a conversation waiting)" : " (none to adopt)"}`,

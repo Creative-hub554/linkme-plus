@@ -7,7 +7,8 @@
 # script for clones that predate the versioned copy.
 #
 #   default          fast gate: typecheck + lint:ci + gates:drift
-#   PUSH_GATE=full   additionally runs the full coverage suite
+#   PUSH_GATE=full   the complete 11-stage gate (npm run ci), fail-fast
+#                    locally and reusing the runner's result cache
 #   bypass once      git push --no-verify
 #
 # Pushes to any other branch, and deletions of master, are not gated.
@@ -39,12 +40,16 @@ run() {
   }
 }
 
-run npm run typecheck
-run npm run lint:ci
-run npm run gates:drift
-
 if [ "${PUSH_GATE:-fast}" = "full" ]; then
-  run npm run test:coverage
+  # The whole gate in canonical order — all 11 stages, including `preflight`,
+  # which the hosted nightly skips because it needs a local dev server this
+  # machine has. Local semantics are fail-fast (the runner's default off CI);
+  # read-only stages come back `reused` from the result cache on a retry.
+  run npm run ci
+else
+  run npm run typecheck
+  run npm run lint:ci
+  run npm run gates:drift
 fi
 
 echo "pre-push: gate passed — push to master allowed." >&2

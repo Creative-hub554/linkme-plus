@@ -55,7 +55,7 @@ vi.mock("@/utils/supabase/server", () => ({
 }));
 
 import { GET, PUT } from "./route";
-import { follows, profiles, users } from "@/lib/db/schema";
+import { blocks, follows, profiles, users } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence, expectGatedUpdate } from "@/test/expect-gated";
 
@@ -65,6 +65,7 @@ const USER_ROW = {
   id: USER_ID,
   username: "alice",
   role: "member",
+  verified: false,
   displayName: "Alice",
   bio: "hi",
   visibility: "public",
@@ -121,7 +122,8 @@ describe("GET /api/users", () => {
       .selectReturns(users, [USER_ROW])
       .selectReturns(follows, [{ followers: 12 }])
       .selectReturns(follows, [{ following: 4 }])
-      .selectReturns(follows, [{ id: "f-1" }]);
+      .selectReturns(follows, [{ id: "f-1" }])
+      .selectReturns(blocks, []);
 
     const response = await GET(get(`?id=${USER_ID}`));
 
@@ -130,9 +132,11 @@ describe("GET /api/users", () => {
       user: USER_ROW,
       stats: { followers: 12, following: 4 },
       isFollowing: true,
+      isBlocked: false,
+      blockedByViewer: false,
     });
-    // Resolve read, then the three follows reads (followers, following, check).
-    expectGatedSequence("reads", ["users", "profiles", "users", "follows", "follows", "follows"]);
+    // Resolve read, followed by follower/following counts, follow state, and block state.
+    expectGatedSequence("reads", ["users", "profiles", "users", "follows", "follows", "follows", "blocks"]);
   });
 
   it("renders the signed-in member from Auth metadata when the database fails", async () => {
@@ -148,6 +152,8 @@ describe("GET /api/users", () => {
     expect(body.user.id).toBe("viewer-1");
     expect(body.stats).toEqual({ followers: 0, following: 0 });
     expect(body.isFollowing).toBe(false);
+    expect(body.isBlocked).toBe(false);
+    expect(body.blockedByViewer).toBe(false);
   });
 
   it("falls back to Auth metadata when the resolve read fails", async () => {

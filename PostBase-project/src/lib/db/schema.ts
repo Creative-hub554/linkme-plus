@@ -5,10 +5,13 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   jsonb,
   pgEnum,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { postAudiences } from "@/lib/post-audiences";
 // Type-only, and erased at build time: the accent's allowed values are the ones
 // the picker offers, and `profiles.appearance` is typed by that same union so
@@ -33,6 +36,7 @@ export const campaignStatusEnum = pgEnum("campaign_status", ["draft", "pending_p
 export const reportStatusEnum = pgEnum("report_status", ["pending", "reviewing", "resolved", "dismissed"]);
 export const moderationActionEnum = pgEnum("moderation_action", ["warning", "removal", "suspension", "ban"]);
 export const coverVideoStatusEnum = pgEnum("cover_video_status", ["pending", "rendering", "ready", "failed"]);
+export const verificationRequestStatusEnum = pgEnum("verification_request_status", ["pending", "approved", "rejected"]);
 
 // ─── Users & Auth ───────────────────────────────────────────────
 export const users = pgTable("users", {
@@ -41,6 +45,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   username: varchar("username", { length: 30 }).notNull().unique(),
   role: userRoleEnum("role").default("member").notNull(),
+  verified: boolean("verified").default(false).notNull(),
   emailVerified: timestamp("email_verified"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -551,6 +556,28 @@ export const moderationActions = pgTable("moderation_actions", {
   reason: text("reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const verificationRequests = pgTable(
+  "verification_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    evidenceUrls: text("evidence_urls").array().notNull(),
+    status: verificationRequestStatusEnum("status").default("pending").notNull(),
+    reviewNote: text("review_note"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("verification_requests_one_pending_per_user_idx")
+      .on(table.userId)
+      .where(sql`${table.status} = 'pending'`),
+    index("verification_requests_status_created_idx").on(table.status, table.createdAt),
+  ],
+);
 
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),

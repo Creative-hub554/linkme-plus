@@ -292,7 +292,7 @@ describe("buildRewriteStatements", () => {
     );
   });
 
-  it("rewrites the one text[] column with array_replace and an any() guard", () => {
+  it("rewrites URL arrays with array_replace and an any() guard", () => {
     const statements = buildRewriteStatements([{ oldUrl: OLD, newUrl: NEW }]);
     const photoUrls = statements.find((statement) => statement.text.includes('"photo_urls"'))!;
     expect(photoUrls.text).toBe(
@@ -300,6 +300,13 @@ describe("buildRewriteStatements", () => {
         `where $3 = any("photo_urls")`,
     );
     expect(photoUrls.params).toEqual([OLD, NEW, OLD]);
+
+    const evidenceUrls = statements.find((statement) => statement.text.includes('"evidence_urls"'))!;
+    expect(evidenceUrls.text).toBe(
+      `update "verification_requests" set "evidence_urls" = array_replace("evidence_urls", $1, $2) ` +
+        `where $3 = any("evidence_urls")`,
+    );
+    expect(evidenceUrls.params).toEqual([OLD, NEW, OLD]);
   });
 
   it("keeps placeholders in text order so postgres reads params positionally", () => {

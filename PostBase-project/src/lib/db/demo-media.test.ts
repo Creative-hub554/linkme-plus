@@ -11,7 +11,7 @@ import {
   pageCoverSvg,
   postArtworkSvg,
 } from "./demo-media";
-import { putObject } from "@/lib/r2";
+import { getFolderForPurpose, putObject } from "@/lib/r2";
 
 /**
  * The seed's imagery is generated, not checked in: `postArtworkSvg` and
@@ -220,5 +220,37 @@ describe("ensureDemoVideo", () => {
 
     await expect(ensureDemoVideo(0)).resolves.toBeNull();
     expect(putObjectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("the seed folder", () => {
+  it("keeps every seeded object under the folder the eviction pass lists", async () => {
+    // The eviction pass lists getFolderForPurpose("seed") — a key that
+    // bypassed that rule would upload an object the reaper can never see,
+    // stranding it in the bucket exactly as if the pass did not exist.
+    const seedFolder = `${getFolderForPurpose("seed")}/`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        // Missing on our CDN (so the asset uploads), present at the clip
+        // mirror (so the sample video downloads).
+        const url = String(input);
+        return url.startsWith("https://test.r2.dev/")
+          ? new Response(null, { status: 404 })
+          : new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      }),
+    );
+
+    await ensureDemoAvatar(0, "TW");
+    await ensureDemoPostImage(0);
+    await ensureDemoPageCover(0);
+    await ensureDemoListingImage(0);
+    await ensureDemoVideo(0);
+
+    const keys = putObjectMock.mock.calls.map(([key]) => key as string);
+    expect(keys).toHaveLength(5);
+    for (const key of keys) {
+      expect(key.startsWith(seedFolder)).toBe(true);
+    }
   });
 });

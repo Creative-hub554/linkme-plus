@@ -5,6 +5,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderSummary, sanitizeReport, workflowCommand } from "../../.freebuff/nightly-report.mjs";
+// The trend the page charts from the runbook, taken from the same module the renderer uses so the
+// case below can compute what the *committed* file should produce instead of typing a row that
+// changes every time a full gate records a run.
+import { coverageOverTime, readLowWater } from "../../.freebuff/coverage-trend.mjs";
+// The one declaration of the readings the summary renders: the ids their lines travel under and
+// the prefixes those lines carry. The renderer walks that declaration rather than naming a field
+// per guard, so the cases below build their payloads from it too — a reading added there is
+// exercised here by cases written before it existed, which is the point of the registry.
+import { READINGS } from "../../.freebuff/coverage-readings.mjs";
 
 /**
  * A test for the nightly report renderer.
@@ -31,6 +40,12 @@ const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
 const reporter = path.join(projectRoot, ".freebuff", "nightly-report.mjs");
 /** The sweep the last describe's chain delivers an unfiltered argv to. */
 const sweep = path.join(projectRoot, ".freebuff", "mutation-guards.mjs");
+
+/**
+ * The floors as the module's own shape — one number and the night it settled, per reading id —
+ * written down here because the module is JavaScript and the case below reads the map key by key.
+ */
+type Floors = Record<string, { value: number; since: string }>;
 
 /** A minimal passing payload, shaped like `ci.mjs --json` emits it. */
 const passing = {
@@ -307,28 +322,169 @@ describe("the nightly report renderer", () => {
     expect(md).toContain("> A stage listed as excluded was **not run** in this job");
   });
 
-  it("renders the rendered-links coverage reading under its own heading", () => {
-    const stamp = "rendered-links coverage: chrome — the footer 14, the signed-in header 5 (9 unique destinations)";
-    const md = renderSummary({ ...passing, coverageStamp: stamp });
+  it("renders every declared reading under one heading, in the registry's order", () => {
+    // One heading, because the readings answer one question — what did the green run
+    // actually measure — and the rows come from the registry in its own order, so two
+    // nights' sections can be read against each other. The payload is built from that
+    // declaration, so a reading added there is rendered by this case without it naming
+    // the new one: the renderer walks the registry rather than a field per guard.
+    const readings = Object.fromEntries(
+      READINGS.map((entry, index) => [
+        entry.id,
+        `${entry.prefix} stub ${index + 1} (2 unique destinations)`,
+      ]),
+    );
+    const md = renderSummary({ ...passing, readings });
 
-    // The section sits after the stage table, and the reading is verbatim — the
-    // same line the runbook bullet quotes, so the run page and the record cannot
-    // disagree about what the guard audited.
-    expect(md).toContain("### Coverage");
-    expect(md).toContain(`${stamp}.`);
-    const tableEnd = md.indexOf("| mutation sweep |");
-    const coverage = md.indexOf("### Coverage");
-    expect(coverage).toBeGreaterThan(tableEnd);
+    // The section sits after the stage table, and each reading is verbatim — the same
+    // line the runbook bullet quotes, so the run page and the record cannot disagree
+    // about what a guard audited.
+    expect(md.indexOf("### Coverage")).toBeGreaterThan(md.indexOf("| mutation sweep |"));
+    expect(md.match(/### Coverage/g)).toHaveLength(1);
+    let previous = -1;
+    for (const entry of READINGS) {
+      const at = md.indexOf(`${readings[entry.id]}.`);
+      expect(at, `${entry.id}'s reading is not on the run page`).toBeGreaterThan(-1);
+      expect(at, `${entry.id}'s reading is out of the registry's order`).toBeGreaterThan(previous);
+      previous = at;
+    }
   });
 
-  it("omits the coverage section when the suite left no stamp", () => {
-    // No `coverageStamp` field, and an explicit null — both the run's real shapes
-    // for a stubbed or failed suite. An omission, never a fabricated zero.
-    const withoutField = renderSummary(passing);
-    const withNull = renderSummary({ ...passing, coverageStamp: null });
+  it("ignores a reading the registry does not declare, and one that is not a line", () => {
+    // The `readings` map is a report's shape, so a payload can carry anything: an older
+    // report's field, a hand-written fixture, a guard that stopped writing. Only the
+    // declared readings are rendered, and only when they carry a non-empty string —
+    // anything else is the same omission as a reading that never arrived, never an
+    // empty heading or a line of some other file's choosing.
+    const md = renderSummary({
+      ...passing,
+      readings: {
+        "some-retired-reading": "a reading nothing declares any more",
+        [READINGS[0].id]: 42,
+        [READINGS[READINGS.length - 1].id]: "   ",
+      },
+    });
 
-    expect(withoutField).not.toContain("### Coverage");
-    expect(withNull).not.toContain("### Coverage");
+    expect(md).not.toContain("### Coverage");
+    expect(md).not.toContain("a reading nothing declares any more");
+  });
+
+  it("omits the coverage section when the suite left no reading", () => {
+    // No `readings` map, an empty one, and an explicit null per declared reading — all
+    // the shapes a stubbed or failed suite leaves. An omission, never a fabricated zero
+    // and never an empty heading.
+    const withNulls = Object.fromEntries(READINGS.map((entry) => [entry.id, null]));
+
+    for (const payload of [passing, { ...passing, readings: {} }, { ...passing, readings: withNulls }]) {
+      expect(renderSummary(payload)).not.toContain("### Coverage");
+    }
+  });
+
+  it("charts each guard's reading over time from the runbook's dated records", () => {
+    // The runpage's second coverage view: `### Coverage` is what *tonight* measured, and this is
+    // the history those readings accrue in the runbook — one series per declared reading, charted
+    // by the number its entry declares. The records are built from the registry's prefixes, so
+    // the file the page is charted from cannot drift from the declaration the renderer walks.
+    const rendered = `${READINGS[0].prefix} chrome — the footer 14 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.`;
+    const grown = `${READINGS[0].prefix} chrome — the footer 14 (28 unique destinations) | data — 28 page mounts, 18 unique destinations.`;
+    const runbook = [
+      `- **2026-10-01 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+      `  ${rendered}`,
+      "",
+      `- **2026-10-02 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+      `  ${grown}`,
+    ].join("\n");
+
+    const md = renderSummary(passing, runbook);
+
+    expect(md).toContain("### Coverage over time");
+    expect(md).toContain(
+      `- **${READINGS[0].id}** \`▁█\` — 28 ${READINGS[0].metric.label}, up 3 from 25 ` +
+        "(range 25–28) over 2 record(s) (2026-10-01 → 2026-10-02)",
+    );
+    // The trend is the runbook's, not the report's: a run whose own suite left no reading still
+    // shows the history, and when tonight's reading is on the page the two sit in that order.
+    expect(renderSummary(passing, runbook)).toContain("### Coverage over time");
+    const withReading = renderSummary(
+      { ...passing, readings: { [READINGS[0].id]: "rendered-links coverage: stub 1" } },
+      runbook,
+    );
+    expect(withReading.indexOf("### Coverage over time")).toBeGreaterThan(
+      withReading.indexOf("### Coverage"),
+    );
+    expect(withReading.indexOf("### Failures")).toBe(-1);
+  });
+
+  it("charts the nights the history table holds and the runbook's bullets do not", () => {
+    // The other surface: the nightly job's dated table, one row per night, matched to the runbook
+    // by date — so a night only the table recorded is a record on the page rather than a gap, and
+    // a reading's series is as long as the two files together make it.
+    const runbook = [
+      `- **2026-10-02 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+      `  ${READINGS[0].prefix} chrome — the footer 14 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+    ].join("\n");
+    const earlier = `${READINGS[0].prefix} chrome — the footer 14 (28 unique destinations) | data — 28 page mounts, 18 unique destinations`;
+    const table = [
+      "# Coverage history",
+      "",
+      `| Date | ${READINGS.map((entry) => entry.id).join(" | ")} |`,
+      `| :-- |${READINGS.map(() => " :-- |").join("")}`,
+      `| 2026-10-01 | ${earlier.replace(/\|/g, "\\|")} |${READINGS.slice(1)
+        .map(() => " |")
+        .join("")}`,
+      "",
+    ].join("\n");
+
+    const md = renderSummary(passing, runbook, table);
+
+    expect(md).toContain(
+      `- **${READINGS[0].id}** \`█▁\` — 25 ${READINGS[0].metric.label}, down 3 from 28 ` +
+        "(range 25–28) over 2 record(s) (2026-10-01 → 2026-10-02)",
+    );
+  });
+
+  it("draws each reading's committed floor beneath its series, and says when there is none", () => {
+    // The fourth input, and the one the page shares with `npm run coverage:trend`: the level each
+    // reading is held against, drawn on its series' own scale. A dip in the bars says a guard
+    // moved; the floor is what says whether it moved below the level that fails the night.
+    const runbook = [
+      `- **2026-10-01 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+      `  ${READINGS[0].prefix} chrome — the footer 14 (28 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+      "",
+      `- **2026-10-02 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+      `  ${READINGS[0].prefix} chrome — the footer 14 (32 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+    ].join("\n");
+    const floors = { [READINGS[0].id]: { value: 30, since: "2026-09-20" } };
+
+    const md = renderSummary(passing, runbook, "", floors);
+
+    expect(md).toContain(
+      `- **${READINGS[0].id}** \`▁█\` — 32 ${READINGS[0].metric.label}, up 4 from 28 ` +
+        "(range 28–32) over 2 record(s) (2026-10-01 → 2026-10-02)",
+    );
+    // 30 sits inside the series' 28–32, so the floor is drawn where its level is: one bar per
+    // plotted record, at (30 - 28) / (32 - 28) of the scale — and the night that came in under it
+    // is counted, which is the number the bars cannot carry.
+    expect(md).toContain(
+      `  \`▅▅\` floor 30 (recorded 2026-09-20) — the newest 32 is 2 above it; 1 of these 2 ` +
+        "record(s) below it",
+    );
+
+    // …and with no floors handed in — a test, a caller with no file — the rows say so rather than
+    // drawing a level this renderer made up, which would be a page stating a decision nobody made.
+    const bare = renderSummary(passing, runbook, "", {});
+    expect(bare).toContain(`- **${READINGS[0].id}**`);
+    expect(bare).toContain("no committed floor — this reading is held against the nights at hand");
+    expect(bare).not.toContain("floor 30");
+  });
+
+  it("charts nothing when the checkout has no recorded reading", () => {
+    // No runbook at all (a page rendered from a report alone), and a runbook that is prose:
+    // the block is omitted rather than printed empty, and a paragraph quoting a reading — the
+    // shape a hand-written bullet has — is not a record and charts nothing.
+    for (const runbook of ["", "- **2026-10-01 — a paragraph about `rendered-links coverage: 25 chrome`.**\n"]) {
+      expect(renderSummary(passing, runbook)).not.toContain("### Coverage over time");
+    }
   });
 
   it("leads a failing report with the failed count and lists each detail with its fix", () => {
@@ -385,6 +541,47 @@ describe("the nightly report renderer", () => {
     );
     // And a stage whose detail carries no diff renders exactly as before.
     expect(renderSummary(failing)).not.toContain("```diff");
+  });
+
+  it("names who is owed when an armed red alarm publishes its verdict, and nothing when there was none", () => {
+    // The section is built from the report's `queueAlarm` — the judgment the armed suite
+    // publishes as data — so the run page carries the handles and their waits, oldest first,
+    // without a reader opening the gate's log for the sentence. The field rides the payload
+    // only when an armed suite wrote one, so its absence is the page reading nothing rather
+    // than a zero that pretends an alarm ran.
+    const red = renderSummary({
+      ...failing,
+      failed: ["test"],
+      queueAlarm: {
+        maxAgeHours: 48,
+        judgedAt: "2026-10-18T09:00:00.000Z",
+        overdue: [
+          { id: "a", username: "kenji", waitHours: 73 },
+          { id: "b", username: "sofia", waitHours: 50 },
+        ],
+      },
+    });
+    expect(red).toContain("### The verification queue's alarm");
+    expect(red).toContain(
+      "The armed suite judged the pending queue at 2026-10-18T09:00:00.000Z: **2 application(s)** past the 48-hour review window, oldest first —",
+    );
+    expect(red).toContain("- `@kenji` — waited 73h — **the oldest**");
+    expect(red).toContain("- `@sofia` — waited 50h");
+    expect(red).toContain("act at /admin → Verification");
+    expect(red).toContain("`npm run admin:grant -- <email>`");
+
+    // A green armed night is the same alarm on duty reading a quiet queue: said, not silent.
+    const green = renderSummary({
+      ...passing,
+      queueAlarm: { maxAgeHours: 48, judgedAt: "2026-10-18T09:00:00.000Z", overdue: [] },
+    });
+    expect(green).toContain("### The verification queue's alarm");
+    expect(green).toContain(
+      "no application had exceeded its 48-hour review window; nobody owes a review",
+    );
+    // And an unarmed night — a report with no `queueAlarm` — renders no section at all.
+    expect(renderSummary(passing)).not.toContain("### The verification queue's alarm");
+    expect(renderSummary(failing)).not.toContain("### The verification queue's alarm");
   });
 
   it("flattens a pipe and a newline in a table cell so the row cannot break", () => {
@@ -517,6 +714,303 @@ describe("the nightly report CLI", () => {
     expect(readFileSync(summary, "utf8")).toContain("## Nightly full CI gate — ❌");
     // The annotation the workflow commands are built from reached stdout.
     expect(result.stdout).toContain("::error file=src/a.ts,line=1,col=2,title=typecheck::boom");
+  });
+
+  it("charts the runbook it is handed, and defaults to the one beside it", () => {
+    // Two halves, one contract: `--runbook` points the block at a file, and with no flag the
+    // script reads the runbook that travels with the checkout — which is what makes the nightly
+    // job's publish step need no argument at all.
+    const report = path.join(dir, "trend-report.json");
+    const summary = path.join(dir, "trend-summary.md");
+    const defaultSummary = path.join(dir, "trend-default.md");
+    const runbook = path.join(dir, "trend-runbook.md");
+    // An empty table and an empty low-water, handed in on purpose: the block is charted from two
+    // surfaces and drawn against the floors of a third, and the checkout's own committed files
+    // would otherwise add their nights *and their levels* to this fixture's runbook.
+    const emptyTable = path.join(dir, "trend-empty-history.md");
+    const noFloors = path.join(dir, "trend-empty-low-water.json");
+    writeFileSync(report, JSON.stringify(passing));
+    writeFileSync(emptyTable, "# Coverage history\n\n");
+    writeFileSync(noFloors, JSON.stringify({ readings: {} }));
+    writeFileSync(
+      runbook,
+      [
+        `- **2026-10-01 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+        `  ${READINGS[0].prefix} chrome — the footer 14 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+      ].join("\n"),
+    );
+
+    const handed = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        summary,
+        "--runbook",
+        runbook,
+        "--history",
+        emptyTable,
+        "--low-water",
+        noFloors,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(handed.status).toBe(0);
+    expect(readFileSync(summary, "utf8")).toContain(`- **${READINGS[0].id}** \`▄\` — 25 `);
+
+    const byDefault = spawnSync(process.execPath, [reporter, "--report", report, "--summary", defaultSummary], {
+      encoding: "utf8",
+    });
+    expect(byDefault.status).toBe(0);
+    // The default path is the committed runbook beside the script, so the page carries the same
+    // row this module charts from that file — computed rather than typed, since the file grows
+    // every time a full gate records a run.
+    // Both defaults are the committed files, so the expectation is computed from both of them:
+    // the committed runbook the module is beside, and the committed history table beside it.
+    const committed = readFileSync(
+      fileURLToPath(new URL("../../.freebuff/run.md", import.meta.url)),
+      "utf8",
+    );
+    const committedTable = readFileSync(
+      fileURLToPath(new URL("../../.freebuff/coverage-history.md", import.meta.url)),
+      "utf8",
+    );
+    const expected = coverageOverTime(committed, { history: committedTable })
+      .filter((line) => line.startsWith("- **"))
+      .at(0);
+    expect(expected, "the committed runbook records no reading to chart").toBeDefined();
+    expect(readFileSync(defaultSummary, "utf8")).toContain(expected);
+
+    // …and the floors are the committed file's too, with no flag: the publish step passes neither
+    // surface, so a default that stopped reading the low-water would chart every row without its
+    // second line and no flag would be there to notice — which is exactly the drift this holds.
+    const floors = readLowWater(
+      readFileSync(fileURLToPath(new URL("../../.freebuff/coverage-low-water.json", import.meta.url)), "utf8"),
+    ) as Floors;
+    const floored = READINGS.find((entry) => floors[entry.id] !== undefined);
+    expect(floored, "the committed low-water records no floor at all").toBeDefined();
+    expect(readFileSync(defaultSummary, "utf8")).toContain(
+      `floor ${floors[floored!.id].value} (recorded ${floors[floored!.id].since})`,
+    );
+  });
+
+  it("charts a night only the history table holds, through the flag a caller points it with", () => {
+    // The second surface, through the CLI: a table row for a night the runbook has nothing for is
+    // a record on the page, which is what `--history` is for — the nightly job needs no flag (the
+    // default is the committed file), and a caller pointing the block at a fixture uses this one.
+    const report = path.join(dir, "table-report.json");
+    const summary = path.join(dir, "table-summary.md");
+    const runbook = path.join(dir, "table-runbook.md");
+    const table = path.join(dir, "table-history.md");
+    const noFloors = path.join(dir, "table-low-water.json");
+    writeFileSync(noFloors, JSON.stringify({ readings: {} }));
+    const line = `${READINGS[0].prefix} chrome — the footer 14 (27 unique destinations) | data — 28 page mounts, 18 unique destinations`;
+    writeFileSync(report, JSON.stringify(passing));
+    // An empty runbook, so the night on the page is the table's alone and nothing else could
+    // have charted it.
+    writeFileSync(runbook, "");
+    writeFileSync(
+      table,
+      [
+        "# Coverage history",
+        "",
+        `| Date | ${READINGS.map((entry) => entry.id).join(" | ")} |`,
+        `| :-- |${READINGS.map(() => " :-- |").join("")}`,
+        `| 2026-09-30 | ${line.replace(/\|/g, "\\|")} |${READINGS.slice(1)
+          .map(() => " |")
+          .join("")}`,
+        "",
+      ].join("\n"),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        summary,
+        "--runbook",
+        runbook,
+        "--history",
+        table,
+        "--low-water",
+        noFloors,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    const md = readFileSync(summary, "utf8");
+    expect(md).toContain("### Coverage over time");
+    expect(md).toContain(`- **${READINGS[0].id}** \`▄\` — 27 ${READINGS[0].metric.label}`);
+    expect(md).toContain("over 1 record(s) (2026-09-30)");
+  });
+
+  it("draws the floors it is handed under the series, through the flag a caller points it with", () => {
+    // The third input, through the CLI: `--low-water` is what a caller pointing the block at a
+    // fixture uses, while the nightly job needs no flag at all — the default is the committed file
+    // beside the script, which is what makes its publish step argument-free.
+    const report = path.join(dir, "floor-report.json");
+    const summary = path.join(dir, "floor-summary.md");
+    const runbook = path.join(dir, "floor-runbook.md");
+    const emptyTable = path.join(dir, "floor-empty-history.md");
+    const floors = path.join(dir, "floor-low-water.json");
+    writeFileSync(report, JSON.stringify(passing));
+    writeFileSync(emptyTable, "# Coverage history\n\n");
+    writeFileSync(
+      runbook,
+      [
+        `- **2026-10-01 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+        `  ${READINGS[0].prefix} chrome — the footer 14 (27 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+        "",
+        `- **2026-10-02 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+        `  ${READINGS[0].prefix} chrome — the footer 14 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+        "",
+        `- **2026-10-03 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+        `  ${READINGS[0].prefix} chrome — the footer 14 (24 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+      ].join("\n"),
+    );
+    // The file the command reads, in the command's own shape: the note it writes about itself, and
+    // the floors keyed by the ids the registry declares.
+    writeFileSync(
+      floors,
+      JSON.stringify({
+        note: "The low-water mark each declared reading is held against.",
+        readings: { [READINGS[0].id]: { value: 25, since: "2026-09-28" } },
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        summary,
+        "--runbook",
+        runbook,
+        "--history",
+        emptyTable,
+        "--low-water",
+        floors,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    const md = readFileSync(summary, "utf8");
+    // The floor is drawn on the series' own scale — 25 sits a third of the way up a 24–27 window —
+    // and the row carries the count the bars cannot: the one night that came in under it. That
+    // count is the whole reason the line exists: those are the nights this window failed on.
+    expect(md).toContain(
+      `  \`▃▃▃\` floor 25 (recorded 2026-09-28) — the newest 24 is 1 below it; 1 of these 3 ` +
+        "record(s) below it",
+    );
+  });
+
+  it("charts without floors when the low-water it is handed is missing or unreadable", () => {
+    // The floors are best-effort like the other two inputs, and for the same reason: what a caller
+    // cannot hand over costs the rows their second line and never the publish. Both failures are
+    // said on stderr with their own reason — a file that is there and broken is not a file that is
+    // not there — because a page quietly charted without its floors is the one nobody would notice.
+    const report = path.join(dir, "bare-report.json");
+    const summary = path.join(dir, "bare-summary.md");
+    const brokenSummary = path.join(dir, "bare-broken.md");
+    const runbook = path.join(dir, "bare-runbook.md");
+    const junk = path.join(dir, "bare-low-water.json");
+    writeFileSync(report, JSON.stringify(passing));
+    writeFileSync(
+      runbook,
+      [
+        `- **2026-10-01 — ci verdict: 11 passed, 0 failed, 0 skipped, 0 unchanged, 0 reused, 0 excluded (11 selected); all stages passed.** typecheck PASS.`,
+        `  ${READINGS[0].prefix} chrome — the footer 14 (25 unique destinations) | data — 28 page mounts, 18 unique destinations.`,
+      ].join("\n"),
+    );
+    // Floors-looking and wrong: the reader's own reason is what says which line of it was.
+    writeFileSync(junk, JSON.stringify({ readings: { [READINGS[0].id]: 25 } }));
+
+    const missingPath = path.join(dir, "no-such-low-water.json");
+    const missing = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        summary,
+        "--runbook",
+        runbook,
+        "--low-water",
+        missingPath,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(missing.status).toBe(0);
+    expect(missing.stderr).toContain(`no committed low-water at ${missingPath}`);
+    expect(missing.stderr).toContain("there is none");
+    const md = readFileSync(summary, "utf8");
+    expect(md).toContain("### Coverage over time");
+    expect(md).toContain(`- **${READINGS[0].id}**`);
+    expect(md).toContain("no committed floor");
+
+    const broken = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        brokenSummary,
+        "--runbook",
+        runbook,
+        "--low-water",
+        junk,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(broken.status).toBe(0);
+    expect(broken.stderr).toContain("is not an entry with a value and a date");
+    expect(readFileSync(brokenSummary, "utf8")).not.toContain("floor 25");
+  });
+
+  it("publishes anyway when there is neither a runbook nor a history table to chart", () => {
+    // A missing file costs the page the trend and never a publish — the gate's own exit code is
+    // the workflow step's, and a summary nobody gets is the failure that matters. Both are said
+    // on stderr, because one surface missing still charts the other: a caller who gets no block
+    // at all has to be able to see why, and a quietly absent section is one nobody would notice.
+    const report = path.join(dir, "trend-missing.json");
+    const summary = path.join(dir, "trend-missing.md");
+    const missing = path.join(dir, "no-such-runbook.md");
+    const noTable = path.join(dir, "no-such-history.md");
+    writeFileSync(report, JSON.stringify(passing));
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        reporter,
+        "--report",
+        report,
+        "--summary",
+        summary,
+        "--runbook",
+        missing,
+        "--history",
+        noTable,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(`no runbook at ${missing}`);
+    expect(result.stderr).toContain(`no history table at ${noTable}`);
+    expect(readFileSync(summary, "utf8")).not.toContain("### Coverage over time");
   });
 
   it("publishes nothing secret even when the report it is handed names one", () => {

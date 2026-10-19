@@ -191,7 +191,21 @@ import { fileURLToPath } from "node:url";
 // The lock this sweep holds while a file is mutated, and the recovery that puts one
 // back after a kill, are shared with the coverage gate mutation check — one module
 // owns the file and its shape, so the two checks cannot drift apart.
-import { LOCK_PATH, clearLock, recoverInterruptedRun, writeLock } from "./mutation-lock.mjs";
+import {
+  LOCK_PATH,
+  RACE_COMMENT,
+  clearLock,
+  envWithoutRaceSeam,
+  raceAfterLine,
+  raceFileInside,
+  raceMoved,
+  raceRowDetail,
+  raceSkipLine,
+  raceVoidLine,
+  raceWedge,
+  recoverInterruptedRun,
+  writeLock,
+} from "./mutation-lock.mjs";
 // The save a strike is allowed to take: text that balances, or nothing. A strike that could
 // not be loaded would fail its test for the wrong reason, which the sweep reads as *caught*.
 import { saveWholeScript } from "./whole-write.mjs";
@@ -244,22 +258,27 @@ const failOpen = !args.includes("--no-fail-open");
 // written back over the editor's edit. So the strike gate verifies, before it measures,
 // that every file a verdict answers to is still the one the plan read. `MUTATION_RACE_AT`
 // and `MUTATION_RACE_FILE` are how a chassis test *lands* such an edit deterministically:
-// the sweep itself appends a comment to the named file just before plan item `n`'s gate
-// runs. They must stand together, and they may stand only when the route walk was
-// re-rooted — a seam that writes into the checkout it would otherwise measure would be the
-// one writer this whole check exists to catch.
+// the sweep itself appends a comment to the named file just before the nth strike this run
+// takes — self families first, then the route plan — on that strike's gate. They must
+// stand together, and they may stand only inside a scratch tree one of the two walks was
+// re-rooted to — a seam that writes into the checkout it would otherwise measure would be
+// the one writer this whole check exists to catch.
 const raceAt = Number(process.env.MUTATION_RACE_AT ?? "0");
 const raceFile = process.env.MUTATION_RACE_FILE ?? "";
-const RACE_COMMENT = "\n/* an outside edit, injected by the sweep's race seam */\n";
 if ((Number.isInteger(raceAt) && raceAt > 0) !== (raceFile !== "")) {
   console.error(
     "mutation-guards: MUTATION_RACE_AT and MUTATION_RACE_FILE stand together — set both, or neither.",
   );
   process.exit(1);
 }
-if (raceAt > 0 && !process.env.MUTATION_ROUTE_ROOT) {
+if (
+  raceAt > 0 &&
+  !raceFileInside(process.env.MUTATION_ROUTE_ROOT, raceFile) &&
+  !raceFileInside(process.env.MUTATION_STRIKE_ROOT, raceFile)
+) {
   console.error(
-    "mutation-guards: MUTATION_RACE_* re-root the route walk first (set MUTATION_ROUTE_ROOT) — " +
+    "mutation-guards: MUTATION_RACE_* re-root one of the walks first (set MUTATION_ROUTE_ROOT, or " +
+      "point MUTATION_STRIKE_ROOT at the scratch tree the race file sits inside) — " +
       "the seam may not edit the checkout it would otherwise measure.",
   );
   process.exit(1);
@@ -432,10 +451,16 @@ function runTest(testPath) {
   const reportPath = join(root, ".freebuff", ".mutation-report.json");
   if (existsSync(reportPath)) unlinkSync(reportPath);
 
+  // The race seam is this sweep's instrument, not its children's: a pinned suite that
+  // drives another tree-editing sweep from inside itself must not inherit the landing
+  // pair — it would refuse a run that has nothing to do with this one, and a race this
+  // sweep landed could masquerade as that sweep's own diagnosis.
+  const childEnv = envWithoutRaceSeam(process.env);
+
   const result = spawnSync(
     process.execPath,
     [vitestEntry, "run", relative(root, testPath), "--reporter=json", `--outputFile=${reportPath}`],
-    { cwd: root, encoding: "utf8" },
+    { cwd: root, encoding: "utf8", env: childEnv },
   );
 
   let report;
@@ -1646,20 +1671,18 @@ const routes = walkRoutes(appDir)
   .filter((path) => !fileFilter || label(path).includes(fileFilter))
   .sort();
 
-// What each measured file looked like when this run read it: the route's content, hashed
-// exactly as the plan splices it, and the hash of the neighbour test every verdict answers
-// to. The strike gate re-reads both before it measures — a file that no longer matches its
+// What each measured file looked like when this run read it: the route's content and the
+// neighbour test every verdict answers to, hashed by the shared wedge in the lock module.
+// The strike gate re-reads both before it measures — a file that no longer matches its
 // wedge is one another session edited inside the run's window, and no verdict may answer
 // on its behalf (see the race gate in the route loop below).
-const wedge = new Map();
+const wedge = raceWedge(
+  routes.map((route) => ({ key: route, files: [route, join(dirname(route), "route.test.ts")] })),
+);
 
 const plan = [];
 for (const route of routes) {
   const source = readFileSync(route, "utf8");
-  wedge.set(route, {
-    route: hash(source),
-    test: hash(readFileSync(join(dirname(route), "route.test.ts"), "utf8")),
-  });
   const guards = findGuards(source);
   guards.forEach((guard, index) =>
     plan.push({
@@ -1730,49 +1753,59 @@ const catchCount = plan.filter((item) => item.kind === "catch").length;
 // the moved file are skipped, counted, and named skipped.
 const raceRows = [];
 const skippedStrikes = [];
-const racedFiles = new Map(); // route -> the row that names it, so one file is named once
+// A measured file's label -> the row that names it, so one file is named once — the key is
+// the label rather than the file itself because both walks report a file by its label, and
+// a route and a self target are the same subject only when they are the same path.
+const racedFiles = new Map();
 
 function raceReason(route) {
-  const entry = wedge.get(route);
-  if (!entry) return null;
-  if (hash(readFileSync(route, "utf8")) !== entry.route) return "the route itself";
-  const testPath = join(dirname(route), "route.test.ts");
-  if (hash(readFileSync(testPath, "utf8")) !== entry.test) return "its neighbour test";
-  return null;
+  const at = raceMoved(
+    { key: route, files: [route, join(dirname(route), "route.test.ts")] },
+    wedge,
+  );
+  if (at === null) return null;
+  return at === 0 ? "the route itself" : "its neighbour test";
 }
 
-function raceRow(route, which) {
+function raceRow(subject, which) {
+  // `subject` is any measured file — a route, or one of the five self targets; `which`
+  // names the half that moved, the wording each walk owns for its own target and test.
   return {
-    path: label(route),
+    path: label(subject),
     line: null,
     kind: "broken",
     descriptor: "edited while the sweep ran",
-    where: `${label(route)}  ${which}`,
+    where: `${label(subject)}  ${which}`,
     total: null,
     masked: true,
     named: [],
     reason: "race",
-    detail:
-      `an edit to ${which} (${label(route)}) landed inside the sweep's window; nothing in the ` +
-      "file is measured, and every verdict this run recorded for it was voided before the report",
+    // The shared sentence, read from the lock module the other two tree-editing sweeps
+    // read — one spelling per reason, not one per sweep.
+    detail: raceRowDetail(which, label(subject)),
   };
 }
 
-function recordRace(route, which) {
-  const already = racedFiles.get(route);
+function recordRace(subject, which) {
+  const key = label(subject);
+  const already = racedFiles.get(key);
   if (already) return 0;
-  const row = raceRow(route, which);
-  racedFiles.set(route, row);
+  const row = raceRow(subject, which);
+  racedFiles.set(key, row);
   raceRows.push(row);
   // Verdicts recorded for the file before the edit landed are gone: a run that left them
   // standing would name survivors whose subject may not exist anymore, so they leave both
   // the report and the count, and the checks that recorded them are refunded — the run
-  // measured nothing that still stands.
+  // measured nothing that still stands. Both the route survivors and the self ones ride
+  // the same read: the self families' survivors live in their own list, one whose path is
+  // the same label the route walk records by.
   let voided = 0;
-  for (let i = survived.length - 1; i >= 0; i -= 1) {
-    if (survived[i].path === label(route)) {
-      survived.splice(i, 1);
-      voided += 1;
+  for (const list of [survived, survivedSelf]) {
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (list[i].path === key) {
+        list.splice(i, 1);
+        voided += 1;
+      }
     }
   }
   checked -= voided;
@@ -2076,16 +2109,76 @@ if (refusals.unnamed.length > 0 || refusals.unspoken.length > 0 || refusals.unfi
   refuseStartUp(refusals);
 }
 
+// The self families' wedge: the same plan-time hashing the route walk does for a route and
+// its neighbour test, this time over the five files the anchors splice into and the test
+// file every self verdict answers to. The anchor check above has just read every one of
+// these files whole, so the wedge costs nothing beyond hashing — and it lets the strike
+// gate below say, before it measures, whether the file a verdict answers to is still the
+// one this plan read. Multiple strikes share a target, so the key is the pair — target and
+// answering test — rather than the file alone: a strike whose target moved is refused by
+// its own half, whatever its siblings' tests look like.
+const selfWedgeKey = (target, testPath) => `${target}\u0000${testPath}`;
+const selfWedge = raceWedge(
+  SELF_MUTATIONS.map((mutation) => {
+    const target = strikeTarget(mutation.file);
+    return { key: selfWedgeKey(target, mutation.test), files: [target, mutation.test] };
+  }),
+);
+
+// One ordinal per strike attempt this run takes — self strikes first, then the route plan —
+// so the sweep's own edit seam (`MUTATION_RACE_AT`) names the same moment whichever loop
+// the nth strike belongs to. Modeled as a `let` the landing checks, because the two loops
+// are the same sequence it walks.
+let raceOrdinal = 0;
+const measuredSelf = new Map(); // wedge key -> the mutation, for the end-of-run sweep below
+function landRaceSeam() {
+  writeFileSync(raceFile, readFileSync(raceFile, "utf8") + RACE_COMMENT);
+}
+
+function selfRaceReason(mutation) {
+  const target = strikeTarget(mutation.file);
+  const at = raceMoved(
+    { key: selfWedgeKey(target, mutation.test), files: [target, mutation.test] },
+    selfWedge,
+  );
+  if (at === null) return null;
+  return at === 0 ? "the strike's target" : "the test the strike answers to";
+}
+
 // The helper self-mutations run first: they are few and fixed, the route guards
 // are many and sliced by `--limit`, and a survivor among the helpers is the
 // sharper failure — it means every test that calls the helper is asserting less
 // than it looks like it does.
 for (const mutation of SELF_MUTATIONS) {
-  checked += 1;
+  raceOrdinal += 1;
+  if (raceOrdinal === raceAt) landRaceSeam();
+
   const target = strikeTarget(mutation.file);
+  const where = `${label(mutation.file)}  ${mutation.name}`;
+
+  // The same gate the route loop below runs before each of its strikes: a target or its
+  // answering test that no longer matches the wedge is a file another session edited
+  // inside this run's window — re-reading it does help with the splice (the anchor is
+  // text-anchored, not index-anchored), but the verdicts this run already recorded for
+  // the file were true against bytes nobody can read back anymore, so the strike is not
+  // taken, one row is carried for the file however many strikes it held, and anything
+  // recorded for it is voided below. The subject is named to the gate as `mutation.file`,
+  // the declared file — the same label every verdict this loop records rides — because
+  // under the strike-root seam the copy that moved is the scratch one, whose label the
+  // survivors never carry.
+  const raced = selfRaceReason(mutation);
+  if (raced !== null) {
+    const voided = recordRace(mutation.file, raced);
+    skippedStrikes.push(raceOrdinal);
+    log(`[${checked}] RACED      ${where}`);
+    log(`             ${voided === 0 ? raceSkipLine(raced) : raceVoidLine(raced, voided)}`);
+    continue;
+  }
+  measuredSelf.set(selfWedgeKey(target, mutation.test), mutation);
+
+  checked += 1;
   const original = readFileSync(target, "utf8");
   const occurrences = original.split(mutation.find).length - 1;
-  const where = `${label(mutation.file)}  ${mutation.name}`;
 
   // Unreachable after the check above unless the tree moved under this run between the two
   // reads; the refusal is the same refusal either way.
@@ -2176,8 +2269,12 @@ for (const mutation of SELF_MUTATIONS) {
 
 for (const [planIndex, item] of plan.slice(0, limit).entries()) {
   // A chassis test's edit lands here, just before the gate below reads the file — the same
-  // window a real session's would, at a moment no `finally` owns.
-  if (planIndex + 1 === raceAt) writeFileSync(raceFile, readFileSync(raceFile, "utf8") + RACE_COMMENT);
+  // window a real session's would, at a moment no `finally` owns. The landing is keyed on
+  // the run's strike ordinal (self strikes first, then these), not the plan index, so the
+  // seam names the same strike however the run's loops split it.
+
+  raceOrdinal += 1;
+  if (raceOrdinal === raceAt) landRaceSeam();
 
   const { route, source, mutation, kind } = item;
   const testPath = join(dirname(route), "route.test.ts");
@@ -2193,11 +2290,7 @@ for (const [planIndex, item] of plan.slice(0, limit).entries()) {
     const voided = recordRace(route, raced);
     skippedStrikes.push(planIndex);
     log(`[${checked}/${plan.length}] RACED      ${where}`);
-    log(
-      voided === 0
-        ? `             left whole; ${raced} was edited while the sweep ran`
-        : `             left whole; the ${raced} changed mid-run — ${voided} verdict(s) recorded earlier for it are void`,
-    );
+    log(`             ${voided === 0 ? raceSkipLine(raced) : raceVoidLine(raced, voided)}`);
     continue;
   }
 
@@ -2285,21 +2378,37 @@ for (const [planIndex, item] of plan.slice(0, limit).entries()) {
 // passes once more, over the routes this run actually measured: a file nobody wrote to
 // during the sweep reads exactly the plan's bytes, and a raced one is refused by the same
 // record the per-strike gate keeps — one row per file, veredict voided, nonzero exit.
-// The seam's other landing: when the plan slice is shorter than `MUTATION_RACE_AT` says, no
-// strike gate ever reads `raceFile — so the edit lands here instead, just before the run's
-// last check reads the tree, and the end-of-run sweep is driven exactly as the per-strike
-// one is.
-if (raceAt > 0 && plan.slice(0, limit).length < raceAt) {
-  writeFileSync(raceFile, readFileSync(raceFile, "utf8") + RACE_COMMENT);
+// When the run takes fewer strikes than `MUTATION_RACE_AT` names — a shorter plan slice,
+// or strikes that were already race-skipped — no strike gate ever lands the edit, so it
+// lands here instead, just before the run's last check reads the tree, and the end-of-run
+// sweep is driven exactly as the per-strike one is.
+if (raceAt > 0 && raceOrdinal < raceAt) {
+  landRaceSeam();
 }
 
 const measuredRoutes = new Set(plan.slice(0, limit).map((item) => item.route));
 for (const route of measuredRoutes) {
-  if (racedFiles.has(route)) continue; // already named once, by the per-strike gate
+  if (racedFiles.has(label(route))) continue; // already named once, by the per-strike gate
   const raced = raceReason(route);
   if (raced !== null) {
     recordRace(route, raced);
-    log(`RACED       ${label(route)} — ${raced} changed after its last strike; its verdicts are void`);
+    log(`RACED       ${label(route)} — ${raceAfterLine(raced)}`);
+  }
+}
+
+// The self families' end of the same walk: every target this run actually measured, with
+// the test it answers to, passed over the wedge once more. A strike skipped by the gate
+// above records its file there directly; the remaining keys are the pairs the run took,
+// each of which may have been edited after its last verdict — which is exactly what no
+// per-strike gate runs to catch.
+for (const [, mutation] of measuredSelf) {
+  // The declared file, for the same reason the per-strike gate above reads `mutation.file`:
+  // the survivors name that label, so the voiding and the dedupe must key it too.
+  if (racedFiles.has(label(mutation.file))) continue; // already named once
+  const raced = selfRaceReason(mutation);
+  if (raced !== null) {
+    recordRace(mutation.file, raced);
+    log(`RACED       ${label(mutation.file)} — ${raceAfterLine(raced)}`);
   }
 }
 

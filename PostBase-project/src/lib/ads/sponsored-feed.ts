@@ -116,6 +116,7 @@ export async function sponsoredFeedPosts(options: {
         name: sql<string | null>`coalesce(${profiles.displayName}, ${users.username})`,
         username: users.username,
         avatarUrl: profiles.avatarUrl,
+        verified: users.verified,
       },
       page: {
         id: pages.id,

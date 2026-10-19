@@ -7,21 +7,28 @@ import { stubFetch as stubFetchEndpoints, type FetchRecorder, type StubPayload }
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// The one declaration of this reading: its sidecar's name, the env seam a test points at
+// scratch, and the prefix the line carries. The runner reads it back through the same entry,
+// so the file, the seam and the vocabulary are stated once for both ends of the pipeline.
+import { RENDERED_LINKS_READING, readingPath } from "../../.freebuff/coverage-readings.mjs";
 
 /**
- * Where this file's close-out leaves its coverage stamp for the CI runner's
+ * Where this file's close-out leaves its coverage reading for the CI runner's
  * close to read: the dated runbook bullet the close appends folds the same
  * line the `afterAll` below prints, so a full gate's record carries the
  * guard's coverage as the chrome and the pages move.
  *
- * Resolved from the `import.meta.url` *string* rather than `new URL(…)` for
- * the reason `module-index.ts` states: this file runs under jsdom, whose own
+ * The path comes from the reading's registry entry, so the sidecar's name and
+ * the `CI_COVERAGE_STAMP_FILE` seam that can point it elsewhere are the
+ * runner's own declaration rather than a literal kept in step with it by hand.
+ * The base is resolved from the `import.meta.url` *string* rather than `new URL(…)`
+ * for the reason `module-index.ts` states: this file runs under jsdom, whose own
  * `URL` class is not Node's, and `fileURLToPath` rejects a URL it did not
  * build with `The URL must be of scheme file`.
  */
-const coverageStampPath = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../.freebuff/.rendered-links-coverage.txt",
+const coverageStampPath = readingPath(
+  RENDERED_LINKS_READING,
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
 );
 
 /**
@@ -455,7 +462,7 @@ afterAll(() => {
     // must not spell the primitive's call shape in its text.
     parts.push(`data — ${dataCoverage.size} page mounts, ${union} unique destinations`);
   }
-  const stamp = `rendered-links coverage: ${parts.join(" | ")}`;
+  const stamp = `${RENDERED_LINKS_READING.prefix} ${parts.join(" | ")}`;
   console.log(stamp);
   // The same line, left where the CI runner's close reads it: the dated bullet
   // the close appends to the runbook folds the stamp in. Fail-silent on

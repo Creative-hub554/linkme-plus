@@ -130,6 +130,18 @@ describe("GET /api/boosts", () => {
     // does not make it.
     expectGatedSequence("reads", ["page_roles", "ad_campaigns"]);
   });
+
+  it("answers 500 when the listing itself cannot be read", async () => {
+    fakeDb
+      .selectReturns(pageRoles, [{ id: "role-1" }])
+      .failNextSelect(adCampaigns, new Error("db down"));
+
+    const response = await GET(list());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to list these campaigns" });
+    expectGatedNone("writes");
+  });
 });
 
 describe("POST /api/boosts", () => {
@@ -196,5 +208,59 @@ describe("POST /api/boosts", () => {
 
     expect(response.status).toBe(200);
     expectGatedInsert(adCampaigns, { values: { status: "paused" } });
+  });
+
+  it("answers 404 for a campaign that is not there, writing nothing", async () => {
+    // A campaign the Page names by id and cannot find is not an action to
+    // retry: the answer is a 404 before the caller's role is even consulted,
+    // and certainly before any state moves.
+    fakeDb.selectReturns(adCampaigns, []);
+
+    const response = await POST(act({ campaignId: CAMPAIGN_ID, action: "pay" }));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Campaign not found" });
+    expectGatedNone("writes");
+  });
+
+  it("refuses a campaign reached by a read that found no Page behind it", async () => {
+    // The post the read joined is what names the Page, so a campaign whose
+    // post has none is one nothing bills and no Page admin may manage. The
+    // refusal is the campaign's state, written before the caller's role is
+    // even asked about.
+    fakeDb.selectReturns(adCampaigns, [{ id: CAMPAIGN_ID, status: "active", pageId: null }]);
+
+    const response = await POST(act({ campaignId: CAMPAIGN_ID, action: "pause" }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "This campaign has no Page behind it" });
+    expectGatedNone("writes");
+  });
+
+  it("answers 400 for a body that is not an action", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/boosts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "not json [[",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "A campaign and an action are required" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("answers 500 when the campaign cannot be updated", async () => {
+    fakeDb
+      .selectReturns(adCampaigns, [{ id: CAMPAIGN_ID, status: "pending_payment", pageId: PAGE_ID }])
+      .selectReturns(pageRoles, [{ id: "role-1" }])
+      .failNextUpdate(adCampaigns, new Error("db down"));
+
+    const response = await POST(act({ campaignId: CAMPAIGN_ID, action: "pay" }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Unable to update this campaign" });
   });
 });

@@ -118,7 +118,7 @@ describe("the derived-import-closure proposal doc against the sources it names",
     // The watch-family regex the doc quotes whole; the extension's case names,
     // which live in the runner test the doc's Tests section describes.
     expectHeld(
-      '"^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure)\\\\.mjs$"',
+      '"^(ci|comment-gate|gate-drift|redact|nightly-report|pr-comment|import-closure|wait-drift-gate)\\\\.mjs$"',
       gateDrift,
       "gate-drift.mjs",
     );

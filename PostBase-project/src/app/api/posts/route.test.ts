@@ -72,7 +72,7 @@ import { posts, postMedia, pages, pageRoles, groups, groupMembers } from "@/lib/
 import { ensureLocalUserProfile } from "@/lib/db/ensure-profile";
 import { deleteStoredObjects } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
-import { expectGatedInsert, expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
+import { expectGatedInsert, expectGatedNone, expectGatedRead, expectGatedSequence } from "@/test/expect-gated";
 
 const POST_ID = "22222222-2222-4222-8222-222222222222";
 const PAGE_ID = "44444444-4444-4444-8444-444444444444";
@@ -111,6 +111,15 @@ beforeEach(() => {
 });
 
 describe("GET /api/posts", () => {
+  it("gates every post read on blocks between the viewer and the author", async () => {
+    const response = await GET(new Request("http://localhost/api/posts?authorId=" + POST_ID));
+
+    expect(response.status).toBe(200);
+    expectGatedRead(posts, {
+      where: [/not exists/, /from "blocks"/, /"blocked_id" = "posts"\."author_id"/, /"blocker_id" = "posts"\."author_id"/],
+    });
+  });
+
   it("answers 500 when the feed read fails, recording no read", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb.failNextSelect(posts, new Error("database unavailable"));

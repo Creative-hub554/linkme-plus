@@ -1,4 +1,5 @@
-import { sql, type SQL } from "drizzle-orm";
+import { and, sql, type SQL } from "drizzle-orm";
+import { notBlockedEitherWay } from "@/lib/db/blocks";
 import { audienceRule, type PostAudience } from "@/lib/post-audiences";
 import { follows, groupMembers, pageFollows, posts } from "@/lib/db/schema";
 
@@ -119,8 +120,15 @@ export function visiblePostsCondition(viewerId: string): SQL {
     .map((visibility) => audienceClause(visibility, viewerId))
     .filter((clause): clause is SQL => clause !== null);
 
-  return sql`(
-    ${posts.authorId} = ${viewerId}
-    or ${sql.join(clauses, sql`\n    or `)}
-  )`;
+  return and(
+    sql`(
+      ${posts.authorId} = ${viewerId}
+      or ${sql.join(clauses, sql`\n      or `)}
+    )`,
+    // Blocks are a boundary on all post reads, including public posts. The
+    // correlated candidate is the account that authored the row, so a block in
+    // either direction hides that member's posts in feeds, profiles, search,
+    // counts, and targeted post lookups alike.
+    notBlockedEitherWay(viewerId, posts.authorId),
+  ) as SQL;
 }

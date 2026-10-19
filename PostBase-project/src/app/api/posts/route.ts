@@ -167,6 +167,7 @@ export async function GET(request: Request) {
             name: sql<string | null>`coalesce(${profiles.displayName}, ${users.username})`,
             username: users.username,
             avatarUrl: profiles.avatarUrl,
+            verified: users.verified,
           },
           // Present only when a Page published the post; every column is null
           // otherwise. `author` above still resolves to the admin who pressed

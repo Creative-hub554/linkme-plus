@@ -213,6 +213,34 @@ export class FakeDb {
     return new FakeQuery(this, "insert").from(table);
   }
 
+  /**
+   * Runs the callback against this fake as one database transaction.
+   *
+   * The fake has no persisted rows to restore, but its observable write log is
+   * the contract route tests assert.  Rewinding that log when the callback
+   * throws makes those tests exercise the production guarantee: a failed
+   * transaction does not leave its earlier writes committed.
+   */
+  async transaction<T>(operation: (transaction: this) => Promise<T>): Promise<T> {
+    const writes = this.writes.length;
+    const updateWheres = this.updateWheres.length;
+    const updateParams = this.updateParams.length;
+    const deletes = this.deletes.length;
+    const deleteWheres = this.deleteWheres.length;
+    const deleteParams = this.deleteParams.length;
+    try {
+      return await operation(this);
+    } catch (error) {
+      this.writes.splice(writes);
+      this.updateWheres.splice(updateWheres);
+      this.updateParams.splice(updateParams);
+      this.deletes.splice(deletes);
+      this.deleteWheres.splice(deleteWheres);
+      this.deleteParams.splice(deleteParams);
+      throw error;
+    }
+  }
+
   /** The rows the next `select` of this table is answered with. */
   selectReturns(table: TableLike, rows: Row[]) {
     enqueue(this.selects, getTableName(table), rows);

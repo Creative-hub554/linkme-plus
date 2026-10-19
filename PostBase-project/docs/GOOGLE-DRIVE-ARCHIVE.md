@@ -30,10 +30,11 @@ The moving parts, in the order a pass runs them:
 - `src/lib/media-archive.ts` — the pass itself: list → age → upload → verify →
   record → rewrite → delete, plus the batched SQL that rewrites every column
   that may hold an old URL.
-- `src/lib/media-eviction.ts` — the eviction pass: list the post folder →
-  age → skip archive-owned keys → prove each candidate unreferenced against
-  the same column list the archive rewrites → delete the orphans. It runs
-  first, so an orphan is deleted rather than shipped to Drive and kept there.
+- `src/lib/media-eviction.ts` — the eviction pass: list every covered folder
+  (the post uploads folder, the demo seeder's folder) → age → skip
+  archive-owned keys → prove each candidate unreferenced against the same
+  column list the archive rewrites → delete the orphans. It runs first, so an
+  orphan is deleted rather than shipped to Drive and kept there.
 - `archived_objects` (table, migration `0014`) — one row per moved object: the
   R2 key, the Drive file id, and both URLs. This row is the archive's memory:
   it lets a crashed run resume without re-uploading, and it is the allow-list
@@ -149,15 +150,19 @@ Uploads are public URLs before they are rows: `/api/uploads` and
 references the file is created by a *later* request. When that request never
 comes — abandoned composer, lost tab, publish that failed client-side — the
 object is stranded in the bucket. Left alone, the archive would eventually
-move it to Drive and keep it there forever. The eviction pass reclaims those
-orphans, and runs first in the same cron so a stray upload is deleted rather
-than archived.
+move it to Drive and keep it there forever. The demo seeder strands objects
+the same way: it uploads every asset before the rows that reference them are
+written, and a re-seed with fewer posts or members leaves the old objects
+referenced by nothing. The eviction pass reclaims those orphans, and runs
+first in the same cron so a stray upload is deleted rather than archived.
 
 One pass, and the order is the safety argument:
 
-1. **List** the post folder — the prefix comes from `getFolderForPurpose("post")`,
-   the same helper the upload routes use, so the pass cannot drift from the
-   routes it cleans up after.
+1. **List** every folder the pass covers — the post folder and the demo
+   seeder's folder, each derived from `getFolderForPurpose` the same way its
+   writers derive their keys (`"post"` for the upload routes, `"seed"` for the
+   seeder, the one `putObject` caller outside a route), so the pass cannot
+   drift from what it cleans up after.
 2. **Age** the objects past `EVICT_GRACE_HOURS` (24 by default) — the window
    a slow publisher gets between uploading a photo and creating the post that
    claims it.
@@ -165,8 +170,9 @@ One pass, and the order is the safety argument:
    its resume path may still be about to rewrite rows pointing at them.
 4. **Prove each candidate unreferenced** against the same column list the
    archive rewrites (`ARCHIVE_REWRITE_TARGETS`): no `post_media` or
-   `comment_media` row, no URL pasted in a post's, comment's or message's
-   text. Reusing that list is the point — a URL-holding column added later
+   `comment_media` row, no seeded avatar or Page cover naming it, no URL
+   pasted in a post's, comment's or message's text. Reusing that list is the
+   point — a URL-holding column added later
    protects objects from eviction automatically, and `media-archive.test.ts`
    guards the list against schema drift.
 5. **Delete** the proven orphans, oldest first, under `EVICT_BATCH_LIMIT`.

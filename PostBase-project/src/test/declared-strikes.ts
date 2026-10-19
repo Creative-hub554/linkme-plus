@@ -74,6 +74,8 @@ export const EXPECTED_GUARDS = [
   "public-vocabulary",
   "client-config",
   "stale-stage-lists",
+  "frozen-scratch",
+  "relative-fixture",
 ];
 
 /**

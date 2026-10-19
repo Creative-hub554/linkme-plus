@@ -233,6 +233,33 @@ const post = {
   media: [{ url: "https://cdn.example/photo.jpg", type: "image/jpeg" }],
 };
 
+/** A row of the reports queue, which the admin board lists and filters. */
+const adminReport = {
+  id: "report-1",
+  reporterId: "user-1",
+  targetType: "post",
+  targetId: "post-1",
+  reason: "Spam",
+  description: "Posting crypto scams",
+  status: "pending",
+  createdAt: "2026-10-13T09:00:00.000Z",
+  // What the route now summarizes onto the row: the reported post's words and
+  // its author's handle, so the moderation queue audits with the excerpt shape.
+  targetContent: "Double your coins in 24 hours, link in bio.",
+  targetAuthor: "@spammer",
+};
+
+/** Members the roles route lists, one of each state its ladder touches. */
+const adminMember = {
+  id: "44444444-4444-4444-8444-444444444444",
+  username: "maya_designs",
+  email: "maya@example.com",
+  role: "member",
+  createdAt: "2026-10-13T09:00:00.000Z",
+};
+const adminModerator = { ...adminMember, id: "55555555-5555-4555-8555-555555555555", username: "sam", role: "moderator" };
+const adminAdmin = { ...adminMember, id: "66666666-6666-4666-8666-666666666666", username: "theowumicrosoft", role: "admin" };
+
 /** What each endpoint answers with, so the populated states are what get audited. */
 const CANNED: Record<string, StubPayload> = {
   "/api/marketplace": { data: [listing] },
@@ -293,6 +320,41 @@ const CANNED: Record<string, StubPayload> = {
       postCount: 1,
       isFollowing: false,
     },
+  },
+  // The admin dashboard's two live surfaces. Both are declared so the board
+  // and the heading row audit their *populated* states — a real row in the
+  // queue and real numbers in the cards, rather than the empty answers the
+  // default fallback hands to anything undeclared.
+  "/api/admin/stats": {
+    stats: { totalUsers: 12, activePosts: 34, pendingReports: 2, adRevenue: 1500 },
+  },
+  "/api/admin/reports": {
+    data: [adminReport],
+    pagination: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
+  },
+  // The moderation record the Content tab's second card reads: one recorded
+  // action, so the history audits its populated shape rather than an empty
+  // one the default fallback would hand it.
+  "/api/admin/moderation-actions": {
+    data: [
+      {
+        id: "action-1",
+        action: "ban",
+        targetType: "user",
+        targetId: "44444444-4444-4444-8444-444444444444",
+        reason: "Ran a coordinated spam network",
+        createdAt: "2026-10-16T09:30:00.000Z",
+        actorUsername: "admin-1",
+      },
+    ],
+    pagination: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
+  },
+  // The member list, with one row of each role, so the Users tab audits a
+  // promote button, a demote button, and the admin row's badge-only absence
+  // of controls — the shape the owner-console rule produces on screen.
+  "/api/admin/roles": {
+    data: [adminMember, adminModerator, adminAdmin],
+    pagination: { total: 3, page: 1, limit: 20, totalPages: 1, hasMore: false },
   },
 };
 
@@ -1037,16 +1099,22 @@ describe("every rendered surface", () => {
 
   covers("/admin");
   test("the admin dashboard", async () => {
+    // The heading row and the reports board load real data now, so the audit
+    // sees that it arrived: one computed number on a card, and the board's
+    // row — which is canned above.
     const { default: AdminPage } = await import("@/app/(main)/admin/page");
-    await audit(<AdminPage />);
+    await audit(<AdminPage />, { shows: adminReport.reason });
   });
 
   test("the admin dashboard, with the users tab chosen", async () => {
-    // The pending-approvals panel is hidden until its tab is chosen, and the
-    // Approve buttons on it are the reason to judge it — a reader only reaches
-    // them by switching. By mouse, which is the event a tab activates on.
+    // The member panel is hidden until its tab is chosen, and the buttons on
+    // it are the reason to judge it — a reader only reaches them by switching.
+    // The listing is canned above with one member, one moderator and one
+    // admin, so the panel the switch reveals has its real shape. By mouse,
+    // which is the event a tab activates on.
     const { default: AdminPage } = await import("@/app/(main)/admin/page");
     await audit(<AdminPage />, {
+      shows: adminMember.username,
       interact: async (ui) => {
         const users = [...ui.container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
           (tab) => tab.textContent?.trim() === "Users",

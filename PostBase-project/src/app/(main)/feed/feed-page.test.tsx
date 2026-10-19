@@ -186,8 +186,10 @@ describe("the feed page", () => {
     expect(ui.container.textContent).toContain("You're all caught up.");
   });
 
-  test("publishes a post and confirms the optimistic card", async () => {
-    const { ui, requests } = await mountFeed({});
+  test("publishes through the composer and renders the server-confirmed feed card", async () => {
+    const { ui, requests } = await mountFeed({
+      "/api/posts/reactions": { reacted: true, type: "like" },
+    });
     await ui.waitFor(() => ui.container.textContent?.includes("First post") ?? false, {
       description: "the feed",
     });
@@ -196,10 +198,32 @@ describe("the feed page", () => {
     await ui.type(textarea, "A brand new thought");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
     await ui.click(postButton as HTMLElement);
-    await ui.waitFor(() => ui.container.textContent?.includes("A brand new thought") ?? false, {
-      description: "the published post",
-    });
-    expect(requests.calls.some((call) => call.pathname === "/api/posts" && call.method === "POST")).toBe(true);
+
+    await ui.waitFor(
+      () => ui.container.querySelector("#post-published-1") !== null,
+      { description: "the server-confirmed post card" },
+    );
+    const card = ui.container.querySelector("#post-published-1");
+    expect(card?.textContent).toContain("A brand new thought");
+    expect(card?.textContent).toContain("Theo Wu");
+    expect(card?.getAttribute("aria-busy")).toBeNull();
+    expect(ui.container.textContent).not.toContain("Posting...");
+    expect(textarea.value).toBe("");
+
+    const create = requests.calls.find((call) => call.pathname === "/api/posts" && call.method === "POST");
+    expect(create?.body).toEqual({ content: "A brand new thought", type: "text", visibility: "public", media: [] });
+
+    const postReaction = card?.querySelector('button[aria-label="React to post"]');
+    if (!postReaction) throw new Error("the newly published card did not expose its reaction action");
+    await ui.click(postReaction as HTMLElement);
+    await ui.waitFor(
+      () => requests.calls.some((call) => call.pathname === "/api/posts/reactions" && call.method === "POST"),
+      { description: "the reaction on the published post" },
+    );
+    const reaction = requests.calls.find(
+      (call) => call.pathname === "/api/posts/reactions" && call.method === "POST",
+    );
+    expect(reaction?.body).toEqual({ targetType: "post", targetId: "published-1", type: "like" });
   });
 
   test("uploads an image attachment before publishing", async () => {

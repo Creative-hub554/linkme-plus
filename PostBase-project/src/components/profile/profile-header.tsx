@@ -7,7 +7,8 @@ import {
   ProfileCover,
   type CoverMedia,
 } from "@/components/profile/profile-cover";
-import { MessageCircle, Plus, Pencil, QrCode } from "lucide-react";
+import { BadgeCheck, MessageCircle, Plus, Pencil, QrCode } from "lucide-react";
+import { BlockButton } from "@/components/social/block-button";
 import { cn } from "@/lib/utils";
 import { FollowButton } from "@/components/social/follow-button";
 
@@ -18,6 +19,7 @@ export interface ProfileHeaderUser {
   bio?: string | null;
   location?: string | null;
   joinedAt?: string | Date | null;
+  verified?: boolean;
 }
 
 interface ProfileHeaderProps {
@@ -35,6 +37,9 @@ interface ProfileHeaderProps {
   profileUserId?: string | null;
   initialFollowing?: boolean;
   onFollowChange?: (following: boolean, followers?: number) => void;
+  isBlocked?: boolean;
+  blockedByViewer?: boolean;
+  onBlockChange?: (blocked: boolean, counts?: { followers: number; following: number }) => void;
   onMessage?: () => void;
 }
 
@@ -68,6 +73,9 @@ export function ProfileHeader({
   profileUserId,
   initialFollowing,
   onFollowChange,
+  isBlocked,
+  blockedByViewer,
+  onBlockChange,
   onMessage,
 }: ProfileHeaderProps) {
   const [showQr, setShowQr] = useState(false);
@@ -94,6 +102,7 @@ export function ProfileHeader({
         <div className="pt-4 text-center sm:pt-5">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <h1 className="text-xl font-bold text-navy-800 sm:text-2xl">{user.name}</h1>
+            {user.verified && <span aria-label={`${user.name ?? "Member"}'s verified account badge`} className="inline-flex items-center gap-1 text-sky-700" title="Verified account"><BadgeCheck className="h-5 w-5" aria-hidden="true" /><span className="sr-only">Verified account</span></span>}
           </div>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             {handle && <span>{handle}</span>}
@@ -149,17 +158,35 @@ export function ProfileHeader({
             </>
           ) : (
             <>
-              {profileUserId && (
+              {profileUserId && !isBlocked && (
                 <FollowButton
                   userId={profileUserId}
                   initialFollowing={initialFollowing}
                   onChange={onFollowChange}
                 />
               )}
-              <Button variant="outline" size="sm" onClick={onMessage} disabled={!profileUserId}>
+              <Button variant="outline" size="sm" onClick={onMessage} disabled={!profileUserId || isBlocked}>
                 <MessageCircle className="h-4 w-4" />
                 Message
               </Button>
+              {profileUserId && blockedByViewer && (
+                <BlockButton
+                  userId={profileUserId}
+                  subjectName={user.name ?? "this member"}
+                  initialBlocked
+                  onChange={onBlockChange}
+                />
+              )}
+              {profileUserId && isBlocked && !blockedByViewer && (
+                <p role="status" className="text-sm text-muted-foreground">This member has blocked you.</p>
+              )}
+              {profileUserId && !isBlocked && (
+                <BlockButton
+                  userId={profileUserId}
+                  subjectName={user.name ?? "this member"}
+                  onChange={onBlockChange}
+                />
+              )}
             </>
           )}
         </div>
