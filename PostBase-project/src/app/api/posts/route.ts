@@ -5,7 +5,7 @@ import { requireAuth, successResponse, errorResponse, cursorPaginatedResponse } 
 import { visiblePostsCondition } from "@/lib/db/post-visibility";
 import { authoredByMember } from "@/lib/db/author-timeline";
 import { toPostAudience } from "@/lib/post-audiences";
-import { deleteStoredObjects } from "@/lib/r2";
+import { deleteStoredObjects, keyBelongsToUser, keyFromPublicUrl, userOwnedStoredObjectUrls } from "@/lib/r2";
 import { clampLimit, decodeCursor, encodeCursor, isUuid, type CursorPosition } from "@/lib/cursor-pagination";
 import { isHomeFeed, sponsoredFeedPosts } from "@/lib/ads/sponsored-feed";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -266,8 +266,41 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { content, type = "text", visibility = "public", hashtags, mentions, media, pageId, groupId } = body;
 
-    if (!content && (!media || media.length === 0)) {
+    if (media !== undefined && media !== null && !Array.isArray(media)) {
+      return errorResponse("Media must be a list", 400);
+    }
+    if (!content && (!Array.isArray(media) || media.length === 0)) {
       return errorResponse("Content or media is required");
+    }
+
+    const storedMedia: PostMediaInput[] = [];
+    for (const item of Array.isArray(media) ? media : []) {
+      if (!item || typeof item !== "object") {
+        return errorResponse("Each media item must be an object with a URL", 400);
+      }
+      const { url: mediaUrl, altText, type: mediaType } = item as {
+        url?: unknown;
+        altText?: unknown;
+        type?: unknown;
+      };
+      const key = typeof mediaUrl === "string" ? keyFromPublicUrl(mediaUrl) : null;
+      if (!key || !keyBelongsToUser(key, session.user.id)) {
+        return errorResponse("Media must be files you uploaded", 400);
+      }
+      if (typeof mediaType !== "string" || mediaType.length === 0) {
+        return errorResponse("Each media item needs a type", 400);
+      }
+      if (altText !== undefined && altText !== null && typeof altText !== "string") {
+        return errorResponse("Media alt text must be text or null", 400);
+      }
+      if (typeof altText === "string" && altText.length > 255) {
+        return errorResponse("Media alt text is limited to 255 characters", 400);
+      }
+      storedMedia.push({
+        url: mediaUrl as string,
+        type: mediaType,
+        altText: typeof altText === "string" && altText.length > 0 ? altText : null,
+      });
     }
 
     // Publishing *as* a Page. The row still records `author_id` as the person
@@ -364,14 +397,14 @@ export async function POST(request: Request) {
     );
 
     // Add media if provided
-    if (media && media.length > 0) {
+    if (storedMedia.length > 0) {
       await withDbRetry(() =>
         db.insert(postMedia).values(
-          media.map((m: PostMediaInput, index: number) => ({
+          storedMedia.map((item, index) => ({
             postId: newPost.id,
-            url: m.url,
-            altText: m.altText,
-            type: m.type,
+            url: item.url,
+            altText: item.altText,
+            type: item.type,
             order: index,
           }))
         )
@@ -472,7 +505,14 @@ export async function DELETE(request: Request) {
       .select({ url: postMedia.url })
       .from(postMedia)
       .where(eq(postMedia.postId, deleted.id));
-    const removed = await deleteStoredObjects(mediaUrls.map((row) => row.url));
+    // Older rows may predate upload ownership validation. Keep post deletion
+    // from becoming a second path to delete another member's R2 object; the
+    // helper also resolves archived R2 URLs back to their original key.
+    const ownedMediaUrls = await userOwnedStoredObjectUrls(
+      mediaUrls.map((row) => row.url),
+      session.user.id,
+    );
+    const removed = await deleteStoredObjects(ownedMediaUrls);
     if (removed.length > 0) {
       console.log(`Deleted ${removed.length} stored object(s) for post ${deleted.id}`);
     }

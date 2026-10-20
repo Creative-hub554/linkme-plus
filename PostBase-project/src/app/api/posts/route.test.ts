@@ -446,12 +446,95 @@ describe("POST /api/posts", () => {
         table: "post_media",
         values: [
           { postId: POST_ID, url: MEDIA_ONE, altText: "A photograph", type: "image", order: 0 },
-          { postId: POST_ID, url: MEDIA_TWO, altText: undefined, type: "video", order: 1 },
+          // The route normalizes a missing or empty alt text to an explicit
+          // `null` — the same stored value, held as a declared one — so the
+          // write's shape says what the row would hold rather than what a
+          // shorthand left out.
+          { postId: POST_ID, url: MEDIA_TWO, altText: null, type: "video", order: 1 },
         ],
       },
     ]);
     // Best-effort provisioning runs before the insert; it is not what is stored.
     expect(vi.mocked(ensureLocalUserProfile)).toHaveBeenCalledOnce();
+  });
+
+  describe("media attachments are validated before anything is written", () => {
+    // Each refusal names its own message, which is what strikes the guard
+    // twice: a guard removed answers whatever refusal or success comes *after*
+    // it, and a guard answering success instead of a refusal would pass the
+    // same body through to the database read.
+    it("refuses media that is not a list", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: { url: MEDIA_ONE, type: "image" } }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Media must be a list" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses a media item that is not an object", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: ["https://test.r2.dev/posts/author-1/1-photo.png"] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Each media item must be an object with a URL" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses media stored outside the author's own folder", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", {
+          content: "Hello",
+          media: [{ url: "https://test.r2.dev/posts/someone-else/1-photo.png", type: "image" }],
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Media must be files you uploaded" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses media whose URL is not on the checkout's public origin at all", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: [{ url: "https://elsewhere.example/1.png", type: "image" }] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Media must be files you uploaded" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses a media item with no type", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: [{ url: MEDIA_ONE }] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Each media item needs a type" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses alt text that is not text", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: [{ url: MEDIA_ONE, type: "image", altText: 7 }] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Media alt text must be text or null" });
+      expectGatedNone("writes");
+    });
+
+    it("refuses alt text longer than 255 characters", async () => {
+      const response = await POST(
+        jsonRequest("POST", "/api/posts", { content: "Hello", media: [{ url: MEDIA_ONE, type: "image", altText: "a".repeat(256) }] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Media alt text is limited to 255 characters" });
+      expectGatedNone("writes");
+    });
   });
 
   it("writes no media rows for a text-only post", async () => {

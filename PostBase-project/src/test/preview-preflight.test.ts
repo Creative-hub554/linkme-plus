@@ -185,21 +185,30 @@ function scratchCheckout(lock: Record<string, unknown> | null): string {
  * a loaded box: the preflight's table read still listed the pid (or a reuse had
  * already recycled it — the sweep's own node spawns recycle pids aggressively)
  * after the child had exited, and the case red on a verdict that called the
- * lock held. So the helper awaits the child's exit and then polls
- * `Win32_Process` about the pid exactly as the script's own lookup does,
- * re-spawning afresh until a candidate answers gone.
+ * lock held. So the helper awaits the child's exit and then polls the pid
+ * against the local process table, re-spawning afresh until a candidate
+ * answers gone.
+ *
+ * The liveness verdict itself (`isPidAlive`) is `process.kill(pid, 0)` — cross-
+ * platform — so the confirmation has to be too: on Windows the read is the
+ * `Win32_Process` lookup the script's own port-owner path uses; elsewhere the
+ * `ps` table is the read, absent meaning reaped (an exit of 1 that printed no
+ * row). A failed lookup is not evidence of absence — the table may be slow to
+ * answer under load — so the caller's poll loop reads that as "not yet gone".
  */
 async function reapedPidAbsentFromProcessTable(pid: number): Promise<boolean> {
-  const script =
-    `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
-    "if ($p) { Write-Output $p.CommandLine }";
-  const read = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  // A failed lookup is not evidence of absence — the table may just be slow to
-  // answer under load, so the caller's poll loop reads this as "not yet gone."
-  return read.status === 0 && (read.stdout ?? "").trim() === "";
+  if (process.platform === "win32") {
+    const script =
+      `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
+      "if ($p) { Write-Output $p.CommandLine }";
+    const read = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return read.status === 0 && (read.stdout ?? "").trim() === "";
+  }
+  const read = spawnSync("ps", ["-p", String(pid)], { encoding: "utf8" });
+  return read.status === 1 && (read.stdout ?? "").trim() === "";
 }
 
 async function deadPid(): Promise<number> {

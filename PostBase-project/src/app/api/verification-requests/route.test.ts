@@ -27,6 +27,16 @@ describe("member verification requests", () => {
     expect(fakeDb.writes).toEqual([]);
   });
 
+  it("refuses a malformed body before anything is read", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/verification-requests", { method: "POST", body: "not json" }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Provide one to five public HTTPS links" });
+    expect(fakeDb.reads).toEqual([]);
+  });
+
   it.each(["http://example.com", "javascript:alert(1)", "https://user:pass@example.com", "not a url"])("refuses non-public or malformed link %s", async (url) => {
     const response = await POST(request("POST", { evidenceUrls: [url] }));
     expect(response.status).toBe(400);
@@ -64,6 +74,36 @@ describe("member verification requests", () => {
     const response = await POST(request("POST", { evidenceUrls: ["https://example.com"] }));
     expect(response.status).toBe(409);
     expect(fakeDb.writes).toEqual([]);
+  });
+
+  it("answers 500 when the verification status cannot be loaded", async () => {
+    fakeDb.failNextSelect(users);
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await GET(request("GET"));
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Unable to load verification status" });
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
+  it("answers 500 when an application cannot be stored", async () => {
+    fakeDb.selectReturns(users, [{ verified: false }]);
+    fakeDb.selectReturns(verificationRequests, []);
+    fakeDb.failNextInsert(verificationRequests);
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await POST(request("POST", { evidenceUrls: ["https://example.com"] }));
+
+      expect(response.status).toBe(500);
+      expect(fakeDb.writes).toEqual([]);
+    } finally {
+      silence.mockRestore();
+    }
   });
 
   it("returns only the signed-in member's status and links", async () => {

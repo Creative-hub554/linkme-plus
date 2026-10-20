@@ -121,6 +121,7 @@ export function visiblePostsCondition(viewerId: string): SQL {
     .filter((clause): clause is SQL => clause !== null);
 
   return and(
+    sql`${posts.deletedAt} IS NULL`,
     sql`(
       ${posts.authorId} = ${viewerId}
       or ${sql.join(clauses, sql`\n      or `)}

@@ -80,6 +80,49 @@ describe("GET /api/users/block", () => {
     expect(response.status).toBe(404);
     expectGatedSequence("reads", ["users"]);
   });
+
+  it("requires a target id, reading nothing", async () => {
+    const response = await GET(new Request("http://localhost/api/users/block"));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "User ID is required" });
+    expectGatedNone("reads");
+  });
+
+  it("refuses a malformed target id, reading nothing", async () => {
+    const response = await GET(new Request("http://localhost/api/users/block?userId=not-a-uuid"));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid user ID" });
+    expectGatedNone("reads");
+  });
+
+  it("refuses to read your own block state", async () => {
+    // The session id is a real uuid here, so the self-refusal is the branch
+    // that answers — not the uuid check a non-uuid session id would hit first.
+    const SELF_ID = "33333333-3333-4333-8333-333333333333";
+    session.userId = SELF_ID;
+
+    const response = await GET(new Request(`http://localhost/api/users/block?userId=${SELF_ID}`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Cannot block yourself" });
+    expectGatedNone("reads");
+  });
+
+  it("answers 500 when the block state cannot be read", async () => {
+    fakeDb.selectReturns(users, [{ id: TARGET_ID }]).failNextSelect(blocks);
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await GET(new Request(`http://localhost/api/users/block?userId=${TARGET_ID}`));
+
+      expect(response.status).toBe(500);
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
+  });
 });
 
 describe("POST /api/users/block", () => {

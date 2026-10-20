@@ -31,12 +31,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate file size if provided
-    if (size) {
-      const validation = validateFile({ type: contentType, size }, purpose);
-      if (!validation.valid) {
-        return errorResponse(validation.error!);
-      }
+    // The size is not optional any more, and this is the gate that makes it so: the presigned
+    // URL signs Content-Length, so a PUT with a different body length cannot use it and the
+    // limit is enforced by R2 itself — which only holds if the URL is minted *with* an explicit
+    // length. A request without one would sign an unbounded URL, so it is refused here, before
+    // anything is signed; the size the caller declares is then validated against the purpose's
+    // limit exactly as an uploaded file's would be.
+    if (typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0) {
+      return errorResponse("Filename, content type and a positive file size are required");
+    }
+    const validation = validateFile({ type: contentType, size }, purpose);
+    if (!validation.valid) {
+      return errorResponse(validation.error!);
     }
 
     try {
@@ -48,7 +54,10 @@ export async function POST(request: Request) {
     // Generate key and presigned URL
     const folder = getFolderForPurpose(purpose);
     const key = generateKey(folder, session.user.id, filename);
-    const uploadUrl = await getPresignedUploadUrl(key, contentType);
+    // The declared size rides into the signature: R2 refuses a PUT whose body length is not
+    // exactly this, so the limit the config holds is enforced at the bucket, not only at this
+    // endpoint by a number the client could have lied about.
+    const uploadUrl = await getPresignedUploadUrl(key, contentType, size);
 
     return successResponse({
       uploadUrl,

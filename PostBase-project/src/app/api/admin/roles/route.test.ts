@@ -139,6 +139,24 @@ describe("POST /api/admin/roles", () => {
     expectGatedNone("writes");
   });
 
+  it("refuses a move that names no member, before anything is read", async () => {
+    const response = await POST(move({ action: "promote" }));
+
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toBe("The member to move is required");
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a target id that is not a uuid, before anything is read", async () => {
+    const response = await POST(move({ userId: "not-a-uuid", action: "promote" }));
+
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toBe("The member to move is required");
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
   it("refuses an unknown action before anything is read", async () => {
     const response = await POST(move({ userId: MEMBER_ID, action: "banner" }));
 
@@ -210,6 +228,34 @@ describe("POST /api/admin/roles", () => {
     expect(body.user.role).toBe("moderator");
     // The write pair: the ladder's step, then the record beside it.
     expectGatedSequence("writes", ["users", "audit_logs"]);
+  });
+
+  it("answers 404 when the ladder step's write matches nothing — the row vanished", async () => {
+    gateAdminAndTarget("member");
+    fakeDb.updateReturns(users, []);
+
+    const response = await POST(move({ userId: MEMBER_ID, action: "promote" }));
+
+    expect(response.status).toBe(404);
+    // The vanished row's 404 answers before the audit: the ladder step was
+    // attempted, but no record was taken beside it.
+    expectGatedSequence("writes", ["users"]);
+  });
+
+  it("answers 500 when the move cannot be recorded at all", async () => {
+    // Nothing was scripted: the very first read — the caller's gate — fails.
+    fakeDb.failNextSelect(users);
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await POST(move({ userId: MEMBER_ID, action: "promote" }));
+
+      expect(response.status).toBe(500);
+      expectGatedNone("reads");
+      expectGatedNone("writes");
+    } finally {
+      silence.mockRestore();
+    }
   });
 
   it("demotes a moderator back to member, with the record beside it", async () => {

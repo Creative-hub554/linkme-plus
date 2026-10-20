@@ -84,6 +84,82 @@ describe("admin verification review", () => {
     }
   });
 
+  it("refuses a malformed review body before anything is read", async () => {
+    const response = await PATCH(
+      new Request("http://localhost/api/admin/verification-requests", {
+        method: "PATCH",
+        body: "not json",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(fakeDb.reads).toEqual([]);
+    expect(fakeDb.writes).toEqual([]);
+  });
+
+  it("refuses a non-reviewer caller on the write side, reading the gate and nothing else", async () => {
+    reviewer("member");
+
+    const response = await PATCH(req("PATCH", { requestId: REQUEST_ID, decision: "approved" }));
+
+    expect(response.status).toBe(403);
+    expect(fakeDb.reads).toEqual(["users"]);
+    expect(fakeDb.writes).toEqual([]);
+  });
+
+  it("answers 404 when the request named is not a pending application", async () => {
+    reviewer();
+    fakeDb.selectReturns(verificationRequests, []);
+
+    const response = await PATCH(req("PATCH", { requestId: REQUEST_ID, decision: "approved" }));
+
+    expect(response.status).toBe(404);
+    expect(fakeDb.writes).toEqual([]);
+  });
+
+  it("answers 409 when the application is reviewed between the read and the write", async () => {
+    reviewer();
+    fakeDb.selectReturns(verificationRequests, [{ id: REQUEST_ID, userId: "member-1" }]);
+    fakeDb.updateReturns(verificationRequests, []);
+
+    const response = await PATCH(req("PATCH", { requestId: REQUEST_ID, decision: "approved" }));
+
+    expect(response.status).toBe(409);
+    // The race is lost before the badge is awarded: only the ladder's own
+    // update was attempted, and no row recorded beside it.
+    expect(fakeDb.writes.map((write) => write.table)).toEqual(["verification_requests"]);
+  });
+
+  it("maps a uniqueness conflict on the review write to 409", async () => {
+    reviewer();
+    fakeDb.selectReturns(verificationRequests, [{ id: REQUEST_ID, userId: "member-1" }]);
+    fakeDb.updateReturns(verificationRequests, [{ id: REQUEST_ID, userId: "member-1", status: "approved" }]);
+    fakeDb.failNextInsert(auditLogs, Object.assign(new Error("duplicate"), { code: "23505" }));
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await PATCH(req("PATCH", { requestId: REQUEST_ID, decision: "approved" }));
+
+      expect(response.status).toBe(409);
+      expect(fakeDb.writes).toEqual([]);
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
+  it("answers 500 when the queue cannot be listed", async () => {
+    fakeDb.failNextSelect(users);
+    const silence = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await GET(req("GET"));
+
+      expect(response.status).toBe(500);
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
   it("rejects invalid decisions before database access beyond reviewer gate", async () => {
     reviewer();
     const response = await PATCH(req("PATCH", { requestId: REQUEST_ID, decision: "granted" }));

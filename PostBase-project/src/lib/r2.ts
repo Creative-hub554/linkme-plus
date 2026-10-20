@@ -113,15 +113,23 @@ export function keyBelongsToUser(key: string, userId: string): boolean {
 export async function getPresignedUploadUrl(
   key: string,
   contentType: string,
+  contentLength: number,
   expiresIn = 3600
 ): Promise<string> {
   assertStorageConfigured();
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    throw new Error("Upload size must be a positive safe integer");
+  }
   const command = new PutObjectCommand({
     Bucket: BUCKET_NAME,
     Key: key,
     ContentType: contentType,
+    // Content-Length is a signed header. A PUT with a different body length
+    // cannot reuse this URL, so the limit is enforced by R2 rather than only
+    // trusting the size the client reported to this endpoint.
+    ContentLength: contentLength,
   });
-
+  
   return getSignedUrl(r2Client, command, { expiresIn });
 }
 
@@ -290,6 +298,45 @@ async function findArchivedDriveIds(driveUrls: string[]): Promise<Map<string, st
  * because deleting an absent object succeeds. Returns what it removed: R2
  * keys, and `drive:<file id>` for the archived files.
  */
+export async function userOwnedStoredObjectUrls(
+  urls: Iterable<string | null | undefined>,
+  userId: string,
+): Promise<string[]> {
+  const requested = [
+    ...new Set([...urls].filter((url): url is string => typeof url === "string" && url.length > 0)),
+  ];
+  const owned = new Set<string>();
+  const archivedUrls: string[] = [];
+
+  for (const url of requested) {
+    const key = keyFromPublicUrl(url);
+    if (key) {
+      if (keyBelongsToUser(key, userId)) owned.add(url);
+      continue;
+    }
+    if (archivedFileIdFromUrl(url)) archivedUrls.push(url);
+  }
+
+  // Archived URLs no longer contain the original member prefix, so consult
+  // the archive provenance row before allowing a later delete to reach Drive.
+  // A lookup failure fails closed: leave archived objects in storage.
+  if (archivedUrls.length > 0) {
+    try {
+      const rows = await db
+        .select({ newUrl: archivedObjects.newUrl, r2Key: archivedObjects.r2Key })
+        .from(archivedObjects)
+        .where(inArray(archivedObjects.newUrl, archivedUrls));
+      for (const row of rows) {
+        if (keyBelongsToUser(row.r2Key, userId)) owned.add(row.newUrl);
+      }
+    } catch (error) {
+      console.warn("Failed to verify stored media ownership; archived files left in place:", error);
+    }
+  }
+
+  return requested.filter((url) => owned.has(url));
+}
+
 export async function deleteStoredObjects(
   urls: Iterable<string | null | undefined>
 ): Promise<string[]> {
@@ -345,9 +392,12 @@ export function validateFile(
   // Named `_`-prefixed so the lint config treats it as deliberately unused.
   _purpose: string = "post"
 ): { valid: boolean; error?: string } {
-  // Check file type
+  // Check file type and reject missing, zero, fractional, or unsafe sizes.
   if (!ALL_ALLOWED_TYPES.includes(file.type)) {
     return { valid: false, error: "File type not allowed" };
+  }
+  if (!Number.isSafeInteger(file.size) || file.size <= 0) {
+    return { valid: false, error: "File size must be a positive integer" };
   }
 
   // Check size based on type
