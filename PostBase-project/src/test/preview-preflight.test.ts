@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
@@ -180,50 +180,31 @@ function scratchCheckout(lock: Record<string, unknown> | null): string {
 }
 
 /**
- * A pid that is genuinely gone — and seen to be gone by the same process-table
- * read the preflight judges liveness with. Spawn-and-reap alone lost a race on
- * a loaded box: the preflight's table read still listed the pid (or a reuse had
- * already recycled it — the sweep's own node spawns recycle pids aggressively)
- * after the child had exited, and the case red on a verdict that called the
- * lock held. So the helper awaits the child's exit and then polls the pid
- * against the local process table, re-spawning afresh until a candidate
- * answers gone.
+ * A dead pid, staged deterministically: a number the machine can never have
+ * handed out, so the read this case is judged by — `isPidAlive`'s
+ * `process.kill(pid, 0)`, cross-platform — answers a pid it cannot see, which
+ * is ``error.code === "ESRCH"`` rather than ``EPERM``, and therefore dead, on
+ * every platform, now and for as long as the case runs. Linux hard-caps its
+ * pid address space at 4194304 and Windows reuses low values first, so this
+ * number is unallocatable where the suite runs; no recycle can flip the
+ * verdict between here and the preflight's own read.
  *
- * The liveness verdict itself (`isPidAlive`) is `process.kill(pid, 0)` — cross-
- * platform — so the confirmation has to be too: on Windows the read is the
- * `Win32_Process` lookup the script's own port-owner path uses; elsewhere the
- * `ps` table is the read, absent meaning reaped (an exit of 1 that printed no
- * row). A failed lookup is not evidence of absence — the table may be slow to
- * answer under load — so the caller's poll loop reads that as "not yet gone".
+ * The staged-for-real version this replaces — spawn a child, await its exit,
+ * and poll the pid absent from the process table — carries its own race: on a
+ * busy runner, with the rest of the suite forking workers and gate scripts in
+ * parallel while this file runs, the reaped pid is picked up again inside the
+ * window between that confirmation and the preflight's read, `kill(pid, 0)`
+ * succeeds against the new process, and the verdict the case asserts — a
+ * dead pid, the stale lock the next `npm run dev` takes over — reads as a
+ * live lock held by someone else. That outcome is reality, not a bug the
+ * script should second-guess through a narrower read; the case only needs the
+ * branch a dead pid answers, and this number takes it without a machine read
+ * at all — the same reasoning that drives the preflight's other machine-state
+ * verdicts through a handover (`PREFLIGHT_PORT_OWNER`) rather than arranging
+ * foreign state on a shared box.
  */
-async function reapedPidAbsentFromProcessTable(pid: number): Promise<boolean> {
-  if (process.platform === "win32") {
-    const script =
-      `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
-      "if ($p) { Write-Output $p.CommandLine }";
-    const read = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    return read.status === 0 && (read.stdout ?? "").trim() === "";
-  }
-  const read = spawnSync("ps", ["-p", String(pid)], { encoding: "utf8" });
-  return read.status === 1 && (read.stdout ?? "").trim() === "";
-}
-
-async function deadPid(): Promise<number> {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const pid = await new Promise<number>((resolve, reject) => {
-      const child = spawn(process.execPath, ["-e", ""]);
-      child.once("error", reject);
-      child.once("close", () => resolve(child.pid ?? 0));
-    });
-    for (let poll = 0; poll < 30; poll += 1) {
-      if (await reapedPidAbsentFromProcessTable(pid)) return pid;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  throw new Error("no pid could be confirmed absent from the process table the preflight reads");
+function deadPid(): number {
+  return 1000000000;
 }
 
 afterAll(() => {
@@ -261,7 +242,7 @@ describe("the preflight's read of a lock held by a process that is alive and not
   it("keeps the stale-lock advice for a dead pid, so the two cases are told apart", async () => {
     const port = await freePort();
     const dir = scratchCheckout({
-      pid: await deadPid(),
+      pid: deadPid(),
       port,
       appUrl: `http://localhost:${port}`,
     });
