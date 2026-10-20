@@ -357,7 +357,7 @@ import { LOCK_PATH, recoverInterruptedRun } from "./mutation-lock.mjs";
 // The coverage readings the suite publishes: one entry per guard — its sidecar, its env seam,
 // the prefix that makes a line its own — which the runner reads generically and the summary
 // renders generically, so a new reading is a declaration there rather than machinery here.
-import { READINGS, carriedReading, reading, readingPath } from "./coverage-readings.mjs";
+import { READINGS, carriedReading, reading, readingPath, readingSentence } from "./coverage-readings.mjs";
 // The import closure of a gate script: the `.mjs` modules a stage's script loads,
 // read out of the sources. Folded into each script-backed stage's key files below,
 // so a helper a gate picks up re-keys that stage without anybody restating it in a
@@ -387,6 +387,7 @@ import {
   readManifest,
   ruleFor,
   stageDeclarationGaps,
+  stashContent,
 } from "./gate-drift.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -538,7 +539,7 @@ function recordRunBullet() {
   const alarmLines = queueAlarmVerdict === null ? [] : [queueAlarmLine(queueAlarmVerdict)];
   const lines = [
     `${head} ${marks}.`,
-    ...readings.map((line) => `  ${line}.`),
+    ...readings.map((line) => `  ${readingSentence(line)}`),
     ...alarmLines,
     ...(pinSuspects.length > 0
       ? [
@@ -5091,6 +5092,27 @@ if (recovery?.action === "absorbed") {
       },
     ],
   });
+}
+
+// Seed the gate-content stash before any stage measures the tree.
+//
+// The test stage's pins read their gate files raw beside the source — the house-timeout
+// pin imports `.ci/gate-content/vitest.config.ts?raw` — and that directory is written by
+// the drift stage, which runs *after* the test stage. On a cold checkout (a hosted runner)
+// the import fails with an ENOENT before the drift stage has ever stood in, so the suite
+// reads as red on a test whose subject never moved. `stashContent` is the honest filler:
+// it stashes a file only when its bytes hash to exactly what the pin records, and leaves
+// every file the stash already holds at the right hash alone — so on a warm checkout this
+// writes nothing, and the drift stage's own stash after the run is the same directory it
+// would have written either way.
+const testDecision = decisions.get("test")?.decision ?? "run";
+if (testDecision !== "unchanged" && selected.some((stage) => stage.name === "test")) {
+  try {
+    const { watches, problem } = await readManifest(manifestPath());
+    if (!problem) stashContent(pin(null, watches));
+  } catch (seedError) {
+    progress(`ci: gate-content stash not seeded — ${seedError?.message ?? "unknown"} (the drift stage will stand in after the run)`);
+  }
 }
 
 const results = [];

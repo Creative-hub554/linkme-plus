@@ -242,6 +242,25 @@ export function metricOf(entry, line) {
 }
 
 /**
+ * A reading's line rendered as the sentence a reader meets, on the runbook bullet and the
+ * run page alike.
+ *
+ * A reading's line is the suite's own words, and the surfaces only finish the sentence: a
+ * line that arrives already ended — the queue's settled-size reading says "…owed past it." —
+ * takes no second full stop, and a line that arrives without one is given exactly one. Spelled
+ * once here rather than beside each renderer's loop, for the same reason the registry owns the
+ * prefixes and the metrics: the bullet, the report and the page cannot disagree about what a
+ * surface may add to a reading's words, and a full stop a line already carried is not prose
+ * any surface gets to double.
+ *
+ * @param {string | undefined} line the reading's line as its sidecar or payload carried it
+ */
+export function readingSentence(line) {
+  if (typeof line !== "string" || line.trim() === "") return "";
+  return line.endsWith(".") ? line : `${line}.`;
+}
+
+/**
  * Every reading a `ci.mjs --json` payload carries, as `{ id, entry, line }` rows, in the
  * registry's order and only for the readings that arrived.
  *

@@ -49,7 +49,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // The readings the suite's guards publish, and the one declaration of which they are: this
 // renderer walks the registry rather than naming a field per guard, so a reading added there
 // appears here without this file knowing anything about it.
-import { carriedReadings } from "./coverage-readings.mjs";
+import { carriedReadings, readingSentence } from "./coverage-readings.mjs";
 // The coverage trend: the readings the runbook's dated records and the nightly history table
 // carried, merged by night and charted one series per declared reading. It reads the same registry
 // this file's `### Coverage` section does, so the two views name the same guards in the same order.
@@ -336,7 +336,7 @@ export function renderSummary(payload, runbook = "", history = "", lowWater = {}
     out.push("### Coverage");
     out.push("");
     for (const { line } of readings) {
-      out.push(line + ".");
+      out.push(readingSentence(line));
       out.push("");
     }
   }

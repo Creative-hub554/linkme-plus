@@ -29,6 +29,7 @@ import { importClosure } from "../../.freebuff/import-closure.mjs";
 import {
   READINGS,
   RENDERED_LINKS_READING,
+  QUEUE_SETTLED_READING,
   SCRATCH_PATHS_READING,
 } from "../../.freebuff/coverage-readings.mjs";
 // The alarm verdict's env seam: the same module the runner reads its sidecar path from, so
@@ -7371,12 +7372,28 @@ describe("the runner's dated runbook bullet", () => {
   const ALARM_JUDGED_AT = "2026-10-18T09:00:00.000Z";
 
   /**
-   * A test-stage stub that publishes an armed alarm's verdict before its passing report —
-   * the writer half of the armed suite, shrunk to one sidecar line: three applications
-   * judged through a 48h window, one of them owed. The seam is the verdict module's own,
-   * so the stub and the runner agree about the file by declaration.
+   * The armed suite's second write, spelled as the real writer words its line and filed at the
+   * registry's slot for the close's walk to quote: the entry's own prefix, then the verdict's
+   * own facts — the settled size (3), the moment judged (the fixture's instant), the window
+   * (48h), and the rows owed (1). Hand-appended, because the next nightly's expected bullet
+   * shape is written here rather than derived: a reader of that bullet must find this line
+   * between the guards' readings and the alarm's, quoting the very facts the verdict names.
    */
-  const alarmVerdictGate = (name: string, verdictPath: string): Record<string, string> => ({
+  const ARMED_SETTLED_LINE =
+    `${QUEUE_SETTLED_READING.prefix} 3 pending application(s) — ` +
+    `judged ${ALARM_JUDGED_AT} against a 48h window; 1 owed past it.`;
+
+  /**
+   * A test-stage stub that publishes an armed night's two writes before its passing report —
+   * the writer half of the armed suite, shrunk to one sidecar each. The verdict sidecar
+   * (three applications judged through a 48h window, one of them owed) goes to the verdict
+   * module's seam, and every declared reading goes to its own seam: the guards' three lines
+   * from `readingLine`, and the armed suite's own queue-settled reading the hand-appended
+   * `ARMED_SETTLED_LINE`. The seams are the modules' own, so the stub and the runner agree
+   * about every file by declaration.
+   */
+  const armedNightGate = (name: string, verdictPath: string): Record<string, string> => ({
+    ...readingSeams(),
     [QUEUE_ALARM_ENV]: verdictPath,
     CI_TEST_SCRIPT: writeStub(name, [
       "import { writeFileSync } from 'node:fs';",
@@ -7391,6 +7408,12 @@ describe("the runner's dated runbook bullet", () => {
       "  numTotalTests: 1, numFailedTests: 0,",
       "  testResults: [{ name: 'src/test/stub.test.ts', status: 'passed', assertionResults: [{ status: 'passed', title: 'passes one' }] }],",
       "}));",
+      ...READINGS.map(
+        (entry) =>
+          `writeFileSync(process.env.${entry.env}, ${JSON.stringify(
+            `${entry.id === QUEUE_SETTLED_READING.id ? ARMED_SETTLED_LINE : readingLine(entry)}\n`,
+          )});`,
+      ),
     ].join("\n")),
   });
 
@@ -7398,14 +7421,18 @@ describe("the runner's dated runbook bullet", () => {
     // The queue's settled size is a measurement the same way the readings are: one line per
     // night on one dated bullet, so a future night's bullet can be read against this one and
     // a quiet queue is a number in the record rather than an empty page. The case drives the
-    // whole gate with the verdict-writing stub and asks the record for the line.
+    // whole gate with the armed-night stub — the verdict sidecar AND the readings, the armed
+    // suite's queue-settled reading hand-appended at the registry's slot — so the record's
+    // expected bullet shape is written here rather than walked into being by the fixture:
+    // the close's registry walk is held to carry four lines, the armed suite's own settled
+    // reading quoting the verdict's facts, and the alarm line rides as its one history line.
     const record = freshRecord();
     const verdictPath = path.join(stubDir, `queue-alarm-verdict-${(recordSeq += 1)}.json`);
     const result = runCi(
       ["--no-cache", "--json"],
       fullGateStubs({
         CI_RECORD_RUNBOOK_FILE: record,
-        ...alarmVerdictGate("record-test-alarm-verdict.mjs", verdictPath),
+        ...armedNightGate("record-test-armed-night.mjs", verdictPath),
       }),
     );
 
@@ -7417,13 +7444,35 @@ describe("the runner's dated runbook bullet", () => {
       pending: 3,
       overdue: [{ id: "93000000-0000-4000-8000-000000000002", username: "kenji", waitHours: 72 }],
     });
+    // The readings ride the report too, verbatim as the seams carried them — the walk's four
+    // lines, in the registry's order, the armed suite's settled reading at its own slot.
+    for (const entry of READINGS) {
+      expect(payload.readings[entry.id]).toBe(
+        entry.id === QUEUE_SETTLED_READING.id ? ARMED_SETTLED_LINE : readingLine(entry),
+      );
+    }
+    const text = readFileSync(record, "utf8");
     // The record names the moment judged, the window, the settled size, and the rows owed
     // oldest first — the same facts the sidecar carried, read back off the file a reader of
     // history opens rather than off a verdict sidecar the runner deleted.
-    expect(readFileSync(record, "utf8")).toContain(
+    expect(text).toContain(
       "  queue-alarm: judged 2026-10-18T09:00:00.000Z against a 48h window — " +
         "3 pending application(s), 1 owed past the window: @kenji 72h.",
     );
+    // …and the bullet's expected shape, hand-appended: the walk's four lines in the registry's
+    // order, the armed suite's queue-settled line at its slot, then the alarm line. Each line
+    // is rendered as the close spells it — a sentence, finished exactly once, keeping the
+    // period the armed writer's line already carried rather than doubling it. Say the walk
+    // must land exactly these lines, exactly there, and no others — that is what "held to
+    // carry four lines" means, and containment alone could not hold the order to it.
+    const expectedBulletLines = READINGS.map((entry) => {
+      const line = entry.id === QUEUE_SETTLED_READING.id ? ARMED_SETTLED_LINE : readingLine(entry);
+      return line.endsWith(".") ? line : `${line}.`;
+    });
+    const quoted = text.split("\n").filter((line) =>
+      expectedBulletLines.some((wanted) => line === `  ${wanted}`),
+    );
+    expect(quoted).toEqual(expectedBulletLines.map((wanted) => `  ${wanted}`));
   }, 20_000);
 
   it("an unarmed night's bullet carries no alarm line", () => {
