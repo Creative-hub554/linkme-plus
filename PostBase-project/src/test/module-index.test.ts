@@ -139,14 +139,14 @@ describe("the app leaf readers", () => {
     const pages = readPageSources();
     const paths = Object.keys(pages);
 
-    // The root page and a nested one, in the space the consumer's `routePath`
-    // and its `covers("/…")` cases are written in.
-    expect(paths).toContain("../app/page.tsx");
+    // The landing page (now under its `(site)` group) and a nested one, in the
+    // space the consumer's `routePath` and its `covers("/…")` cases are written in.
+    expect(paths).toContain("../app/(site)/page.tsx");
     expect(paths).toContain("../app/(main)/feed/page.tsx");
     // Only `page.tsx` leaves: a layout default-exports a component too.
     expect(paths.every((path) => path.endsWith("/page.tsx"))).toBe(true);
     // The *text*, not just the key — that is what discovery reads exports from.
-    expect(pages["../app/page.tsx"]).toContain("export default");
+    expect(pages["../app/(site)/page.tsx"]).toContain("export default");
   });
 
   it("keys the api routes the way the glob did", () => {
@@ -190,15 +190,16 @@ describe("the component enumeration", () => {
     const loaders = pageComponentModules();
     const paths = Object.keys(loaders);
 
-    // The root page and a nested one, in Vite's glob space — the space the
-    // consumer's `routePath` and its `covers("/…")` cases are written in.
-    expect(paths).toContain("../app/page.tsx");
+    // The landing page under its `(site)` group and a nested one, in Vite's
+    // glob space — the space the consumer's `routePath` and its `covers("/…")`
+    // cases are written in.
+    expect(paths).toContain("../app/(site)/page.tsx");
     expect(paths).toContain("../app/(main)/feed/page.tsx");
     // Only `page.tsx` leaves: a layout default-exports a component too, and the
     // filename is the whole distinction.
     expect(paths.every((path) => path.endsWith("/page.tsx"))).toBe(true);
 
-    const mod = await loaders["../app/page.tsx"]();
+    const mod = await loaders["../app/(site)/page.tsx"]();
     expect(typeof mod.default).toBe("function");
   });
 

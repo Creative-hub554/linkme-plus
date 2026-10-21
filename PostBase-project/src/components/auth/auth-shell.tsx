@@ -13,10 +13,14 @@ export function AuthShell({ mode, children, liveVisual }: AuthShellProps) {
   const isRegister = mode === "register";
 
   return (
-    <div className="page-enter relative min-h-[calc(100vh-56px)] overflow-hidden bg-surface-light-blue">
+    // Full-viewport, not `calc(100vh-56px)`: the 56px the calc subtracted was
+    // the header the root layout used to draw above every page — including
+    // these. The header no longer comes here (see `(auth)/layout.tsx`), so the
+    // shell owns the whole viewport on its own.
+    <div className="page-enter relative min-h-screen overflow-hidden bg-surface-light-blue">
       <div className="ambient-pulse pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-brand-purple/10 blur-3xl" />
       <div className="ambient-pulse motion-delay-200 pointer-events-none absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-brand-blue/10 blur-3xl" />
-      <div className="mx-auto grid min-h-[calc(100vh-56px)] max-w-7xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-8 lg:py-12">
+      <div className="mx-auto grid min-h-screen max-w-7xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-8 lg:py-12">
         <section className="soft-float relative hidden overflow-hidden rounded-[2rem] bg-ink-800 p-10 text-white shadow-2xl shadow-navy-900/10 lg:flex lg:min-h-[650px] lg:flex-col lg:justify-between">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-purple/30 blur-2xl" />
           <div className="absolute -bottom-28 -left-20 h-80 w-80 rounded-full bg-brand-blue/30 blur-2xl" />

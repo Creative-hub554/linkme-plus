@@ -1,0 +1,25 @@
+{
+  "total_count": 1,
+  "artifacts": [
+    {
+      "id": 12234666945,
+      "node_id": "MDg6QXJ0aWZhY3QxMjIzNDY2Njk0NQ==",
+      "name": "nightly-ci-report",
+      "size_in_bytes": 14762,
+      "url": "https://api.github.com/repos/Creative-hub554/linkme-plus/actions/artifacts/12234666945",
+      "archive_download_url": "https://api.github.com/repos/Creative-hub554/linkme-plus/actions/artifacts/12234666945/zip",
+      "expired": false,
+      "digest": "sha256:a1e525f02bc34d94a45671b3240f4fb9b432f35dfd63dab67cdf465e3640b459",
+      "created_at": "2026-10-20T01:29:14Z",
+      "updated_at": "2026-10-20T01:29:14Z",
+      "expires_at": "2026-11-19T01:29:14Z",
+      "workflow_run": {
+        "id": 39350566899,
+        "repository_id": 1404930250,
+        "head_repository_id": 1404930250,
+        "head_branch": "ci/remove-inert-deploy-jobs",
+        "head_sha": "c2071b1840e795459ba957fd849688dce1369dca"
+      }
+    }
+  ]
+}

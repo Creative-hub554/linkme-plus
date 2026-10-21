@@ -1,0 +1,1 @@
+import{r as e}from"./rolldown-runtime-hePW80VL.js";import{i as t,r as n}from"./framework-2k-VFE-j.js";import{t as r}from"./button-DqA88TJH.js";var i=e(t(),1),a=n(),o=i.forwardRef(function({pressed:e,surface:t=`light`,className:n,...i},o){return(0,a.jsx)(r,{ref:o,...i,className:n,type:`button`,variant:e?`default`:t===`dark`?`onDark`:`outline`,"aria-pressed":e})});export{o as t};

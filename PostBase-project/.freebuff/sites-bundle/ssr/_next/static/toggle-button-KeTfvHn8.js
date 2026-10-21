@@ -1,0 +1,1 @@
+import{i as e,t}from"./react-DJibUF-Z.js";import{t as n}from"./jsx-runtime-7_pICZxP.js";import{t as r}from"./button-BxI5fqnG.js";var i=e(t(),1),a=n(),o=i.forwardRef(function({pressed:e,surface:t=`light`,className:n,...i},o){return(0,a.jsx)(r,{ref:o,...i,className:n,type:`button`,variant:e?`default`:t===`dark`?`onDark`:`outline`,"aria-pressed":e})});export{o as t};

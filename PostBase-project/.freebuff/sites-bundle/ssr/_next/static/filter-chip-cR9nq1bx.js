@@ -1,0 +1,1 @@
+import{i as e,t}from"./react-DJibUF-Z.js";import{t as n}from"./jsx-runtime-7_pICZxP.js";import{t as r}from"./utils-DOQQTBMN.js";import{t as i}from"./toggle-button-KeTfvHn8.js";var a=e(t(),1),o=n(),s=a.forwardRef(function({selected:e,className:t,...n},a){return(0,o.jsx)(i,{ref:a,pressed:e,size:`sm`,className:r(`whitespace-nowrap`,t),...n})});export{s as t};

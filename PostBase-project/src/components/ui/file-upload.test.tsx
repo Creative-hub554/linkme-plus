@@ -165,18 +165,21 @@ describe("FileUpload", () => {
     expect(ui.container.textContent).not.toContain("photo.png");
   });
 
-  test("uploads through both steps and reports the completed file", async () => {
+  test("uploads in one step and reports the completed file", async () => {
     const completed = vi.fn();
-    const put = vi.fn(async () => new Response("", { status: 200 }));
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes("/api/uploads")) {
-        expect(init?.method).toBe("POST");
-        return new Response(
-          JSON.stringify({ uploadUrl: "https://r2.example/put/1", key: "key-1", publicUrl: "https://cdn.example/1.png" }),
-          { status: 200, headers: { "content-type": "application/json" } },
+      expect(String(input)).toContain("/api/uploads");
+      expect(init?.method).toBe("POST");
+      expect(init?.body).toBeInstanceOf(FormData);
+      // The bytes ride the same request that declares them — there is no
+      // second step: the old presigned-URL PUT is what the bucket's missing
+      // CORS headers made impossible, which is why the contract is one POST.
+      expect((init?.body as FormData).get("file")).toBeInstanceOf(File);
+      expect((init?.body as FormData).get("purpose")).toBe("post");
+      return new Response(
+          JSON.stringify({ url: "https://cdn.example/1.png", key: "key-1", contentType: "image/png", purpose: "post" }),
+          { status: 201, headers: { "content-type": "application/json" } },
         );
-      }
-      return put();
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -188,11 +191,11 @@ describe("FileUpload", () => {
     await ui.waitFor(() => ui.container.textContent?.includes("Uploaded") ?? false, {
       description: "the row to report the upload finished",
     });
-    expect(put).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(completed).toHaveBeenCalledWith([{ url: "https://cdn.example/1.png", key: "key-1" }]);
   });
 
-  test("shows the server's reason when the presigned step is refused", async () => {
+  test("shows the server's reason when the upload is refused", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "Storage is full" }), { status: 500 })),
@@ -215,22 +218,17 @@ describe("FileUpload", () => {
     const input = ui.container.querySelector("input[type=file]") as HTMLInputElement;
     await ui.chooseFiles(input, [file("photo.png", "image/png")]);
     await ui.click(uploadButton(ui));
-    await ui.waitFor(() => ui.container.textContent?.includes("Failed to get upload URL") ?? false, {
+    await ui.waitFor(() => ui.container.textContent?.includes("Failed to upload file") ?? false, {
       description: "the fallback error to be shown",
     });
   });
 
-  test("reports a failed object-store step", async () => {
+  test("reports a failed upload step", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
-        if (String(input).includes("/api/uploads")) {
-          return new Response(
-            JSON.stringify({ uploadUrl: "https://r2.example/put/1", key: "key-1", publicUrl: "https://cdn.example/1.png" }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-        return new Response("", { status: 403 });
+        expect(String(input)).toContain("/api/uploads");
+        return new Response(null, { status: 403 });
       }),
     );
     const ui = mountSurface(<FileUpload />, { providers: "none" });

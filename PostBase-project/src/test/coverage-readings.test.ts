@@ -13,6 +13,7 @@ import {
   metricOf,
   reading,
   readingPath,
+  readingSentence,
 } from "../../.freebuff/coverage-readings.mjs";
 
 /**
@@ -327,5 +328,30 @@ describe("the one spelling the pipeline keeps", () => {
         `.${entry.id}-coverage.txt`,
       );
     }
+  });
+
+  it("finishes a reading's line as exactly one sentence for the surfaces that print it", () => {
+    // A reading's line is the suite's own words; the bullet and the run page only finish the
+    // sentence. Both renderers print through this one spelling, so a line a writer already
+    // ended — the queue's settled-size reading says "…owed past it." — is never handed a reader
+    // with two full stops, and a line that arrives without one is not left bare. One helper
+    // rather than each renderer's own loop, because the same sentence ending is a contract
+    // both surfaces keep and the two cannot be allowed to drift over punctuation.
+    expect(readingSentence("rendered-links coverage: chrome — 2 unique destinations")).toContain(
+      "destinations.",
+    );
+    expect(readingSentence("rendered-links coverage: chrome — 2 unique destinations")).toBe(
+      "rendered-links coverage: chrome — 2 unique destinations.",
+    );
+    // The writer-ended line: one full stop stands, not two — the literal shape the armed
+    // suite's queue-settled reading carries and the surfaces have to keep.
+    const ended = `queue-settled coverage: 3 pending application(s) — judged 2026-10-18T09:00:00.000Z against a 48h window; 1 owed past it.`;
+    expect(readingSentence(ended)).toBe(ended);
+    expect(readingSentence(ended).endsWith("...")).toBe(false);
+    // A non-reading is not rendered as an empty sentence: the callers pass lines the payload
+    // already carried, but a helper that answers a string for nothing would let an absent
+    // reading print a full stop of its own.
+    expect(readingSentence(undefined)).toBe("");
+    expect(readingSentence("")).toBe("");
   });
 });

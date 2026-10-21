@@ -1,0 +1,1 @@
+function e(e){if(!e||typeof e!=`object`||Array.isArray(e))return[];let t=e.photos;return Array.isArray(t)?t.filter(e=>typeof e==`string`&&e.length>0):[]}export{e as t};

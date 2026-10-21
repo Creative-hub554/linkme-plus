@@ -21,14 +21,13 @@ npx wrangler login
 wrangler r2 bucket create linkme-plus-uploads
 ```
 
-### 3. Create KV Namespace
+### 3. Cache Namespace (not needed)
 
-```bash
-wrangler kv namespace create CACHE
-wrangler kv namespace create CACHE --preview
-```
-
-Update `wrangler.jsonc` with the returned IDs.
+The worker binds no KV namespace and no Durable Object: the publish target's
+hosting model provides neither, and every consumer of them degrades by design
+(the `/ws` door answers through the in-isolate hub in `worker/index.ts` when no
+`WEBSOCKET_ROOM` binding exists). Nothing in the app reads `env.CACHE`, so
+there is no namespace to create and no ID to record.
 
 ### 4. Create Database
 
@@ -46,7 +45,7 @@ Use one of these managed PostgreSQL providers:
 
 ### 5. Set Up Environment Variables
 
-All user-uploaded objects use the Cloudflare R2 bucket through the S3-compatible API. The same bucket stores avatars, profile covers, post media, marketplace media, documents, and legacy cover-video uploads. Keep the R2 API token server-side only; never expose its secret in browser code.
+All user-uploaded objects use the Cloudflare R2 bucket. A hosted deploy never signs anything: the Worker binds the bucket directly through the `UPLOADS` binding in `wrangler.jsonc`, reads and writes go through the binding, and the four S3-credential variables below are not needed there. They stay meaningful only where the app runs under Node without a Worker — the dev server and the seed scripts — which fall back to the bucket's S3-compatible API signed with those credentials. The same bucket stores avatars, profile covers, post media, marketplace media, documents, and legacy cover-video uploads. Keep the R2 API token server-side only; never expose its secret in browser code.
 
 
 Copy `.env.example` to `.env.local` and fill in:
@@ -58,11 +57,13 @@ cp .env.example .env.local
 Required variables:
 - `DATABASE_URL` - PostgreSQL connection string
 - `AUTH_SECRET` - Generate with `openssl rand -base64 32`
+- `R2_PUBLIC_URL` - Your R2 public domain (public media URLs are built from it everywhere)
+
+Node-only (dev server, seed scripts — a hosted Worker needs none of these):
 - `R2_ACCOUNT_ID` - Your Cloudflare account ID
 - `R2_ACCESS_KEY_ID` - R2 API token access key
 - `R2_SECRET_ACCESS_KEY` - R2 API token secret key
-- `R2_BUCKET_NAME` - "linkme-plus-uploads"
-- `R2_PUBLIC_URL` - Your R2 public domain
+- `R2_BUCKET_NAME` - "linkme-plus-uploads" (the Worker gets the bucket itself through the `UPLOADS` binding)
 
 ### 6. Initialize Database
 
@@ -167,12 +168,10 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 wrangler secret put FACEBOOK_CLIENT_ID
 wrangler secret put FACEBOOK_CLIENT_SECRET
 wrangler secret put TELEGRAM_BOT_TOKEN
-wrangler secret put R2_ACCESS_KEY_ID
-wrangler secret put R2_SECRET_ACCESS_KEY
-wrangler secret put R2_ACCOUNT_ID
-wrangler secret put R2_BUCKET_NAME
 wrangler secret put R2_PUBLIC_URL
 ```
+
+The S3 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) and `R2_BUCKET_NAME` are **not** production secrets: the deployed Worker reaches the bucket through its `UPLOADS` binding (`wrangler.jsonc`), so nothing signs a request and no credential is carried. Only the public domain (`R2_PUBLIC_URL`) is still configured, because every stored media URL is built from it.
 
 ### 2. Deploy
 
@@ -191,14 +190,12 @@ npm run deploy
 
 Staging needs its own Cloudflare resource identifiers. Do not deploy the
 production configuration with `--env staging`: Worker environment bindings are
-not inherited, and that can connect a staging Worker to production KV, R2, or
-Durable Object state. Add an `env.staging` block to `wrangler.jsonc` only after
-creating and recording all of the following staging resources:
+not inherited, and that can connect a staging Worker to production R2 state.
+Add an `env.staging` block to `wrangler.jsonc` only after creating and
+recording all of the following staging resources:
 
 - a staging Worker name and route or preview domain;
-- a staging KV namespace ID;
-- a staging R2 bucket name;
-- a staging Durable Object binding and migration; and
+- a staging R2 bucket name; and
 - staging secrets (including a non-production database URL).
 
 Then build with `CLOUDFLARE_ENV=staging` and deploy the same named environment:
@@ -216,11 +213,11 @@ npx wrangler deploy --env staging
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db` |
 | `AUTH_SECRET` | Auth.js secret key | `openssl rand -base64 32` |
-| `R2_ACCOUNT_ID` | Cloudflare account ID | `abc123` |
-| `R2_ACCESS_KEY_ID` | R2 API access key | `...` |
-| `R2_SECRET_ACCESS_KEY` | R2 API secret key | `...` |
-| `R2_BUCKET_NAME` | R2 bucket name | `linkme-plus-uploads` |
 | `R2_PUBLIC_URL` | R2 public URL | `https://pub-xxx.r2.dev` |
+| `R2_ACCOUNT_ID` | Cloudflare account ID (Node-only: dev server, scripts) | `abc123` |
+| `R2_ACCESS_KEY_ID` | R2 API access key (Node-only) | `...` |
+| `R2_SECRET_ACCESS_KEY` | R2 API secret key (Node-only) | `...` |
+| `R2_BUCKET_NAME` | R2 bucket name (Node-only; the Worker binds via `UPLOADS`) | `linkme-plus-uploads` |
 
 ### OAuth Providers
 
@@ -274,7 +271,7 @@ wrangler r2 bucket list
 wrangler r2 object put linkme-plus-uploads/test.txt --file=test.txt
 ```
 
-### Durable Object Errors
+### Worker Errors
 
 ```bash
 # Check logs

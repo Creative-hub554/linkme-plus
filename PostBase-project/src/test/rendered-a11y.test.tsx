@@ -164,6 +164,10 @@ vi.mock("@/utils/supabase/client", () => {
 // the provider answers with one instead of being left out.
 vi.mock("@/components/providers/notification-provider", () => ({
   useNotifications: () => mocks.notifications,
+  // `app-chrome` mounts the real provider's name around the nav and the chat
+  // bubble; here it is a passthrough so the bell's own context mock above is
+  // still what every surface under it reads.
+  NotificationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const listing = {
@@ -881,7 +885,7 @@ describe("every rendered surface", () => {
 
   covers("/");
   test("the marketing page", async () => {
-    const { default: LandingPage } = await import("@/app/page");
+    const { default: LandingPage } = await import("@/app/(site)/page");
     await audit(<LandingPage />);
   });
 
@@ -1963,6 +1967,7 @@ const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KIND
   "../components/profile/member-list-dialog.tsx#MemberListDialog": "nothing",
   "../components/profile/profile-cover.tsx#CoverCameraIcon": "nothing",
   "../components/profile/profile-cover.tsx#CoverEditIcon": "nothing",
+  "../components/providers/notification-provider.tsx#NotificationProvider": "nothing",
   "../components/providers/presence-provider.tsx#PresenceProvider": "nothing",
   "../components/providers/room-provider.tsx#RoomProvider": "nothing",
   "../components/providers/theme-provider.tsx#ThemeProvider": "nothing",

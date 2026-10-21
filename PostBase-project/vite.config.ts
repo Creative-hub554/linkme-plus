@@ -52,6 +52,9 @@ export default defineConfig(({ command, mode }) => {
       // Cloudflare's edge runtime does not expose WeakRef, while Vinext's
       // development RSC client currently requires it. Keep local development
       // on Node and use the Cloudflare environment for the production build.
+      // The deployment target is one configuration (wrangler.jsonc): the
+      // default and the Sites-compatible build no longer diverge, so there is
+      // no override to thread through.
       ...(command === "build"
         ? [
             cloudflare({

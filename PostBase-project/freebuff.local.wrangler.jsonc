@@ -1,0 +1,23 @@
+// The local wrangler/workerd check for the Freebuff Sites deployment: the
+// same bundled Worker the manifest ships, with local bindings standing in
+// for the site's (R2 via Miniflare, assets from dist/client). Not a deploy
+// config — the deployed Worker is produced by the manifest in
+// .freebuff/sites.manifest.json.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "postbase-sites-local-check",
+  "main": ".freebuff/sites-single/index.js",
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "linkme-plus-uploads"
+    }
+  ],
+  "observability": { "enabled": false }
+}

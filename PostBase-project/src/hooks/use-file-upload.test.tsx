@@ -84,34 +84,30 @@ describe("useFileUpload queue", () => {
 });
 
 describe("useFileUpload uploadAll", () => {
-  it("presigns, PUTs, marks complete, and reports the results", async () => {
+  it("uploads in one step — the file and the purpose on one POST — marks complete, and reports the results", async () => {
     mountHook({ onComplete: (files) => completed.push(files) });
 
-    const requests: { url: string; method: string; body: unknown }[] = [];
+    const requests: { url: string; method: string; body?: FormData }[] = [];
     stubFetch((url, init) => {
       requests.push({
         url,
-        method: init.method ?? "GET",
-        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+        method: (init?.method as string) ?? "GET",
+        body: init?.body instanceof FormData ? init.body : undefined,
       });
-      if (url === "/api/uploads") {
-        return json({ uploadUrl: "https://r2.example.com/put", key: "avatars/u/1.png", publicUrl: "https://cdn/u/1.png" });
-      }
-      return new Response(null, { status: 200 });
+      return json({ url: "https://cdn/u/1.png", key: "avatars/u/1.png", contentType: "image/png", purpose: "avatar" });
     });
 
     await call((api) => api.addFiles([file()]));
     await call((api) => api.uploadAll());
 
-    // The presign carried the purpose and the file's metadata.
-    expect(requests[0]).toMatchObject({
-      url: "/api/uploads",
-      method: "POST",
-      body: { filename: "photo.png", contentType: "image/png", purpose: "avatar", size: 5 },
-    });
-    // The PUT went to the presigned URL with the file as its body.
-    expect(requests[1].url).toBe("https://r2.example.com/put");
-    expect(requests[1].method).toBe("PUT");
+    // One request, and it is the old presign step's door: the reason the old
+    // second request (a browser PUT to the presigned URL) is gone is that the
+    // bucket has no CORS headers for it — what carries the file now is this one
+    // multipart POST, with the purpose beside it.
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ url: "/api/uploads", method: "POST" });
+    expect(requests[0].body!.get("purpose")).toBe("avatar");
+    expect(requests[0].body!.get("file")).toBeInstanceOf(File);
 
     expect(latest?.uploads[0]).toMatchObject({
       status: "complete",
@@ -123,7 +119,7 @@ describe("useFileUpload uploadAll", () => {
     expect(completed).toEqual([[{ url: "https://cdn/u/1.png", key: "avatars/u/1.png" }]]);
   });
 
-  it("records a presign failure on the upload and reports errors", async () => {
+  it("records a refused upload with the server's reason", async () => {
     mountHook();
     stubFetch(() => json({ error: "File type not allowed" }, 400));
 
@@ -135,13 +131,9 @@ describe("useFileUpload uploadAll", () => {
     expect(latest?.hasErrors).toBe(true);
   });
 
-  it("records a failed PUT", async () => {
+  it("records a storage failure with the fallback message", async () => {
     mountHook();
-    stubFetch((url) =>
-      url === "/api/uploads"
-        ? json({ uploadUrl: "https://r2.example.com/put", key: "k", publicUrl: "https://cdn/k" })
-        : new Response(null, { status: 500 }),
-    );
+    stubFetch(() => new Response(null, { status: 500 }));
 
     await call((api) => api.addFiles([file()]));
     await call((api) => api.uploadAll());

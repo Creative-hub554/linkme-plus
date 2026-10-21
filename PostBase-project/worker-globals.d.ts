@@ -119,7 +119,13 @@ interface R2Objects {
 
 interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
-  put(key: string, value: unknown): Promise<unknown>;
+  put(
+    key: string,
+    value: unknown,
+    options?: { httpMetadata?: { contentType?: string } }
+  ): Promise<unknown>;
+  /** `null` for a key no object occupies — the health probe's cheap round-trip. */
+  head(key: string): Promise<R2Object | null>;
   delete(key: string): Promise<void>;
   list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2Objects>;
 }

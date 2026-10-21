@@ -1,0 +1,1 @@
+import{r as e}from"./navigation.react-server-DHJ6Djzx.js";function t(){e(`/profile?tab=cover`)}export{t as default};

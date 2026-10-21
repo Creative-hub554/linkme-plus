@@ -1,0 +1,1 @@
+import{i as e,t}from"./react-DJibUF-Z.js";import{t as n}from"./jsx-runtime-7_pICZxP.js";import{t as r}from"./icon-button-DqZUwRDF.js";var i=e(t(),1),a=n(),o=i.forwardRef(function({open:e,controls:t,...n},i){return(0,a.jsx)(r,{ref:i,...n,"aria-expanded":e,"aria-controls":t})});export{o as t};

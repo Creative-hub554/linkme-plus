@@ -2,45 +2,48 @@ import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import {
   assertStorageConfigured,
   generateKey,
-  getPresignedUploadUrl,
   getPublicUrl,
+  putObject,
   validateFile,
   getFolderForPurpose,
-  ALL_ALLOWED_TYPES,
   MAX_IMAGE_SIZE,
   MAX_VIDEO_SIZE,
   MAX_DOCUMENT_SIZE,
 } from "@/lib/r2";
 
+/**
+ * POST /api/uploads — the general-purpose upload door.
+ *
+ * The request is a multipart form: one `file` and an optional `purpose` naming
+ * which folder the object belongs to (`getFolderForPurpose`'s list). The bytes
+ * are stored in the same request that carries them — there is no presigned URL
+ * to mint and no follow-up browser-to-R2 hop. The old two-step contract died
+ * twice over: its only use was a presigned PUT the browser can never perform
+ * (the media bucket sends no CORS headers, so the preflight was refused), and
+ * its signing path needed S3-API credentials the platform binding has replaced.
+ * What the shape does keep is every other route's guarantees: the type/size
+ * limits run on the actual `File` the form carries — the body's own length, not
+ * a number the client could have declared and then broken.
+ */
 export async function POST(request: Request) {
   const { session, error } = await requireAuth(request);
   if (error) return error;
 
   try {
-    const body = await request.json();
-    const { filename, contentType, purpose = "post", size } = body;
+    const formData = await request.formData();
+    const file = formData.get("file");
+    const purposeValue = formData.get("purpose");
+    const purpose = typeof purposeValue === "string" && purposeValue.length > 0 ? purposeValue : "post";
 
-    if (!filename || !contentType) {
-      return errorResponse("Filename and content type are required");
+    if (!(file instanceof File)) {
+      return errorResponse("A file is required");
     }
 
-    // Validate file type
-    if (!ALL_ALLOWED_TYPES.includes(contentType)) {
-      return errorResponse(
-        `File type not allowed. Allowed: ${ALL_ALLOWED_TYPES.join(", ")}`
-      );
+    // Validate against the bytes the form actually carried.
+    if (!file.type) {
+      return errorResponse("Content type is required");
     }
-
-    // The size is not optional any more, and this is the gate that makes it so: the presigned
-    // URL signs Content-Length, so a PUT with a different body length cannot use it and the
-    // limit is enforced by R2 itself — which only holds if the URL is minted *with* an explicit
-    // length. A request without one would sign an unbounded URL, so it is refused here, before
-    // anything is signed; the size the caller declares is then validated against the purpose's
-    // limit exactly as an uploaded file's would be.
-    if (typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0) {
-      return errorResponse("Filename, content type and a positive file size are required");
-    }
-    const validation = validateFile({ type: contentType, size }, purpose);
+    const validation = validateFile({ type: file.type, size: file.size }, purpose);
     if (!validation.valid) {
       return errorResponse(validation.error!);
     }
@@ -51,24 +54,18 @@ export async function POST(request: Request) {
       return errorResponse(storageError instanceof Error ? storageError.message : "Cloudflare R2 storage is not configured", 503);
     }
 
-    // Generate key and presigned URL
-    const folder = getFolderForPurpose(purpose);
-    const key = generateKey(folder, session.user.id, filename);
-    // The declared size rides into the signature: R2 refuses a PUT whose body length is not
-    // exactly this, so the limit the config holds is enforced at the bucket, not only at this
-    // endpoint by a number the client could have lied about.
-    const uploadUrl = await getPresignedUploadUrl(key, contentType, size);
+    const key = generateKey(getFolderForPurpose(purpose), session.user.id, file.name || "upload");
+    await putObject(key, file, file.type);
 
     return successResponse({
-      uploadUrl,
+      url: getPublicUrl(key),
       key,
-      publicUrl: getPublicUrl(key),
-      contentType,
+      contentType: file.type,
       purpose,
-    });
+    }, 201);
   } catch (err) {
-    console.error("Generate upload URL error:", err);
-    return errorResponse("Failed to generate upload URL", 500);
+    console.error("Upload error:", err);
+    return errorResponse("Failed to upload that file", 500);
   }
 }
 

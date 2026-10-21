@@ -1,0 +1,233 @@
+{
+  "total_count": 1,
+  "jobs": [
+    {
+      "id": 118393511791,
+      "run_id": 39350566899,
+      "workflow_name": "Nightly",
+      "head_branch": "ci/remove-inert-deploy-jobs",
+      "run_url": "https://api.github.com/repos/Creative-hub554/linkme-plus/actions/runs/39350566899",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOU72Iys8AAAAbkM2fbw",
+      "head_sha": "c2071b1840e795459ba957fd849688dce1369dca",
+      "url": "https://api.github.com/repos/Creative-hub554/linkme-plus/actions/jobs/118393511791",
+      "html_url": "https://github.com/Creative-hub554/linkme-plus/actions/runs/39350566899/job/118393511791",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-20T00:56:11Z",
+      "started_at": "2026-10-20T00:56:13Z",
+      "completed_at": "2026-10-20T01:29:16Z",
+      "name": "Full CI gate",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-20T00:56:14Z",
+          "completed_at": "2026-10-20T00:56:14Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-20T00:56:14Z",
+          "completed_at": "2026-10-20T00:56:16Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-20T00:56:16Z",
+          "completed_at": "2026-10-20T00:56:16Z"
+        },
+        {
+          "name": "Run npm ci",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-20T00:56:16Z",
+          "completed_at": "2026-10-20T00:56:48Z"
+        },
+        {
+          "name": "Run the full CI gate",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 5,
+          "started_at": "2026-10-20T00:56:48Z",
+          "completed_at": "2026-10-20T01:29:10Z"
+        },
+        {
+          "name": "Publish the report",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-20T01:29:10Z",
+          "completed_at": "2026-10-20T01:29:10Z"
+        },
+        {
+          "name": "Record the coverage history row",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-20T01:29:10Z",
+          "completed_at": "2026-10-20T01:29:10Z"
+        },
+        {
+          "name": "Record the floor proposals that have been answered",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-20T01:29:10Z",
+          "completed_at": "2026-10-20T01:29:11Z"
+        },
+        {
+          "name": "Record the collect-budget proposals that have been answered",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-20T01:29:11Z",
+          "completed_at": "2026-10-20T01:29:12Z"
+        },
+        {
+          "name": "Fail on a crossing line the records do not produce",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-20T01:29:12Z",
+          "completed_at": "2026-10-20T01:29:12Z"
+        },
+        {
+          "name": "Comment the refuted record on the open request",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 11,
+          "started_at": "2026-10-20T01:29:12Z",
+          "completed_at": "2026-10-20T01:29:12Z"
+        },
+        {
+          "name": "Retract the refuted record that was repaired",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 12,
+          "started_at": "2026-10-20T01:29:12Z",
+          "completed_at": "2026-10-20T01:29:12Z"
+        },
+        {
+          "name": "Comment the ending on the request that ended",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 13,
+          "started_at": "2026-10-20T01:29:12Z",
+          "completed_at": "2026-10-20T01:29:12Z"
+        },
+        {
+          "name": "Commit the coverage history",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-20T01:29:12Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Check the coverage trend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Propose the floors the records now derive",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 16,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Check the pin describes the tree the proposal will carry",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 17,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Open the floor proposal",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 18,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Comment the re-fired proposal on the pull request",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 19,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Comment the risen wait on the floor proposal",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 20,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Upload the report",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Fail when a comment this run owed was not posted",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 22,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 43,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:14Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 44,
+          "started_at": "2026-10-20T01:29:14Z",
+          "completed_at": "2026-10-20T01:29:15Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 45,
+          "started_at": "2026-10-20T01:29:15Z",
+          "completed_at": "2026-10-20T01:29:15Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/Creative-hub554/linkme-plus/check-runs/118393511791",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000003573,
+      "runner_name": "GitHub Actions 1000003573",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

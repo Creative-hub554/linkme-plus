@@ -1,9 +1,21 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
+  // The deployment target is a single configuration: this file is both what a
+  // Cloudflare-side deploy consumes and what the Freebuff Sites Publish build
+  // produces its worker metadata from. Sites provides neither a KV runtime nor
+  // a Durable Object runtime, and a config the platform refused ("This Worker
+  // uses KV namespaces, Durable Objects…") strands the whole publish path — so
+  // the CACHE namespace and the WEBSOCKET_ROOM binding stay out on purpose,
+  // with WHY absent: every consumer of them degrades by design. `/ws` answers
+  // through the in-isolate hub (worker/index.ts) when no WEBSOCKET_ROOM
+  // binding exists, presence is per-isolate, and nothing in `src/` reads
+  // `env.CACHE`. The media cron (docs/GOOGLE-DRIVE-ARCHIVE.md) and the custom
+  // routes remain exactly what a Cloudflare deploy uses; the Sites platform
+  // applies its own origin and cron policy for what it hosts.
   "name": "linkme-plus",
   "main": "worker/index.ts",
-  "compatibility_date": "2024-10-22",
-  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -18,33 +30,13 @@
   "triggers": {
     "crons": ["17 * * *"]
   },
-  "vars": {
-    "ENVIRONMENT": "production"
-  },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "WEBSOCKET_ROOM",
-        "class_name": "WebSocketRoom"
-      }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["WebSocketRoom"]
-    }
-  ],
+  // No `vars` here: the publish target refuses a Worker that sets Wrangler
+  // vars, and nothing in the app reads `ENVIRONMENT` to want it back — a
+  // deployment-level value belongs in the Sites variables panel, not inline.
   "r2_buckets": [
     {
       "binding": "UPLOADS",
       "bucket_name": "linkme-plus-uploads"
-    }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "CACHE",
-      "id": "4a8785a91f694003a27afc7495210980"
     }
   ],
   "observability": {

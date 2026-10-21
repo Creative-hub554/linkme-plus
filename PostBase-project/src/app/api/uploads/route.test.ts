@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The presigned-upload route, driven through the handler.
+ * The general-purpose upload route, driven through the handler.
  *
- * The browser no longer uses this route — the bucket sends no CORS headers, so a
- * direct PUT is refused, and the browser goes through `/api/posts/media` and its
- * siblings instead. It stays for anything outside a browser, so what it must not
- * do is hand out a signed URL it could not sign: the two storage failures are a
- * `503` when storage is unconfigured and a `500` when signing fails, and neither
- * answers with an `uploadUrl`. The validation in front of them (type, size) is
- * pinned because it is the only thing standing between a caller and a signature
- * for a file the app would never accept.
+ * The route takes a multipart form and stores the bytes in the same request
+ * that carries them — what replaced the two-step presign contract whose browser
+ * PUT could never leave the preflight (no CORS headers on the bucket) and
+ * whose minting needed S3 credentials the platform binding has replaced. The
+ * pins are the contract a client now builds against: the file is validated
+ * against its own bytes before storage is touched, the answer carries the
+ * `url`/`key` pair the caller records, and the two storage failures stay
+ * distinct — a `503` when storage is unconfigured, a `500` (with no `url`)
+ * when the object cannot be written.
  */
 vi.mock("@/lib/auth", () => ({
   auth: {
@@ -25,19 +26,22 @@ vi.mock("@/lib/r2", async (importOriginal) => {
   return {
     ...actual,
     assertStorageConfigured: vi.fn(),
-    getPresignedUploadUrl: vi.fn(async (key: string) => `https://signed.example/${key}`),
+    putObject: vi.fn(async () => {}),
   };
 });
 
-import { POST } from "./route";
-import { assertStorageConfigured, getPresignedUploadUrl, ALL_ALLOWED_TYPES } from "@/lib/r2";
+import { POST, GET } from "./route";
+import { assertStorageConfigured, putObject, MAX_IMAGE_SIZE, MAX_DOCUMENT_SIZE } from "@/lib/r2";
 
-function jsonRequest(body: unknown) {
-  return new Request("http://localhost/api/uploads", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+function imageFile(name = "photo.png", type = "image/png") {
+  return new File(["photo-bytes"], name, { type });
+}
+
+function uploadRequest(file?: File, purpose?: string) {
+  const form = new FormData();
+  if (file) form.append("file", file);
+  if (purpose) form.append("purpose", purpose);
+  return new Request("http://localhost/api/uploads", { method: "POST", body: form });
 }
 
 beforeEach(() => {
@@ -45,125 +49,95 @@ beforeEach(() => {
 });
 
 describe("POST /api/uploads", () => {
-  it("returns a signed URL and the key it points at", async () => {
-    const response = await POST(
-      jsonRequest({
-        filename: "photo.png",
-        contentType: "image/png",
-        purpose: "post",
-        // The declared size is required now — it is the length the signature enforces.
-        size: 2 * 1024 * 1024,
-      }),
-    );
+  it("stores the file under the purpose's folder and answers with the URL to record", async () => {
+    const response = await POST(uploadRequest(imageFile(), "avatar"));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    expect(payload.key).toContain("avatars/member-1/");
+    expect(payload.url).toBe(`https://test.r2.dev/${payload.key}`);
+    expect(payload.contentType).toBe("image/png");
+    expect(payload.purpose).toBe("avatar");
+    expect(vi.mocked(putObject)).toHaveBeenCalledOnce();
+    expect(vi.mocked(putObject)).toHaveBeenCalledWith(
+      expect.stringContaining("avatars/member-1/"),
+      expect.any(File),
+      "image/png",
+    );
+  });
+
+  it("defaults the purpose to post", async () => {
+    const response = await POST(uploadRequest(imageFile()));
+
+    expect(response.status).toBe(201);
     const payload = await response.json();
     expect(payload.key).toContain("posts/member-1/");
-    expect(payload.uploadUrl).toBe(`https://signed.example/${payload.key}`);
-    expect(payload.publicUrl).toBe(`https://test.r2.dev/${payload.key}`);
-    // The size rides into the signature call: the helper signs Content-Length with it, so the
-    // bucket — not this endpoint's trust in a number — is what refuses a differently-sized PUT.
-    expect(vi.mocked(getPresignedUploadUrl)).toHaveBeenCalledWith(
-      expect.stringContaining("posts/member-1/"),
-      "image/png",
-      2 * 1024 * 1024,
-    );
+    expect(payload.purpose).toBe("post");
   });
 
-  it("refuses a request with no size, signing nothing", async () => {
-    // A missing size is the shape of an unbounded URL: Content-Length is signed, so nothing
-    // signed without one is never minted — the refusal is this endpoint's and nothing else's.
-    const response = await POST(
-      jsonRequest({ filename: "photo.png", contentType: "image/png", purpose: "post" }),
-    );
+  it("refuses a request with no file, without reaching storage", async () => {
+    const response = await POST(uploadRequest());
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: "Filename, content type and a positive file size are required",
-    });
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
+    expect(vi.mocked(putObject)).not.toHaveBeenCalled();
   });
 
-  it("refuses sizes that are not positive safe integers, signing nothing", async () => {
-    // The helper would throw on these — failing the request with a 500 whose message is an
-    // internal invariant — but a caller that declares a broken size is a bad request, named as
-    // one, before anything reaches the signer.
-    for (const size of [0, -1, 1.5, "two megabytes"]) {
-      const response = await POST(
-        jsonRequest({ filename: "photo.png", contentType: "image/png", purpose: "post", size }),
-      );
-
-      expect(response.status, JSON.stringify({ size })).toBe(400);
-      expect(await response.json()).toEqual({
-        error: "Filename, content type and a positive file size are required",
-      });
-    }
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
-  });
-
-  it("refuses a request with no filename or content type, signing nothing", async () => {
-    const response = await POST(jsonRequest({ filename: "photo.png" }));
+  it("refuses a disallowed type before storing it", async () => {
+    const response = await POST(uploadRequest(new File(["bytes"], "notes.txt", { type: "text/plain" })));
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Filename and content type are required" });
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
-  });
-
-  it("refuses a disallowed content type, naming the allowed list", async () => {
-    const response = await POST(
-      jsonRequest({ filename: "script.sh", contentType: "application/x-sh", size: 1024 }),
-    );
-
-    expect(response.status).toBe(400);
-    // The refusal is the sentence the caller reads: the type is refused, and
-    // the allowed list is right there in the message — not a bare 400 a
-    // sibling guard's refusal could double for.
-    expect(await response.json()).toEqual({
-      error: `File type not allowed. Allowed: ${ALL_ALLOWED_TYPES.join(", ")}`,
-    });
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
+    expect(vi.mocked(putObject)).not.toHaveBeenCalled();
   });
 
   it("refuses a file over the size limit for its type", async () => {
+    const oversized = new Uint8Array(MAX_IMAGE_SIZE + 1);
     const response = await POST(
-      jsonRequest({
-        filename: "huge.png",
-        contentType: "image/png",
-        size: 11 * 1024 * 1024,
-      }),
+      uploadRequest(new File([oversized], "huge.png", { type: "image/png" }), "post"),
     );
 
     expect(response.status).toBe(400);
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
+    expect(vi.mocked(putObject)).not.toHaveBeenCalled();
   });
 
-  it("answers 503, signing nothing, when storage is not configured", async () => {
+  it("answers 503, storing nothing, when storage is not configured", async () => {
     vi.mocked(assertStorageConfigured).mockImplementationOnce(() => {
       throw new Error("Cloudflare R2 storage is not configured: missing R2_ACCOUNT_ID");
     });
 
-    const response = await POST(
-      jsonRequest({ filename: "photo.png", contentType: "image/png", size: 2 * 1024 * 1024 }),
-    );
+    const response = await POST(uploadRequest(imageFile()));
 
     expect(response.status).toBe(503);
-    expect(vi.mocked(getPresignedUploadUrl)).not.toHaveBeenCalled();
+    expect((await response.json()).error).toContain("not configured");
+    expect(vi.mocked(putObject)).not.toHaveBeenCalled();
   });
 
-  it("answers 500, with no uploadUrl, when signing fails", async () => {
+  it("answers 500, with no URL, when the object cannot be written", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(getPresignedUploadUrl).mockRejectedValueOnce(new Error("signing failed"));
+    vi.mocked(putObject).mockRejectedValueOnce(new Error("network unreachable"));
     try {
-      const response = await POST(
-        jsonRequest({ filename: "photo.png", contentType: "image/png", size: 2 * 1024 * 1024 }),
-      );
+      const response = await POST(uploadRequest(imageFile()));
 
       expect(response.status).toBe(500);
-      // No signed URL is better than one that does not work — the caller would
-      // push bytes at it and see a failure it could not explain.
-      expect(await response.json()).toEqual({ error: "Failed to generate upload URL" });
+      // No `url` in the body: there is no object behind one, and a client that
+      // recorded it would store a dead attachment.
+      expect(await response.json()).toEqual({ error: "Failed to upload that file" });
     } finally {
       silence.mockRestore();
     }
+  });
+});
+
+describe("GET /api/uploads", () => {
+  it("publishes the allowed types and the per-kind size ceilings", async () => {
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.maxSizes).toEqual({
+      image: MAX_IMAGE_SIZE,
+      video: expect.any(Number),
+      document: MAX_DOCUMENT_SIZE,
+    });
+    expect(payload.purposes).toContain("post");
   });
 });

@@ -38,37 +38,39 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   );
 
   const uploadFile = useCallback(async (upload: UploadProgress): Promise<{ url: string; key: string }> => {
-    // Get presigned URL
+    // One step: the bytes ride the same request that declares them, stored by
+    // the server through the app's storage binding. The old two-step contract
+    // (presigned URL, then a browser PUT) could never run in a browser — the
+    // bucket sends no CORS headers — and its signing needed S3 credentials the
+    // platform binding has replaced.
+    const formData = new FormData();
+    formData.append("file", upload.file);
+    formData.append("purpose", purpose);
+
     const response = await fetch("/api/uploads", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: upload.file.name,
-        contentType: upload.file.type,
-        purpose,
-        size: upload.file.size,
-      }),
+      body: formData,
     });
 
     if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Failed to get upload URL");
+      // A refusal may carry no body at all, and reading one as JSON would throw
+      // its own cryptic error over the fallback message — parse defensively.
+      const message = await response
+        .text()
+        .then((text) => {
+          try {
+            return JSON.parse(text).error;
+          } catch {
+            return undefined;
+          }
+        })
+        .catch(() => undefined);
+      throw new Error(message || "Failed to upload file");
     }
 
-    const { uploadUrl, key, publicUrl } = await response.json();
+    const { url, key } = await response.json();
 
-    // Upload to R2
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      body: upload.file,
-      headers: { "Content-Type": upload.file.type },
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error("Failed to upload file");
-    }
-
-    return { url: publicUrl, key };
+    return { url, key };
   }, [purpose]);
 
   const uploadAll = useCallback(async () => {

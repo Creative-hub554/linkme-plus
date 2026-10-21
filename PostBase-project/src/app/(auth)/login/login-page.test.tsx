@@ -8,7 +8,7 @@ import LoginPage from "@/app/(auth)/login/page";
  * The sign-in page, driven through its form.
  *
  * Four paths reach four different places: a password sign-in that lands on the
- * feed, the same sign-in when the account has a verified second factor (which
+ * profile, the same sign-in when the account has a verified second factor (which
  * shows the challenge instead), a refusal (which shows the server's sentence),
  * and the OAuth buttons. The challenge is stubbed because it is a separate
  * component with its own requests — this is a test of the page's routing between
@@ -114,7 +114,7 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  test("signs in with a password and forwards to the feed", async () => {
+  test("signs in with a password and forwards to the profile", async () => {
     vi.useFakeTimers();
     const ui = mountSurface(<LoginPage />, { providers: "none" });
     const email = ui.container.querySelector("#email") as HTMLInputElement;
@@ -126,7 +126,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -166,7 +166,7 @@ describe("LoginPage", () => {
     expect(ui.container.textContent).toContain("Or continue with email");
   });
 
-  test("goes to the feed from the challenge", async () => {
+  test("goes to the profile from the challenge", async () => {
     vi.useFakeTimers();
     mocks.getAssurance.mockResolvedValueOnce({ data: { nextLevel: "aal2", currentLevel: "aal1" } });
     mocks.listFactors.mockResolvedValueOnce({ data: { totp: [{ id: "factor-1", status: "verified" }] } });
@@ -179,7 +179,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("skips the challenge when no verified factor exists", async () => {
@@ -191,7 +191,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("does not challenge a reader already at the required level", async () => {
@@ -202,7 +202,7 @@ describe("LoginPage", () => {
       vi.advanceTimersByTime(900);
     });
     expect(mocks.listFactors).not.toHaveBeenCalled();
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("starts a Google sign-in", async () => {

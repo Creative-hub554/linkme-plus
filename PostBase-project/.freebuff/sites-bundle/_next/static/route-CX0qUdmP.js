@@ -1,0 +1,1 @@
+import{t as e}from"./auth-CKCvtlum.js";async function t(t){return e.handler(t)}async function n(t){return e.handler(t)}export{t as GET,n as POST};

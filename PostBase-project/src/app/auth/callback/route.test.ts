@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * `exchangeCodeForSession`, and only a successful exchange with a `user` reaches
  * the database. The client-supplied `next` is the one thing the request does
  * control, and it is guarded against an open redirect: a value that is not a
- * single-slash absolute path falls back to `/feed`. A failed exchange, or a
+ * single-slash absolute path falls back to `/profile`. A failed exchange, or a
  * provisioning error inside the `try`, both end at `/login?error=auth`.
  *
  * `@/utils/supabase/server` and `@/lib/db` are both replaced — the first by a
@@ -74,7 +74,7 @@ describe("GET /auth/callback", () => {
     expectGatedNone("reads");
   });
 
-  it("provisions a new member from the provider's user and lands on /feed", async () => {
+  it("provisions a new member from the provider's user and lands on /profile", async () => {
     exchange.mockResolvedValueOnce({ data: { user: USER }, error: null });
     fakeDb
       .selectReturns(users, []) // no account yet
@@ -84,7 +84,7 @@ describe("GET /auth/callback", () => {
     const response = await GET(callback("?code=good"));
 
     expect(response.status).toBe(307);
-    expect(located(response)).toBe("http://localhost/feed");
+    expect(located(response)).toBe("http://localhost/profile");
     // The account and the profile, both keyed on the provider's id — not on
     // anything the request supplied.
     expectGatedSequence("writes", ["users", "profiles"]);
@@ -110,7 +110,7 @@ describe("GET /auth/callback", () => {
     expectGatedNone("writes");
   });
 
-  it("refuses an off-site `next`, falling back to /feed", async () => {
+  it("refuses an off-site `next`, falling back to /profile", async () => {
     // A fresh answer per iteration: the exchange is the same, but the fake's
     // scripted reads are reset between cases.
     exchange.mockResolvedValue({ data: { user: USER }, error: null });
@@ -123,7 +123,7 @@ describe("GET /auth/callback", () => {
 
       const response = await GET(callback(`?code=good&next=${encodeURIComponent(next)}`));
 
-      expect(located(response), next).toBe("http://localhost/feed");
+      expect(located(response), next).toBe("http://localhost/profile");
     }
   });
 

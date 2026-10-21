@@ -1,0 +1,1 @@
+import{r as e}from"./server-Bx_Xus0_.js";import{t}from"./server-C4ho_Lq9.js";async function n(){let{data:{user:e}}=await(await t()).auth.getUser();return e}var r={api:{getSession:async({headers:e})=>{let t=await n();return t?{user:t}:null}},handler:async t=>e.json({error:`Authentication is handled by Supabase`},{status:404})};export{n,r as t};

@@ -1,0 +1,5 @@
+import{I as e,U as t,Y as n,et as r,ot as i,t as a}from"./db-kf_TeMKT.js";import{a as o,n as s,o as c}from"./api-helpers-Btorluec.js";import{i as l}from"./cursor-pagination-C8TKnIFZ.js";var u=25;async function d(d){let{session:f,error:p}=await o(d);if(p)return p;let m=(new URL(d.url).searchParams.get(`ids`)??``).split(`,`).map(e=>e.trim()).filter(Boolean);if(m.length===0)return s("`ids` is required");if(m.length>u)return s(`At most ${u} ids per request`);if(!m.every(l))return s(`Invalid user ID`);try{let o=await a.select({id:t.id,username:t.username,displayName:i`coalesce(${e.displayName}, ${t.username})`,avatarUrl:e.avatarUrl,bio:e.bio,isFollowing:i`exists (
+          select 1 from "follows" as viewer_follow
+          where viewer_follow."follower_id" = ${f.user.id}
+            and viewer_follow."following_id" = "users"."id"
+        )`}).from(t).leftJoin(e,n(t.id,e.userId)).where(r(t.id,m));return c({data:o})}catch(e){return console.error(`Brief users error:`,e),s(`Failed to load those members`,500)}}export{d as GET};

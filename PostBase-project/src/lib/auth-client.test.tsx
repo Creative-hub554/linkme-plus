@@ -119,11 +119,14 @@ describe("the browser auth client", () => {
     });
   });
 
-  test("signIn.social returns to this app's callback", async () => {
+  test("signIn.social returns to this app's callback, landing on the profile", async () => {
     await signIn.social("facebook");
     expect(mocks.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "facebook",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      // `next` is the landing route after the callback's code exchange; the
+      // callback route accepts it only when it starts with a single `/`, and
+      // defaults to /profile when the param is missing or unsafe.
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/profile` },
     });
   });
 

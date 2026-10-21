@@ -1,6 +1,13 @@
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
-import { assertStorageConfigured, r2Client, BUCKET_NAME, getPublicUrl, IMAGE_SIZES, keyBelongsToUser, putObject, type ImageSize } from "@/lib/r2";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  assertStorageConfigured,
+  getPublicUrl,
+  IMAGE_SIZES,
+  keyBelongsToUser,
+  putObject,
+  readStoredObject,
+  type ImageSize,
+} from "@/lib/r2";
 import sharp from "sharp";
 
 export async function POST(request: Request) {
@@ -30,19 +37,16 @@ export async function POST(request: Request) {
       return errorResponse(storageError instanceof Error ? storageError.message : "Cloudflare R2 storage is not configured", 503);
     }
 
-    // Fetch original from R2
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    });
+    // Fetch original from R2 — the same storage op every reader uses, so the
+    // binding answers first in a hosted runtime and the signed API carries only
+    // the Node side.
+    const fileBytes = await readStoredObject(key);
 
-    const response = await r2Client.send(command);
-
-    if (!response.Body) {
+    if (!fileBytes) {
       return errorResponse("File not found", 404);
     }
 
-    const fileBuffer = Buffer.from(await response.Body.transformToByteArray());
+    const fileBuffer = Buffer.from(fileBytes);
 
     // Process each size
     const processedUrls: Record<string, string> = {};

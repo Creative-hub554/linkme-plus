@@ -50,3 +50,6 @@ node_modules/
 .freebuff/*.exe
 .freebuff/*.log
 .freebuff/*.log.err
+/freebuff-sites-build/
+/.open-next/
+/.wrangler/

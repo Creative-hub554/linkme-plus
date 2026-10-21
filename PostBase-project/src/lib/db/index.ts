@@ -14,10 +14,15 @@ function normalizeEnvValue(value: string | undefined): string | undefined {
 }
 
 const runtimeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-const configuredConnectionString = normalizeEnvValue(runtimeEnv.DATABASE_URL);
 
-if (!configuredConnectionString) {
-  throw new Error("DATABASE_URL is not configured");
+// The connection string is resolved on first use, not at module init: a
+// Worker deployment validates its top-level scope before any request runs,
+// and throwing here (DB host absent in that scope at deploy time) fails the
+// whole upload. Keep the failure message but defer it to the first query.
+function resolveConnectionString(): string {
+  const raw = normalizeEnvValue(runtimeEnv.DATABASE_URL);
+  if (!raw) throw new Error("DATABASE_URL is not configured");
+  return applyTransactionPooler(raw);
 }
 
 function applyTransactionPooler(connectionString: string): string {
@@ -35,15 +40,13 @@ function applyTransactionPooler(connectionString: string): string {
   return connectionString;
 }
 
-const connectionString = applyTransactionPooler(configuredConnectionString);
-
 // Supavisor tears down idle pools after ~2 minutes and can silently drop
 // sockets. A single connection (max: 1) means one stuck connect attempt
 // blocks every other query behind it, so keep a small pool and recycle
 // connections before they can go stale. Prepared statements stay off
 // (required by transaction poolers).
 function createClient() {
-  return postgres(connectionString, {
+  return postgres(resolveConnectionString(), {
     max: 5,
     idle_timeout: 15,
     max_lifetime: 300,
@@ -69,11 +72,11 @@ function createDb() {
 // environments have always had.
 const requestDb = new AsyncLocalStorage<() => AppDb>();
 
-const fallbackDb = createDb();
+let fallbackDb: AppDb | undefined;
 
-export const db: AppDb = new Proxy(fallbackDb, {
+export const db: AppDb = new Proxy({} as AppDb, {
   get(_target, property) {
-    const instance = (requestDb.getStore() ?? (() => fallbackDb))();
+    const instance = (requestDb.getStore() ?? (() => (fallbackDb ??= createDb())))();
     const value = Reflect.get(instance, property, instance);
     // `$client` is the one function-valued property that must not be bound. It is
     // drizzle's own escape hatch to the driver, and postgres.js's client *is* a

@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { expectDocSelfHeld, expectHeld, readSource } from "./doc-freshness";
 
@@ -58,7 +58,6 @@ const DOC_NEEDLES: Record<string, string> = {
   cleanScript: "npm run clean",
   npmInstall: "npm install",
   envCopy: "cp .env.example .env.local",
-  kvNamespace: "wrangler kv namespace create CACHE",
   bucketCreate: "wrangler r2 bucket create linkme-plus-uploads",
   bucketName: "linkme-plus-uploads",
   databaseUrl: "`DATABASE_URL`",
@@ -119,12 +118,18 @@ describe("the deployment guide against the files it instructs about", () => {
     }
   });
 
-  it("describes the R2 bucket and KV binding wrangler.jsonc really configures", () => {
-    // The bucket the guide creates and the CACHE namespace the guide's KV command
-    // names are the two bindings an operator touches from this document; both must
-    // still be what `wrangler.jsonc` declares.
+  it("describes the R2 bucket wrangler.jsonc really configures, and no others", () => {
+    // The bucket the guide creates is the one binding an operator touches from
+    // this document, and it must still be what `wrangler.jsonc` declares. The
+    // inverse half is the removal the config records as a decision: the worker
+    // binds neither KV nor a Durable Object (the publish target provides
+    // neither, and `/ws` degrades to the in-isolate hub), so a rebound CACHE or
+    // DO — or the guide's provisioning command for one — is a regressed
+    // decision, and red here rather than a surprise at publish time.
     expectHeld(DOC_NEEDLES.bucketName, wrangler, "wrangler.jsonc");
-    expectHeld('"binding": "CACHE",', wrangler, "wrangler.jsonc");
     expectHeld(DOC_NEEDLES.bucketName, envExample, ".env.example");
+    expect(wrangler, "wrangler.jsonc binds KV again").not.toContain('"kv_namespaces"');
+    expect(wrangler, "wrangler.jsonc binds a Durable Object again").not.toContain("durable_objects");
+    expect(wrangler, "wrangler.jsonc carries a DO migration again").not.toContain("new_sqlite_classes");
   });
 });

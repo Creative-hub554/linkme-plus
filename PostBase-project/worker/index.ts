@@ -14,14 +14,50 @@ import {
   runEvictionPass,
 } from "../src/lib/media-eviction";
 import { PUBLIC_URL } from "../src/lib/r2";
+import { setWorkerR2Bucket } from "../src/lib/r2-bucket";
+import { RoomHub, type HubSocket } from "../src/lib/realtime/room-hub";
 import { authenticateWsUpgrade } from "../src/lib/realtime/ws-session";
 
 // The Durable Object class must be exported from the Worker entry for
 // wrangler.jsonc's `WebSocketRoom` binding to resolve; nothing else imports it.
 export { WebSocketRoom } from "../src/lib/durable-objects/websocket-room";
 
+// The `/ws` door without a Durable Object: host a hub in the Worker isolate
+// and serve the upgrade straight from `fetch`. Sockets never outlive their
+// request, but the hub itself lives as long as the isolate does, and its
+// `close` events keep departed members from lingering in the room list —
+// so rooms stay correct inside one isolate and simply do not exchange
+// presence across isolates. That is the degradation a platform without a
+// Durable-Object runtime gets, warned once at startup, not every request.
+const inlineHub = new RoomHub({ onPresence: () => {} });
+let inlineHubWarned = false;
+function serveWebSocketInline(userId: string, room: string): Response {
+  if (!inlineHubWarned) {
+    inlineHubWarned = true;
+    console.warn(
+      "[ws] no WEBSOCKET_ROOM binding — serving /ws inline (presence is per-isolate)",
+    );
+  }
+  const pair = new WebSocketPair();
+  const [client, server] = Object.values(pair);
+  server.accept();
+  const socket: HubSocket = { send: (data) => server.send(data) };
+  server.addEventListener("message", (event) => {
+    inlineHub.receive(socket, event.data as string);
+  });
+  server.addEventListener("close", () => inlineHub.close(socket));
+  inlineHub.connect(socket, userId, room);
+  return new Response(null, { status: 101, webSocket: client });
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Storage ops resolve the platform's R2 bucket through the binding slot,
+    // not through S3-API credentials: a hosted runtime carries no upload
+    // credentials, and the binding is the capability the platform gives. The
+    // Node fallback (dev server, scripts) reaches storage differently and is
+    // configured in `@/lib/r2`'s own comments.
+    setWorkerR2Bucket(env.UPLOADS);
     // The WebSocket door belongs to the Durable Object, not to the app: the
     // upgrade never reaches a route, and the instance is named rather than
     // per-room because rooms are names inside one hub — every socket in the
@@ -48,13 +84,27 @@ const worker = {
         return new Response(decision.message, { status: decision.status });
       }
 
-      const verifiedUrl = new URL(url);
-      verifiedUrl.searchParams.set("userId", decision.userId);
       const headers = new Headers(request.headers);
       headers.delete("Cookie");
 
-      const id = env.WEBSOCKET_ROOM.idFromName("global");
-      return env.WEBSOCKET_ROOM.get(id).fetch(
+      // The Durable Object room is optional by configuration: the deploy target
+      // this repo publishes through provides no Durable-Object runtime, and the
+      // binding is absent from wrangler.jsonc on purpose, so its projection onto
+      // the Env type is read through the optional lens rather than a declared
+      // property that stopped existing.
+      const webSocketRoom = (env as { WEBSOCKET_ROOM?: DurableObjectNamespace }).WEBSOCKET_ROOM;
+      if (!webSocketRoom) {
+        // No Durable Object on this runtime: the same session-verified
+        // handshake is answered by the in-isolate hub above.
+        return serveWebSocketInline(
+          decision.userId,
+          url.searchParams.get("room") || "global",
+        );
+      }
+
+      const verifiedUrl = new URL(url);
+      verifiedUrl.searchParams.set("userId", decision.userId);
+      return webSocketRoom.get(webSocketRoom.idFromName("global")).fetch(
         new Request(verifiedUrl, { method: request.method, headers }),
       );
     }

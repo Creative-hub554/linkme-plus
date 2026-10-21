@@ -1,0 +1,1 @@
+import{ot as e}from"./db-kf_TeMKT.js";function t(t){return e`count(${t||e.raw(`*`)})`.mapWith(Number)}export{t};

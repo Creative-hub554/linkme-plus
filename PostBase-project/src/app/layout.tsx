@@ -1,15 +1,8 @@
 import "@/lib/weak-ref-polyfill";
 import type { Metadata } from "next";
-import { ChatBubble } from "@/components/chat/chat-bubble";
-import { MainNav } from "@/components/layout/main-nav";
-import { BottomNav } from "@/components/layout/bottom-nav";
-import { Footer } from "@/components/layout/footer";
 import { AuthProvider } from "@/components/auth-provider";
-import { NotificationProvider } from "@/components/providers/notification-provider";
-import { RoomProvider } from "@/components/providers/room-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ThemeSync } from "@/components/providers/theme-sync";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -49,27 +42,7 @@ export default function RootLayout({
                 `ThemeProvider`, because it is the one place both the account
                 and the applied accent can be read — see its own comment. */}
             <ThemeSync />
-            <NotificationProvider>
-              {/* One connection for the room every realtime surface below asks
-                  for: the floating bubble, the messages page and its typing
-                  indicator all read `global`, so they share the one socket
-                  this provider runs rather than each dialing their own. */}
-              <RoomProvider room="global">
-                {/* One tooltip provider for the whole app. Radix needs it above every
-                    tooltip, and a single one also means hovering one control is enough
-                    for the next tooltip to open without waiting again. */}
-                <TooltipProvider>
-                  <MainNav />
-                  <main className="mx-auto max-w-7xl px-4 py-6 pb-20 md:pb-6">{children}</main>
-                  <Footer />
-                  <BottomNav />
-                  {/* Mounted last, like the bar above it: a floating door to
-                      messages on every page. It renders nothing until the reader
-                      is signed in — see the component itself. */}
-                  <ChatBubble />
-                </TooltipProvider>
-              </RoomProvider>
-            </NotificationProvider>
+            {children}
           </AuthProvider>
         </ThemeProvider>
       </body>

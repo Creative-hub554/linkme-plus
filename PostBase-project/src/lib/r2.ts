@@ -1,5 +1,3 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { archivedObjects } from "@/lib/db/schema";
@@ -9,35 +7,52 @@ import {
   driveConfigFromEnv,
   type DriveClient,
 } from "@/lib/gdrive";
+import { workerR2Bucket } from "@/lib/r2-bucket";
+import { checkR2Bucket, r2ApiCredentials, signR2Request } from "@/lib/r2-sigv4";
 
 const runtimeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-const R2_ACCOUNT_ID = runtimeEnv.R2_ACCOUNT_ID || "";
-const R2_ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-
-export const r2Client = new S3Client({
-  region: "auto",
-  endpoint: R2_ENDPOINT,
-  credentials: {
-    accessKeyId: runtimeEnv.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: runtimeEnv.R2_SECRET_ACCESS_KEY || "",
-  },
-});
 
 export const BUCKET_NAME = runtimeEnv.R2_BUCKET_NAME || "linkme-plus-uploads";
 export const PUBLIC_URL = (runtimeEnv.R2_PUBLIC_URL || "").replace(/\/$/, "");
 
+/**
+ * Every write and read goes through the runtime's own R2 capabilities, in
+ * order of preference:
+ *
+ *   1. The platform's `UPLOADS` binding (worker/index.ts registers it at the
+ *      top of the fetch handler) — available in every hosted runtime, needing
+ *      no credentials at all.
+ *   2. The bucket's S3-compatible API, signed with the WebCrypto signer in
+ *      `@/lib/r2-sigv4` — what the Node dev server and the seed scripts use,
+ *      which is why `R2_ACCOUNT_ID`-`R2_ACCESS_KEY_ID`-`R2_SECRET_ACCESS_KEY`
+ *      remain configuration for those environments while no hosted runtime
+ *      carries them.
+ *
+ * `assertStorageConfigured` names whichever piece is missing, keeping its
+ * long-standing message shape so the routes that surface it to their callers
+ * keep answering the same way.
+ */
 export function assertStorageConfigured(): void {
+  if (workerR2Bucket()) return;
   const missing = [
-    ["R2_ACCOUNT_ID", R2_ACCOUNT_ID],
-    ["R2_ACCESS_KEY_ID", runtimeEnv.R2_ACCESS_KEY_ID || ""],
-    ["R2_SECRET_ACCESS_KEY", runtimeEnv.R2_SECRET_ACCESS_KEY || ""],
-    ["R2_BUCKET_NAME", runtimeEnv.R2_BUCKET_NAME || ""],
-    ["R2_PUBLIC_URL", PUBLIC_URL],
-  ].filter(([, value]) => !value).map(([key]) => key);
-
-  if (missing.length > 0) {
-    throw new Error(`Cloudflare R2 storage is not configured: missing ${missing.join(", ")}`);
+    ["R2_ACCOUNT_ID", r2ApiCredentials() === null],
+    ["UPLOADS binding", workerR2Bucket() === null],
+  ];
+  if (missing.every(([, isMissing]) => isMissing)) {
+    throw new Error("Cloudflare R2 storage is not configured: missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY (no UPLOADS binding either)");
   }
+}
+
+/** A caller's body shaped the way both the binding's `put` and the signed API take it. */
+async function normalizeBody(body: File | Blob | Uint8Array | ArrayBuffer | string): Promise<Uint8Array> {
+  if (body instanceof File || body instanceof Blob) {
+    return new Uint8Array(await body.arrayBuffer());
+  }
+  if (body instanceof ArrayBuffer) {
+    return new Uint8Array(body);
+  }
+  if (typeof body === "string") return new TextEncoder().encode(body);
+  return body;
 }
 
 // File type configurations
@@ -109,28 +124,59 @@ export function keyBelongsToUser(key: string, userId: string): boolean {
   return segments.length >= 3 && segments[1] === userId;
 }
 
-// Get presigned upload URL
-export async function getPresignedUploadUrl(
-  key: string,
-  contentType: string,
-  contentLength: number,
-  expiresIn = 3600
-): Promise<string> {
-  assertStorageConfigured();
-  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
-    throw new Error("Upload size must be a positive safe integer");
+/** The key the health probe heads against: one intentionally absent object. */
+const STORAGE_PROBE_KEY = "__storage_probe__";
+
+export interface StorageProbeResult {
+  ok: boolean;
+  latencyMs: number;
+  error?: "unreachable" | "unconfigured";
+}
+
+function storageConfigurationError(cause: unknown): boolean {
+  // `assertStorageConfigured` names the missing variables its message — safe to
+  // reflect as a class, but the class is all a public endpoint needs. Anything
+  // else (network, signing, auth) is one failure shape from the outside.
+  return cause instanceof Error && cause.message.startsWith("Cloudflare R2 storage is not configured");
+}
+
+/**
+ * A real round-trip against storage, binding-first.
+ *
+ * Where the platform's `UPLOADS` binding is registered (every hosted runtime),
+ * the probe is a `head` against a key no object occupies: cheap, authenticated
+ * by the binding itself, and answered inside the same runtime the uploads land
+ * in — no credentials are involved or needed. Where it is not (the Node dev
+ * server, the scripts), the check falls back to the signed bucket `HEAD` in
+ * `checkR2Bucket`, which proves the S3 credentials actually work rather than
+ * merely being set.
+ *
+ * The answer carries no provenance — `ok`/`unreachable`/`unconfigured` and a
+ * latency only — because its caller (`/api/health`) is a public endpoint.
+ */
+export async function probeStorage(): Promise<StorageProbeResult> {
+  const started = performance.now();
+  const bucket = workerR2Bucket();
+  if (bucket) {
+    try {
+      await bucket.head(STORAGE_PROBE_KEY);
+      return { ok: true, latencyMs: Math.round(performance.now() - started) };
+    } catch {
+      return { ok: false, latencyMs: Math.round(performance.now() - started), error: "unreachable" };
+    }
   }
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-    ContentType: contentType,
-    // Content-Length is a signed header. A PUT with a different body length
-    // cannot reuse this URL, so the limit is enforced by R2 rather than only
-    // trusting the size the client reported to this endpoint.
-    ContentLength: contentLength,
-  });
-  
-  return getSignedUrl(r2Client, command, { expiresIn });
+  try {
+    assertStorageConfigured();
+    const probe = await checkR2Bucket(BUCKET_NAME);
+    if (probe.ok) return { ok: true, latencyMs: probe.latencyMs };
+    return { ok: false, latencyMs: probe.latencyMs, error: "unreachable" };
+  } catch (error) {
+    return {
+      ok: false,
+      latencyMs: Math.round(performance.now() - started),
+      error: storageConfigurationError(error) ? "unconfigured" : "unreachable",
+    };
+  }
 }
 
 // Upload a file directly from the server (e.g. cover uploads proxied through the API)
@@ -140,21 +186,24 @@ export async function putObject(
   contentType: string
 ): Promise<void> {
   assertStorageConfigured();
-  // The S3 SDK takes `Uint8Array | string`, not a raw `ArrayBuffer`, so every
-  // binary shape is normalised to a view before it is handed over.
-  const normalizedBody = body instanceof File || body instanceof Blob
-    ? new Uint8Array(await body.arrayBuffer())
-    : body instanceof ArrayBuffer
-      ? new Uint8Array(body)
-      : body;
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-    Body: normalizedBody,
-    ContentType: contentType,
-  });
-
-  await r2Client.send(command);
+  // Both transports take the same normalized body: the SDK-shaped callers hand
+  // files, blobs and arrays over, and a view covers `binding.put` as a value
+  // option in workerd.
+  const normalizedBody = await normalizeBody(body);
+  const bucket = workerR2Bucket();
+  if (bucket) {
+    await bucket.put(key, normalizedBody, { httpMetadata: { contentType } });
+    return;
+  }
+  const credentials = r2ApiCredentials();
+  if (!credentials) {
+    throw new Error("Cloudflare R2 storage is not configured: missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY (no UPLOADS binding either)");
+  }
+  const request = await signR2Request({ method: "PUT", bucket: BUCKET_NAME, key, contentType, body: normalizedBody });
+  const response = await fetch(request.url, { method: request.method, headers: request.headers, body: normalizedBody as unknown as BodyInit });
+  if (!response.ok) {
+    throw new Error(`R2 upload failed with HTTP ${response.status}`);
+  }
 }
 
 // Get public URL for a file
@@ -176,12 +225,54 @@ export function getProcessedImageUrl(key: string, _size: ImageSize): string {
 // Delete file from R2
 export async function deleteFile(key: string): Promise<void> {
   assertStorageConfigured();
-  const command = new DeleteObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-  });
+  const bucket = workerR2Bucket();
+  if (bucket) {
+    await bucket.delete(key);
+    return;
+  }
+  const credentials = r2ApiCredentials();
+  if (!credentials) {
+    throw new Error("Cloudflare R2 storage is not configured: missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY (no UPLOADS binding either)");
+  }
+  const request = await signR2Request({ method: "DELETE", bucket: BUCKET_NAME, key });
+  const response = await fetch(request.url, { method: request.method, headers: request.headers });
+  // Deleting an absent object is a success for S3-compatible APIs: the caller
+  // runs deletes after the referencing row is gone, where a second delete is
+  // normal reuse, so 404 answers as nothing to do.
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete failed with HTTP ${response.status}`);
+  }
+}
 
-  await r2Client.send(command);
+/**
+ * The bytes of one stored object, or `null` when the key is not there.
+ *
+ * The two transports answer differently — the binding yields an `R2ObjectBody`
+ * whose body is a stream, the signed API a `Response` — but a caller (the
+ * media-processing route is the only one) needs neither, just the bytes.
+ * Reading through `arrayBuffer` of the consumed stream for the binding and the
+ * response body keeps the helper's answer shape one thing. A non-404 failure
+ * is a storage outage and throws for the caller's own try/catch to surface.
+ */
+export async function readStoredObject(key: string): Promise<Uint8Array | null> {
+  assertStorageConfigured();
+  const bucket = workerR2Bucket();
+  if (bucket) {
+    const object = await bucket.get(key);
+    if (!object) return null;
+    return new Uint8Array(await new Response(object.body).arrayBuffer());
+  }
+  const credentials = r2ApiCredentials();
+  if (!credentials) {
+    throw new Error("Cloudflare R2 storage is not configured: missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY (no UPLOADS binding either)");
+  }
+  const request = await signR2Request({ method: "GET", bucket: BUCKET_NAME, key });
+  const response = await fetch(request.url, { method: request.method, headers: request.headers });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`R2 read failed with HTTP ${response.status}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 /**

@@ -29,9 +29,9 @@ import { importSpecifiers, reExportSpecifiers } from "@/test/source-scan";
  * The check is a walk rather than a scan, because "can reach" is a graph question
  * and the answer is not a filename. A module is in a client bundle when a client
  * boundary reaches it — through imports, through dynamic imports, through
- * re-exports — however many edges away it is, and `src/lib/r2.ts` reads
+ * re-exports — however many edges away it is, and `src/lib/r2-sigv4.ts` reads
  * `R2_SECRET_ACCESS_KEY` today without publishing anything only because nothing a
- * client boundary reaches imports it. One `import { upload } from "@/lib/r2"` in a
+ * client boundary reaches imports it. One `import { signR2Request } from "@/lib/r2-sigv4"` in a
  * component is the whole difference, and no test that lists files would see it.
  *
  * Four controls keep the check from passing because it looked at nothing, which is
@@ -40,7 +40,7 @@ import { importSpecifiers, reExportSpecifiers } from "@/test/source-scan";
  *   - the tree really is read (`readModuleSources`), and the roots really are
  *     found — 86 modules carry the directive today, and the walk must reach modules
  *     *beyond* them, which is the edges being followed rather than the roots listed;
- *   - the server side of the same rule is non-vacuous: `src/lib/r2.ts` is read by
+ *   - the server side of the same rule is non-vacuous: `src/lib/r2-sigv4.ts` is read by
  *     the detector and reports the secret it holds, so the detector is known to fire
  *     on this repo's own code and would fire the moment that module entered the graph;
  *   - a read planted into a reachable module fails the sweep, in each of the
@@ -413,12 +413,14 @@ describe("the modules a client bundle reaches", () => {
   });
 
   it("would catch the server modules this rule exists for", () => {
-    // The detector is known to fire on this repo's own code: `src/lib/r2.ts` reads
-    // the R2 credentials through the alias idiom, and it is only *outside* the
-    // graph that keeps the values off the client. Without this control a detector
-    // that had stopped reading aliases would pass every case above by finding
-    // nothing in a tree that reads its secrets the other way.
-    const reads = serverEnvReads(readModuleSources()["lib/r2.ts"]);
+    // The detector is known to fire on this repo's own code: `src/lib/r2-sigv4.ts`
+    // (the SigV4 signer — the one credential reader since the storage ops moved
+    // onto the UPLOADS binding) reads the R2 credentials through the alias
+    // idiom, and it is only *outside* the graph that keeps the values off the
+    // client. Without this control a detector that had stopped reading aliases
+    // would pass every case above by finding nothing in a tree that reads its
+    // secrets the other way.
+    const reads = serverEnvReads(readModuleSources()["lib/r2-sigv4.ts"]);
     expect(reads.some((read) => read.startsWith("R2_SECRET_ACCESS_KEY "))).toBe(true);
     expect(reads.some((read) => read.startsWith("R2_ACCESS_KEY_ID "))).toBe(true);
   });

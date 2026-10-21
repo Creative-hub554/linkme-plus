@@ -29,7 +29,7 @@ export default function LoginPage() {
   const goToDiscover = () => {
     setIsTransitioning(true);
     window.setTimeout(() => {
-      router.push("/feed");
+      router.push("/profile");
       router.refresh();
     }, 850);
   };
