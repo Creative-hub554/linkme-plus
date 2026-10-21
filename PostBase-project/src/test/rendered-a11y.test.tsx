@@ -121,8 +121,15 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => mocks.navigation.params,
   useParams: () => mocks.routeParams,
   // Recorded and then thrown, as Next does: a redirect is not a render, and the
-  // throw is what stops the page from going on to render anything.
+  // throw is what stops the page from going on to render anything. The permanent
+  // half is beside it because the `(auth)` spellings forward that way (308) — a
+  // forwarder declaring the door here must be callable, exactly the reason a
+  // missing key would make six pages fail collection rather than a render.
   redirect: (url: string) => {
+    mocks.navigation.redirects.push(url);
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  },
+  permanentRedirect: (url: string) => {
     mocks.navigation.redirects.push(url);
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
@@ -595,6 +602,15 @@ function covers(route: string): void {
  */
 const UNCOVERED: Record<string, string> = {
   "/cover-studio": "a redirect to the profile's cover tab — nothing renders, though where it forwards is pinned by its own case",
+  // The six legacy auth forwarders below: each is a `redirect(...)`, so none of
+  // them renders anything, and where each forwards is pinned by the legacy
+  // auth-forwarding cases beside them.
+  "/signin": "a redirect to /login — pinned by the legacy auth-forwarding cases",
+  "/sign-in": "a redirect to /login — pinned by the legacy auth-forwarding cases",
+  "/auth/login": "a redirect to /login — pinned by the legacy auth-forwarding cases",
+  "/signup": "a redirect to /register — pinned by the legacy auth-forwarding cases",
+  "/sign-up": "a redirect to /register — pinned by the legacy auth-forwarding cases",
+  "/auth/register": "a redirect to /register — pinned by the legacy auth-forwarding cases",
 };
 
 /**
@@ -1301,6 +1317,35 @@ describe("the cover studio's old address", () => {
     // target and throws the way Next does, which is what stops the page here.
     expect(() => CoverStudioPage()).toThrow(/NEXT_REDIRECT/);
     expect(mocks.navigation.redirects).toEqual(["/profile?tab=cover"]);
+  });
+});
+
+/**
+ * The legacy auth addresses, each mounted once the list sent it — a route on
+ * one side of the move between old spellings and the standalone pages it
+ * forwards to. Both spellings of each pair are pinned, because two files mean
+ * two chances for one to drift to the wrong destination.
+ */
+describe("the legacy auth addresses", () => {
+  // Names each route only for the test's own label; the routes are held in
+  // UNCOVERED (a redirect renders nothing an audit can judge), so unlike the
+  // bespoke cases above this does not call `covers()`.
+  describe.each([
+    ["/signin", "@/app/(auth)/signin/page", "/login"],
+    ["/sign-in", "@/app/(auth)/sign-in/page", "/login"],
+    ["/auth/login", "@/app/(auth)/auth/login/page", "/login"],
+    ["/signup", "@/app/(auth)/signup/page", "/register"],
+    ["/sign-up", "@/app/(auth)/sign-up/page", "/register"],
+    ["/auth/register", "@/app/(auth)/auth/register/page", "/register"],
+  ] as const)("the %s forwarder", (route, moduleName, target) => {
+    test(`forwards to ${target}`, async () => {
+      mocks.navigation.redirects.length = 0;
+      // Called rather than mounted, as the cover studio forwarder above is: a
+      // redirect is not a render, and the mock records what it asked for.
+      const { default: Forwarder } = await import(/* @vite-ignore */ moduleName);
+      expect(() => Forwarder()).toThrow(/NEXT_REDIRECT/);
+      expect(mocks.navigation.redirects).toEqual([target]);
+    });
   });
 });
 
