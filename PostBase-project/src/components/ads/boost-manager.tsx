@@ -27,6 +27,9 @@ interface CampaignRow {
   excerpt: string | null;
   goal: string | null;
   budget: number;
+  chargeAmount: number;
+  creatorDiscountPercent: number;
+  creatorDiscountAmount: number;
   spent: number;
   impressions: number;
   clicks: number;
@@ -106,7 +109,12 @@ export function BoostManager({ pageId }: { pageId: string }) {
   const [budget, setBudget] = useState<string>("50");
   const [targetLocation, setTargetLocation] = useState("");
   const [interests, setInterests] = useState("");
-  const [booked, setBooked] = useState<{ id: string } | null>(null);
+  const [booked, setBooked] = useState<{
+    id: string;
+    budget: number;
+    chargeAmount: number;
+    creatorDiscountPercent: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/boosts?pageId=${encodeURIComponent(pageId)}`, {
@@ -168,13 +176,21 @@ export function BoostManager({ pageId }: { pageId: string }) {
           .filter(Boolean),
       }),
     });
-    const payload = await readJson<{ campaign?: { id: string }; error?: string }>(response);
+    const payload = await readJson<{
+      campaign?: { id: string; budget: number; chargeAmount: number | null; creatorDiscountPercent: number };
+      error?: string;
+    }>(response);
     setBusy(null);
     if (!response.ok || !payload?.campaign) {
       setError(payload?.error ?? "This boost could not be booked");
       return;
     }
-    setBooked({ id: payload.campaign.id });
+    setBooked({
+      id: payload.campaign.id,
+      budget: payload.campaign.budget,
+      chargeAmount: payload.campaign.chargeAmount ?? payload.campaign.budget,
+      creatorDiscountPercent: payload.campaign.creatorDiscountPercent,
+    });
   };
 
   const reset = () => {
@@ -228,6 +244,16 @@ export function BoostManager({ pageId }: { pageId: string }) {
                   Once authorised, a platform administrator reviews the campaign — usually the same
                   day — and it runs for the length you booked.
                 </p>
+                <div className="rounded-lg border border-surface-border bg-surface-light-blue/40 px-3 py-2 text-sm text-navy-700">
+                  {booked.creatorDiscountPercent > 0 ? (
+                    <>
+                      <strong>Creator Boost discount: {booked.creatorDiscountPercent}%.</strong> You will be charged{" "}
+                      {booked.chargeAmount} instead of {booked.budget}.
+                    </>
+                  ) : (
+                    <>You will be charged {booked.chargeAmount}. Your full {booked.budget} budget goes to delivery.</>
+                  )}
+                </div>
                 {error && (
                   <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                     {error}
@@ -379,6 +405,7 @@ export function BoostManager({ pageId }: { pageId: string }) {
                     {campaign.goal ? ` · ${GOAL_LABEL[campaign.goal] ?? campaign.goal}` : ""} ·{" "}
                     {campaign.impressions.toLocaleString()} impressions · {campaign.clicks.toLocaleString()} clicks ·{" "}
                     {campaign.spent} of {campaign.budget}
+                    {campaign.creatorDiscountPercent > 0 ? ` · ${campaign.creatorDiscountPercent}% Creator Boost discount` : ""}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

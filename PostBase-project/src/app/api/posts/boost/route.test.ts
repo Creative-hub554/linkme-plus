@@ -26,6 +26,11 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+vi.mock("@/lib/db/creator-boost", () => ({
+  getCreatorBoostBenefit: async () => null,
+  getActiveCreatorMembership: async () => null,
+}));
+
 import { POST } from "./route";
 import { adCampaigns, boostedPostCampaigns, pageRoles, posts } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
@@ -140,6 +145,10 @@ describe("POST /api/posts/boost", () => {
           id: CAMPAIGN_ID,
           status: "pending_payment",
           budget: 50,
+          chargeAmount: 50,
+          creatorDiscountPercent: 0,
+          creatorDiscountAmount: 0,
+          priorityReview: false,
           startDate: new Date("2026-10-10T00:00:00.000Z"),
           endDate: new Date("2026-10-17T00:00:00.000Z"),
         },
@@ -158,6 +167,10 @@ describe("POST /api/posts/boost", () => {
         id: CAMPAIGN_ID,
         status: "pending_payment",
         budget: 50,
+        chargeAmount: 50,
+        creatorDiscountPercent: 0,
+        creatorDiscountAmount: 0,
+        priorityReview: false,
         startDate: "2026-10-10T00:00:00.000Z",
         endDate: "2026-10-17T00:00:00.000Z",
         goal: "reach",
@@ -176,6 +189,10 @@ describe("POST /api/posts/boost", () => {
         type: "boosted_post",
         status: "pending_payment",
         budget: 50,
+        chargeAmount: 50,
+        creatorDiscountPercent: 0,
+        creatorDiscountAmount: 0,
+        priorityReview: false,
         targetLocation: "Lisbon",
         targetCategories: ["design"],
       }),

@@ -3,6 +3,8 @@ import { adCampaigns, boostedPostCampaigns, pageRoles, posts } from "@/lib/db/sc
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { isUuid } from "@/lib/cursor-pagination";
 import { occupiesPost, parseBoostRequest, windowFrom } from "@/lib/ads/boosts";
+import { creatorBoostPrice } from "@/lib/creator-boost";
+import { getActiveCreatorMembership, getCreatorBoostBenefit } from "@/lib/db/creator-boost";
 import { and, eq } from "drizzle-orm";
 
 /**
@@ -90,7 +92,17 @@ export async function POST(request: Request) {
       .where(eq(boostedPostCampaigns.postId, postId));
     if (live && occupiesPost(live.status)) {
       return errorResponse("This post already has a campaign running", 409);
-    }      const window = windowFrom(new Date(), boost.durationDays);
+    }
+
+    // A Creator Boost price is awarded from the server-side membership record,
+    // not selected in the request. The delivery budget is never reduced, only
+    // the amount the eligible Page admin is charged.
+    const [benefit, activeCreator] = await Promise.all([
+      getCreatorBoostBenefit(session.user.id),
+      getActiveCreatorMembership(session.user.id),
+    ]);
+    const pricing = creatorBoostPrice(boost.budget, benefit?.tier ?? null);
+    const window = windowFrom(new Date(), boost.durationDays);
 
     const [campaign] = await db
       .insert(adCampaigns)
@@ -99,6 +111,10 @@ export async function POST(request: Request) {
         type: "boosted_post",
         status: "pending_payment",
         budget: boost.budget,
+        chargeAmount: pricing.chargeAmount,
+        creatorDiscountPercent: pricing.discountPercent,
+        creatorDiscountAmount: pricing.discountAmount,
+        priorityReview: Boolean(activeCreator),
         startDate: window.startDate,
         endDate: window.endDate,
         targetLocation: boost.targetLocation,
@@ -108,6 +124,10 @@ export async function POST(request: Request) {
         id: adCampaigns.id,
         status: adCampaigns.status,
         budget: adCampaigns.budget,
+        chargeAmount: adCampaigns.chargeAmount,
+        creatorDiscountPercent: adCampaigns.creatorDiscountPercent,
+        creatorDiscountAmount: adCampaigns.creatorDiscountAmount,
+        priorityReview: adCampaigns.priorityReview,
         startDate: adCampaigns.startDate,
         endDate: adCampaigns.endDate,
       });

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."scheduled_creator_post_status" ADD VALUE 'draft';

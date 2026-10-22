@@ -7,6 +7,8 @@ import { AdminModerationHistory } from "@/components/admin/admin-moderation-hist
 import { AdminReports } from "@/components/admin/admin-reports";
 import { CampaignReviewQueue } from "@/components/admin/campaign-review-queue";
 import { AdminVerificationRequests } from "@/components/admin/admin-verification-requests";
+import { CreatorBoostReviewQueue } from "@/components/admin/creator-boost-review-queue";
+import { CreatorSupportQueue } from "@/components/admin/creator-support-queue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart3 } from "lucide-react";
@@ -46,6 +48,7 @@ export default function AdminPage() {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
           <TabsTrigger value="verification">Verification</TabsTrigger>
+          <TabsTrigger value="creator-boost">Creator Boost</TabsTrigger>
         </TabsList>
 
         <TabsContent value="reports" className="mt-4">
@@ -134,6 +137,16 @@ export default function AdminPage() {
               <p className="text-sm text-muted-foreground">Review public links submitted by members. Approving awards the verified badge.</p>
             </CardHeader>
             <CardContent><AdminVerificationRequests /></CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="creator-boost" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Creator Boost applications</CardTitle>
+              <p className="text-sm text-muted-foreground">The platform owner makes the final decision. Approval awards a time-limited creator badge and discounted boosts; it does not verify identity.</p>
+            </CardHeader>
+            <CardContent><div className="space-y-6"><CreatorBoostReviewQueue /><div className="border-t border-surface-border pt-5"><h3 className="mb-1 text-sm font-semibold text-navy-800">Priority support</h3><p className="mb-3 text-sm text-muted-foreground">Private support requests from active Creator Boost members.</p><CreatorSupportQueue /></div></div></CardContent>
           </Card>
         </TabsContent>
 

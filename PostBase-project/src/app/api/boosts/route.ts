@@ -34,6 +34,9 @@ function toReport(row: {
   id: string;
   status: CampaignStatus;
   budget: number;
+  chargeAmount: number | null;
+  creatorDiscountPercent: number;
+  creatorDiscountAmount: number;
   spent: number | null;
   startDate: Date | null;
   endDate: Date | null;
@@ -51,6 +54,9 @@ function toReport(row: {
     goal: row.goal,
     excerpt: row.excerpt,
     budget: row.budget,
+    chargeAmount: row.chargeAmount ?? row.budget,
+    creatorDiscountPercent: row.creatorDiscountPercent,
+    creatorDiscountAmount: row.creatorDiscountAmount,
     // The spend the delivery implies, rather than the column, which is only
     // ever written when a campaign is settled. An advertiser watching a
     // running boost wants what it has cost so far, and this is the same
@@ -89,6 +95,9 @@ export async function GET(request: Request) {
         id: adCampaigns.id,
         status: adCampaigns.status,
         budget: adCampaigns.budget,
+        chargeAmount: adCampaigns.chargeAmount,
+        creatorDiscountPercent: adCampaigns.creatorDiscountPercent,
+        creatorDiscountAmount: adCampaigns.creatorDiscountAmount,
         spent: adCampaigns.spent,
         startDate: adCampaigns.startDate,
         endDate: adCampaigns.endDate,

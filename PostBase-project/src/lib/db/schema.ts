@@ -38,6 +38,13 @@ export const reportStatusEnum = pgEnum("report_status", ["pending", "reviewing",
 export const moderationActionEnum = pgEnum("moderation_action", ["warning", "removal", "suspension", "ban"]);
 export const coverVideoStatusEnum = pgEnum("cover_video_status", ["pending", "rendering", "ready", "failed"]);
 export const verificationRequestStatusEnum = pgEnum("verification_request_status", ["pending", "approved", "rejected"]);
+/** A manual programme approval, deliberately distinct from account verification. */
+export const creatorBoostStatusEnum = pgEnum("creator_boost_status", ["pending", "approved", "rejected", "suspended"]);
+/** The tier sets boost pricing; it is awarded by a platform admin, never self-selected. */
+export const creatorBoostTierEnum = pgEnum("creator_boost_tier", ["rising", "established", "star", "icon"]);
+export const scheduledCreatorPostStatusEnum = pgEnum("scheduled_creator_post_status", ["scheduled", "publishing", "published", "cancelled", "failed", "draft"]);
+export const creatorCollaborationStatusEnum = pgEnum("creator_collaboration_status", ["pending", "accepted", "declined", "cancelled"]);
+export const creatorSupportTicketStatusEnum = pgEnum("creator_support_ticket_status", ["open", "in_progress", "resolved"]);
 
 // ─── Users & Auth ───────────────────────────────────────────────
 export const users = pgTable("users", {
@@ -115,6 +122,8 @@ export const profiles = pgTable("profiles", {
   appearance: jsonb("appearance").$type<{ accent?: Accent }>(),
   /** Public, allow-listed presentation choices for the member's profile. */
   profileDesign: jsonb("profile_design").$type<ProfileDesign>(),
+  /** A creator-selected, public post highlighted separately from feed ranking. */
+  creatorSpotlightPostId: uuid("creator_spotlight_post_id"),
   visibility: visibilityEnum("visibility").default("public").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -481,6 +490,12 @@ export const adCampaigns = pgTable("ad_campaigns", {
   placementId: uuid("placement_id").references(() => adPlacements.id),
   status: campaignStatusEnum("status").default("draft").notNull(),
   budget: integer("budget").notNull(),
+  /** The delivery budget stays intact; these record the server-calculated price. */
+  chargeAmount: integer("charge_amount"),
+  creatorDiscountPercent: integer("creator_discount_percent").default(0).notNull(),
+  creatorDiscountAmount: integer("creator_discount_amount").default(0).notNull(),
+  /** Active Creator Boost members are placed first in the human review queue. */
+  priorityReview: boolean("priority_review").default(false).notNull(),
   spent: integer("spent").default(0),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
@@ -533,6 +548,123 @@ export const boostedPostCampaigns = pgTable("boosted_post_campaigns", {
     .references(() => posts.id, { onDelete: "cascade" }),
   goal: varchar("goal", { length: 30 }),
 });
+
+/**
+ * A time-limited Creator Boost benefit. It is private application state: the
+ * public profile only receives an approved, unexpired tier badge.
+ */
+export const creatorBoostMemberships = pgTable(
+  "creator_boost_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" })
+      .unique(),
+    status: creatorBoostStatusEnum("status").default("pending").notNull(),
+    tier: creatorBoostTierEnum("tier"),
+    /** The metrics at application or review time, retained for accountable review. */
+    eligibilitySnapshot: jsonb("eligibility_snapshot").notNull(),
+    reviewNote: text("review_note"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at"),
+    approvedAt: timestamp("approved_at"),
+    expiresAt: timestamp("expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("creator_boost_memberships_status_created_idx").on(table.status, table.createdAt),
+    index("creator_boost_memberships_active_expiry_idx").on(table.status, table.expiresAt),
+  ],
+);
+
+/** Text-only creator posts released by the Worker cron at (up to) five-minute precision. */
+export const scheduledCreatorPosts = pgTable(
+  "scheduled_creator_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    visibility: visibilityEnum("visibility").default("public").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    status: scheduledCreatorPostStatusEnum("status").default("scheduled").notNull(),
+    publishedPostId: uuid("published_post_id").references(() => posts.id, { onDelete: "set null" }),
+    failureReason: text("failure_reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("scheduled_creator_posts_creator_status_time_idx").on(table.creatorId, table.status, table.scheduledFor),
+    index("scheduled_creator_posts_due_idx").on(table.scheduledFor).where(sql`${table.status} = 'scheduled'`),
+  ],
+);
+
+/** A co-author invitation never grants publishing or account access by itself. */
+export const creatorCollaborations = pgTable(
+  "creator_collaborations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    collaboratorId: uuid("collaborator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: creatorCollaborationStatusEnum("status").default("pending").notNull(),
+    respondedAt: timestamp("responded_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("creator_collaborations_one_invite_idx").on(table.postId, table.collaboratorId),
+    index("creator_collaborations_creator_status_idx").on(table.creatorId, table.status, table.createdAt),
+    index("creator_collaborations_collaborator_status_idx").on(table.collaboratorId, table.status, table.createdAt),
+  ],
+);
+
+/** Identifies a normal Group as a Creator Boost member's community. */
+export const creatorCommunities = pgTable(
+  "creator_communities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" })
+      .unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("creator_communities_creator_created_idx").on(table.creatorId, table.createdAt)],
+);
+
+/** Private, audited Creator Boost support requests. */
+export const creatorSupportTickets = pgTable(
+  "creator_support_tickets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subject: varchar("subject", { length: 160 }).notNull(),
+    message: text("message").notNull(),
+    status: creatorSupportTicketStatusEnum("status").default("open").notNull(),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("creator_support_tickets_status_created_idx").on(table.status, table.createdAt),
+    index("creator_support_tickets_creator_created_idx").on(table.creatorId, table.createdAt),
+  ],
+);
 
 // ─── Trust & Safety ─────────────────────────────────────────────
 export const reports = pgTable("reports", {

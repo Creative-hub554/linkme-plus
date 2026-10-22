@@ -38,6 +38,8 @@ import { parseCoverVideoConfig, type CoverVideoConfig } from "@/lib/cover-video"
 import { shortVideoTemplateById } from "@/components/cover-studio/short-video-templates";
 import { CoverStudio } from "@/components/cover-studio/cover-studio";
 import { ProfileThemeStudio } from "@/components/profile/profile-theme-studio";
+import { CreatorBoostPanel } from "@/components/profile/creator-boost-panel";
+import { CreatorHub } from "@/components/profile/creator-hub";
 import { parseProfileDesign, type ProfileDesign } from "@/lib/profile-design";
 import {
   MapPin,
@@ -197,6 +199,8 @@ function ProfileContent() {
     location: "",
     joinedAt: "",
     verified: false,
+    creatorBoostTier: null as "rising" | "established" | "star" | "icon" | null,
+    creatorSpotlightPostId: "" as string,
   });
   const [profileDesign, setProfileDesign] = useState<ProfileDesign | null>(null);
   /** The editor only mounts once the profile response has supplied its saved design. */
@@ -261,6 +265,8 @@ function ProfileContent() {
           location: payload.user.location || (typeof authMetadata.location === "string" ? authMetadata.location : ""),
           joinedAt: payload.user.createdAt ? new Date(payload.user.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "",
           verified: Boolean(payload.user.verified),
+          creatorBoostTier: payload.user.creatorBoostTier === "rising" || payload.user.creatorBoostTier === "established" || payload.user.creatorBoostTier === "star" || payload.user.creatorBoostTier === "icon" ? payload.user.creatorBoostTier : null,
+          creatorSpotlightPostId: typeof payload.user.creatorSpotlightPostId === "string" ? payload.user.creatorSpotlightPostId : "",
         });
         setStats({
           followers: Number(payload.stats?.followers ?? 0),
@@ -808,6 +814,7 @@ function ProfileContent() {
           location: profileDetails.location || null,
           joinedAt: profileDetails.joinedAt || null,
           verified: profileDetails.verified,
+          creatorBoostTier: profileDetails.creatorBoostTier,
         }}
         cover={cover}
         design={profileDesign}
@@ -1136,6 +1143,13 @@ function ProfileContent() {
 
           {activeTab === "more" && (
             <div className="p-6 space-y-4">
+              {isOwnProfile && <CreatorBoostPanel />}
+              {isOwnProfile && <CreatorHub />}
+              {!isOwnProfile && profileDetails.creatorSpotlightPostId && (
+                <a href={`/feed#post-${profileDetails.creatorSpotlightPostId}`} className="block rounded-lg border border-violet-200 bg-violet-50/50 px-4 py-3 text-sm font-medium text-violet-900 hover:underline">
+                  <span aria-hidden="true">✦ </span>View this creator’s spotlight post
+                </a>
+              )}
               <h3 className="text-sm font-semibold text-navy-800">More sections</h3>
               <div className="grid grid-cols-2 gap-3">
                 {["Sports", "Music", "Movies", "Books", "Games", "Travel"].map((section) => (

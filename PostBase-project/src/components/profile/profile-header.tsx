@@ -7,11 +7,12 @@ import {
   ProfileCover,
   type CoverMedia,
 } from "@/components/profile/profile-cover";
-import { BadgeCheck, MessageCircle, Plus, Pencil, QrCode } from "lucide-react";
+import { BadgeCheck, MessageCircle, Plus, Pencil, QrCode, Sparkles } from "lucide-react";
 import { BlockButton } from "@/components/social/block-button";
 import { cn } from "@/lib/utils";
 import { FollowButton } from "@/components/social/follow-button";
 import { profilePaletteGradients, type ProfileDesign } from "@/lib/profile-design";
+import { CREATOR_BOOST_BENEFITS, type CreatorBoostTier } from "@/lib/creator-boost";
 
 export interface ProfileHeaderUser {
   name?: string | null;
@@ -21,6 +22,7 @@ export interface ProfileHeaderUser {
   location?: string | null;
   joinedAt?: string | Date | null;
   verified?: boolean;
+  creatorBoostTier?: CreatorBoostTier | null;
 }
 
 interface ProfileHeaderProps {
@@ -118,6 +120,16 @@ export function ProfileHeader({
           <div className={cn("flex flex-wrap items-center justify-center gap-2", usesSplitIdentity && "sm:justify-start")}>
             <h1 className="text-xl font-bold text-navy-800 sm:text-2xl">{user.name}</h1>
             {user.verified && <span aria-label={`${user.name ?? "Member"}'s verified account badge`} className="inline-flex items-center gap-1 text-sky-700" title="Verified account"><BadgeCheck className="h-5 w-5" aria-hidden="true" /><span className="sr-only">Verified account</span></span>}
+            {user.creatorBoostTier && (
+              <span
+                aria-label={`${user.name ?? "Member"} is a ${CREATOR_BOOST_BENEFITS[user.creatorBoostTier].label}`}
+                className="inline-flex items-center gap-1 text-violet-700"
+                title={`${CREATOR_BOOST_BENEFITS[user.creatorBoostTier].label} · Creator Boost`}
+              >
+                <Sparkles className="h-5 w-5" aria-hidden="true" />
+                <span className="sr-only">{CREATOR_BOOST_BENEFITS[user.creatorBoostTier].label}</span>
+              </span>
+            )}
           </div>
           <div className={cn("mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground", usesSplitIdentity && "sm:justify-start")}>
             {handle && <span>{handle}</span>}

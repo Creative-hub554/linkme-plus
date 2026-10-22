@@ -1,6 +1,6 @@
 import { db, withDbRetry } from "@/lib/db";
 import { ensureLocalUserProfile } from "@/lib/db/ensure-profile";
-import { users, profiles, follows, blocks, visibilityEnum } from "@/lib/db/schema";
+import { users, profiles, follows, blocks, creatorBoostMemberships, visibilityEnum } from "@/lib/db/schema";
 import { blockedEitherWay } from "@/lib/db/blocks";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { createClient } from "@/utils/supabase/server";
@@ -82,6 +82,7 @@ export async function GET(request: Request) {
         contactEmail: sql<string | null>`${profiles.contactPreferences} ->> 'contactEmail'`,
         contactPhone: sql<string | null>`${profiles.contactPreferences} ->> 'contactPhone'`,
         profileDesign: profiles.profileDesign,
+        creatorSpotlightPostId: profiles.creatorSpotlightPostId,
         visibility: profiles.visibility,
       })
       .from(users)
@@ -99,6 +100,20 @@ export async function GET(request: Request) {
     if (!user) {
       return errorResponse("User not found", 404);
     }
+
+    // Creator Boost is a separate programme badge, not an identity claim. The
+    // profile only exposes an approved benefit during its 30-day term.
+    const [creatorBoost] = await db
+      .select({ tier: creatorBoostMemberships.tier })
+      .from(creatorBoostMemberships)
+      .where(
+        and(
+          eq(creatorBoostMemberships.userId, user.id),
+          eq(creatorBoostMemberships.status, "approved"),
+          sql`${creatorBoostMemberships.expiresAt} > ${new Date()}`,
+        ),
+      )
+      .limit(1);
 
     // Get follower/following counts
     const [{ followers }] = await db
@@ -129,7 +144,7 @@ export async function GET(request: Request) {
       .limit(1);
 
     return successResponse({
-      user,
+      user: { ...user, creatorBoostTier: creatorBoost?.tier ?? null },
       stats: {
         followers,
         following,
@@ -154,6 +169,7 @@ export async function GET(request: Request) {
         username: fallbackUsername,
         role: "member",
         verified: false,
+        creatorBoostTier: null,
         createdAt: session.user.created_at ?? null,
         displayName: String(metadata.display_name || metadata.full_name || metadata.name || session.user.email?.split("@")[0] || "Member"),
         avatarUrl: String(metadata.avatar_url || metadata.picture || "") || null,
@@ -170,6 +186,7 @@ export async function GET(request: Request) {
         contactEmail: typeof metadata.contact_email === "string" ? metadata.contact_email : null,
         contactPhone: typeof metadata.contact_phone === "string" ? metadata.contact_phone : null,
         profileDesign: parseProfileDesign(metadata.profile_design),
+        creatorSpotlightPostId: null,
         visibility: metadata.visibility || "public",
       },
       stats: { followers: 0, following: 0 },

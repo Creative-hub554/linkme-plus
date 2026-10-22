@@ -1,0 +1,1 @@
+CREATE INDEX "creator_collaborations_creator_status_idx" ON "creator_collaborations" USING btree ("creator_id","status","created_at");

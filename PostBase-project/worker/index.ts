@@ -17,6 +17,7 @@ import { PUBLIC_URL } from "../src/lib/r2";
 import { setWorkerR2Bucket } from "../src/lib/r2-bucket";
 import { RoomHub, type HubSocket } from "../src/lib/realtime/room-hub";
 import { authenticateWsUpgrade } from "../src/lib/realtime/ws-session";
+import { publishDueCreatorPosts } from "../src/lib/creator-scheduler";
 
 // The Durable Object class must be exported from the Worker entry for
 // wrangler.jsonc's `WebSocketRoom` binding to resolve; nothing else imports it.
@@ -115,7 +116,9 @@ const worker = {
     return runWithDb(() => handler.fetch(request, env, ctx));
   },
 
-  // The media cron (wrangler.jsonc's `17 * * *`), two passes in order:
+  // The media cron (wrangler.jsonc's `17 * * *`) and the five-minute Creator
+  // Hub post-release cron. Media remains hourly; scheduled creator text posts
+  // have an intentional five-minute delivery window.
   //
   // 1. **Eviction** reclaims uploads no post or comment ever referenced —
   //    the files a client uploaded and then never published, and the demo
@@ -141,6 +144,11 @@ const worker = {
     });
 
     await runWithDb(async () => {
+      if (_event.cron === "*/5 * * * *") {
+        const report = await publishDueCreatorPosts(new Date());
+        console.log(`[creator-scheduler] published ${report.published}, failed ${report.failed}`);
+        return;
+      }
       await runEvictionPass({
         storage: createEvictionStorage(env.UPLOADS),
         store: createEvictionStore(),

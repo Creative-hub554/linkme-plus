@@ -3,7 +3,7 @@ import { adCampaigns, boostedPostCampaigns, auditLogs, pages, posts, users } fro
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { isUuid } from "@/lib/cursor-pagination";
 import { REVIEW_ACTIONS, windowFrom, type ReviewAction } from "@/lib/ads/boosts";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 /**
  * The platform's side of a boost: the queue an administrator clears, and the
@@ -41,6 +41,7 @@ export async function GET(request: Request) {
         id: adCampaigns.id,
         status: adCampaigns.status,
         budget: adCampaigns.budget,
+        priorityReview: adCampaigns.priorityReview,
         startDate: adCampaigns.startDate,
         endDate: adCampaigns.endDate,
         advertiser: users.username,
@@ -55,7 +56,8 @@ export async function GET(request: Request) {
       .innerJoin(posts, eq(boostedPostCampaigns.postId, posts.id))
       .innerJoin(pages, eq(posts.pageId, pages.id))
       .innerJoin(users, eq(adCampaigns.advertiserId, users.id))
-      .where(eq(adCampaigns.status, "pending_review"));
+      .where(eq(adCampaigns.status, "pending_review"))
+      .orderBy(desc(adCampaigns.priorityReview), desc(adCampaigns.createdAt));
 
     return successResponse({ campaigns: queue });
   } catch (queueError) {

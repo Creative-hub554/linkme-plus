@@ -28,7 +28,7 @@
   // The media cron — eviction first, then the archive — hourly and off the
   // hour so it lands between traffic peaks. See docs/GOOGLE-DRIVE-ARCHIVE.md.
   "triggers": {
-    "crons": ["17 * * *"]
+    "crons": ["17 * * *", "*/5 * * * *"]
   },
   // No `vars` here: the publish target refuses a Worker that sets Wrangler
   // vars, and nothing in the app reads `ENVIRONMENT` to want it back — a

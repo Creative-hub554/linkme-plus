@@ -9,6 +9,7 @@ import { ShieldCheck } from "lucide-react";
 interface QueuedCampaign {
   id: string;
   budget: number;
+  priorityReview: boolean;
   goal: string | null;
   excerpt: string | null;
   pageName: string;
@@ -95,6 +96,7 @@ export function CampaignReviewQueue() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-navy-800">
                   {campaign.pageName} <span className="text-muted-foreground">@{campaign.pageUsername}</span>
+                  {campaign.priorityReview && <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">Creator priority</span>}
                 </p>
                 <p className="mt-0.5 text-sm text-navy-700">{campaign.excerpt ?? "Boosted post"}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
