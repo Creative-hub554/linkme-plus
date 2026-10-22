@@ -127,6 +127,27 @@
       "when": 1792655123971,
       "tag": "0017_moaning_purifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792669648070,
+      "tag": "0018_server_only_data_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792669648071,
+      "tag": "0019_server_only_function_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792669648072,
+      "tag": "0020_revoke_public_function_execute",
+      "breakpoints": true
     }
   ]
 }
