@@ -27,6 +27,13 @@ The first release is a responsive web application. It supports public discovery 
 - Profiles may be public, followers-only, or private where applicable.
 - Users can block accounts and control who can follow, message, tag, or view contact details.
 
+### Profile Theme Studio
+
+- Members can choose a profile layout from maintained templates such as Classic, Creator, Gamer/Anime, Portfolio, and Minimal. The identity header—profile picture, display name, optional nickname, username, verification state, and Follow/Message/Block/Report controls—remains in a predictable accessible location in every layout.
+- Within a selected template, members may arrange supported optional blocks (bio, links, media gallery, featured posts, skills, badges, and playlists), choose a palette, safe font pair, card shape, avatar frame, and a reduced set of animation effects. Layout editing uses ordered blocks and preset size ranges; it does not allow arbitrary pixel positioning.
+- Members may upload their own background, decorative image, avatar frame, and stickers when they created the asset or have permission to use it. The platform validates and scans uploads, generates safe thumbnails, provides reporting/moderation, and does not ship unlicensed anime or other third-party character art. Official character themes are available only through licensed packs.
+- Every themed profile has a Standard view that suppresses decorative uploads and nonessential animation. Visitors can disable custom themes and motion, and the theme must preserve readable contrast, keyboard navigation, and useful alt text.
+
 ### 3.2 Social Feed and Short Video
 
 - Members create text, image, video, and short-video posts.
@@ -176,6 +183,7 @@ AI operates only in the **Social/Feed**, **Marketplace**, and **Jobs** modules. 
 ## 8. Later Releases
 
 - Integrated marketplace payments, escrow, delivery, refunds, and reviews.
+- Profile Theme Studio: reusable layouts, user-uploaded decorative assets, accessible Standard view, and licensed theme packs.
 - Advanced recommendation ranking, video creator monetization, and live streaming.
 - Private groups, paid communities, membership approval workflows, and events.
 - Advanced audience targeting, auction bidding, programmatic advertising, and self-serve campaign optimization.

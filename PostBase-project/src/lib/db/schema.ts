@@ -18,6 +18,7 @@ import { postAudiences } from "@/lib/post-audiences";
 // the two cannot drift. (`postAudiences` above is the same idea, imported as a
 // value because the enum is built from it at runtime.)
 import type { Accent } from "@/lib/theme";
+import type { ProfileDesign } from "@/lib/profile-design";
 
 // The audience list lives in `@/lib/post-audiences`; the column is built from it
 // so the database cannot hold an audience the rule does not describe.
@@ -112,6 +113,8 @@ export const profiles = pgTable("profiles", {
    * `contactPreferences` is one.
    */
   appearance: jsonb("appearance").$type<{ accent?: Accent }>(),
+  /** Public, allow-listed presentation choices for the member's profile. */
+  profileDesign: jsonb("profile_design").$type<ProfileDesign>(),
   visibility: visibilityEnum("visibility").default("public").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

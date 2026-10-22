@@ -5,6 +5,7 @@ import { blockedEitherWay } from "@/lib/db/blocks";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
 import { createClient } from "@/utils/supabase/server";
 import { eq, and, sql, count, ne } from "drizzle-orm";
+import { parseProfileDesign } from "@/lib/profile-design";
 
 type Visibility = (typeof visibilityEnum.enumValues)[number];
 
@@ -32,6 +33,7 @@ interface ProfileUpdateBody {
   contactEmail?: unknown;
   contactPhone?: unknown;
   currentContactPreferences?: unknown;
+  profileDesign?: unknown;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -79,6 +81,7 @@ export async function GET(request: Request) {
         skills: profiles.skills,
         contactEmail: sql<string | null>`${profiles.contactPreferences} ->> 'contactEmail'`,
         contactPhone: sql<string | null>`${profiles.contactPreferences} ->> 'contactPhone'`,
+        profileDesign: profiles.profileDesign,
         visibility: profiles.visibility,
       })
       .from(users)
@@ -166,6 +169,7 @@ export async function GET(request: Request) {
         skills: Array.isArray(metadata.skills) ? metadata.skills : [],
         contactEmail: typeof metadata.contact_email === "string" ? metadata.contact_email : null,
         contactPhone: typeof metadata.contact_phone === "string" ? metadata.contact_phone : null,
+        profileDesign: parseProfileDesign(metadata.profile_design),
         visibility: metadata.visibility || "public",
       },
       stats: { followers: 0, following: 0 },
@@ -186,6 +190,8 @@ export async function PUT(request: Request) {
     body = await request.json();
     await withTimeout(withDbRetry(() => ensureLocalUserProfile(session.user)), 8000);
     const { displayName, username, bio, location, skills, visibility, avatarUrl, coverUrl, coverVideoUrl, coverConfig, work, education, website, contactEmail, contactPhone } = body;
+    const profileDesign = body.profileDesign === undefined ? undefined : parseProfileDesign(body.profileDesign);
+    if (body.profileDesign !== undefined && !profileDesign) return errorResponse("Invalid profile theme", 400);
 
     if (username !== undefined) {
       const normalizedUsername = String(username).trim().toLowerCase();
@@ -222,6 +228,7 @@ export async function PUT(request: Request) {
       ...(coverUrl !== undefined ? { coverUrl } : {}),
       ...(coverVideoUrl !== undefined ? { coverVideoUrl } : {}),
       ...(coverConfig !== undefined ? { coverConfig } : {}),
+      ...(profileDesign !== undefined ? { profileDesign } : {}),
     };
 
     const [updated] = await db
@@ -239,6 +246,10 @@ export async function PUT(request: Request) {
     // into the local profile when the database connection recovers.
     try {
       const supabase = await createClient();
+      // The primary path validates this before the database write. Reparse in
+      // the independent outage fallback so an untrusted body cannot slip into
+      // Auth metadata just because Postgres happened to be unavailable.
+      const fallbackProfileDesign = parseProfileDesign(body.profileDesign);
       const metadata = {
         ...(typeof body.displayName === "string" ? { display_name: body.displayName.trim() } : {}),
         ...(typeof body.username === "string" ? { username: body.username.trim().toLowerCase() } : {}),
@@ -251,6 +262,7 @@ export async function PUT(request: Request) {
         ...(typeof body.contactPhone === "string" || body.contactPhone === null ? { contact_phone: body.contactPhone } : {}),
         ...(Array.isArray(body.skills) ? { skills: body.skills.map(String).slice(0, 12) } : {}),
         ...(typeof body.visibility === "string" ? { visibility: body.visibility } : {}),
+        ...(fallbackProfileDesign ? { profile_design: fallbackProfileDesign } : {}),
       };
       const { error: metadataError } = await supabase.auth.updateUser({ data: metadata });
       if (!metadataError) {

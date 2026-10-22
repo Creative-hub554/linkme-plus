@@ -11,6 +11,7 @@ import { BadgeCheck, MessageCircle, Plus, Pencil, QrCode } from "lucide-react";
 import { BlockButton } from "@/components/social/block-button";
 import { cn } from "@/lib/utils";
 import { FollowButton } from "@/components/social/follow-button";
+import { profilePaletteGradients, type ProfileDesign } from "@/lib/profile-design";
 
 export interface ProfileHeaderUser {
   name?: string | null;
@@ -41,6 +42,7 @@ interface ProfileHeaderProps {
   blockedByViewer?: boolean;
   onBlockChange?: (blocked: boolean, counts?: { followers: number; following: number }) => void;
   onMessage?: () => void;
+  design?: ProfileDesign | null;
 }
 
 const tabs = [
@@ -54,6 +56,7 @@ const tabs = [
   // step of setting up a profile, so it is a section of one. Ahead of "More",
   // which stays the catch-all at the end of the row.
   { id: "cover", label: "Cover studio" },
+  { id: "design", label: "Theme studio" },
   { id: "more", label: "More" },
 ] as const;
 
@@ -77,16 +80,25 @@ export function ProfileHeader({
   blockedByViewer,
   onBlockChange,
   onMessage,
+  design,
 }: ProfileHeaderProps) {
   const [showQr, setShowQr] = useState(false);
   const handle = user.username ? `@${user.username}` : null;
+  const usesSplitIdentity = design?.layout === "creator" || design?.layout === "portfolio";
   const profileUrl = useMemo(() => {
     if (typeof window === "undefined") return `/profile?username=${encodeURIComponent(user.username ?? "user")}`;
     return `${window.location.origin}/profile?username=${encodeURIComponent(user.username ?? "user")}`;
   }, [user.username]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-surface-border bg-card shadow-sm">
+    <div className={cn(
+      "overflow-hidden rounded-xl border border-surface-border bg-card shadow-sm",
+      design?.cardStyle === "glass" && "border-brand-purple/30 bg-white/85 shadow-lg backdrop-blur",
+      design?.cardStyle === "outline" && "border-2 border-brand-purple shadow-none",
+      design?.layout === "creator" && "rounded-2xl",
+      design?.layout === "anime" && !design.reducedMotion && "motion-safe:animate-[pulse_5s_ease-in-out_infinite]",
+      design?.layout === "minimal" && "shadow-none",
+    )}>
       <ProfileCover
         media={cover}
         alt={user.name ?? "Profile"}
@@ -96,15 +108,18 @@ export function ProfileHeader({
         isOwner={isOwner}
         onEdit={onEditCover}
       />
+      {design && (
+        <div className={cn("h-2 bg-gradient-to-r", profilePaletteGradients[design.palette])} aria-hidden="true" />
+      )}
 
       <div className="px-4 pb-0 sm:px-6">
         {/* The real profile picture is rendered inside the cover video. Keep identity content directly beneath it. */}
-        <div className="pt-4 text-center sm:pt-5">
-          <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className={cn("pt-4 text-center sm:pt-5", usesSplitIdentity && "sm:text-left", design?.layout === "minimal" && "mx-auto max-w-2xl")}>
+          <div className={cn("flex flex-wrap items-center justify-center gap-2", usesSplitIdentity && "sm:justify-start")}>
             <h1 className="text-xl font-bold text-navy-800 sm:text-2xl">{user.name}</h1>
             {user.verified && <span aria-label={`${user.name ?? "Member"}'s verified account badge`} className="inline-flex items-center gap-1 text-sky-700" title="Verified account"><BadgeCheck className="h-5 w-5" aria-hidden="true" /><span className="sr-only">Verified account</span></span>}
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <div className={cn("mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground", usesSplitIdentity && "sm:justify-start")}>
             {handle && <span>{handle}</span>}
             {typeof followersCount === "number" && (
               <span>
@@ -194,14 +209,15 @@ export function ProfileHeader({
         {/* Tab bar */}
         <nav
           aria-label="Profile sections"
-          className="mt-3 flex justify-center gap-1 overflow-x-auto border-b border-surface-border scrollbar-hide"
+          className="relative mt-3 flex justify-start gap-1 overflow-x-auto border-b border-surface-border scrollbar-hide after:pointer-events-none after:sticky after:right-0 after:block after:w-8 after:shrink-0 after:bg-gradient-to-l after:from-card after:to-transparent sm:justify-center"
         >
+          <span className="sr-only">More profile sections are available by scrolling horizontally.</span>
           {/* The studio is offered on your own profile only: it writes *your*
               cover, so on somebody else's it would be a door into the wrong
               room. Every other section describes the member whose profile this
               is, and so is shown to everyone. */}
           {tabs
-            .filter((tab) => tab.id !== "cover" || isOwner)
+            .filter((tab) => (tab.id !== "cover" && tab.id !== "design") || isOwner)
             .map((tab) => {
               const isActive = tab.id === activeTab;
               return (

@@ -19,6 +19,7 @@ Short, next-up tasks. Move completed work to its pull request or issue history r
 - [ ] Implement company pages, jobs, applications, and applicant workflow.
 - [ ] Implement fixed banner inventory, campaign review/payment/scheduling, sponsored labels, delivery metrics, and hide/report controls.
 - [ ] Implement promoted listings and boosted posts with availability checks and pause rules.
+- [ ] Implement Profile Theme Studio: template layouts, ordered optional profile blocks, safe decorative uploads, Standard view, and motion/contrast safeguards.
 
 ## Launch readiness
 

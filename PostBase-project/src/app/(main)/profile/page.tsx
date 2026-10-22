@@ -37,6 +37,8 @@ import type { DynamicCoverConfig } from "@/components/profile/dynamic-cover-canv
 import { parseCoverVideoConfig, type CoverVideoConfig } from "@/lib/cover-video";
 import { shortVideoTemplateById } from "@/components/cover-studio/short-video-templates";
 import { CoverStudio } from "@/components/cover-studio/cover-studio";
+import { ProfileThemeStudio } from "@/components/profile/profile-theme-studio";
+import { parseProfileDesign, type ProfileDesign } from "@/lib/profile-design";
 import {
   MapPin,
   Calendar,
@@ -196,27 +198,34 @@ function ProfileContent() {
     joinedAt: "",
     verified: false,
   });
+  const [profileDesign, setProfileDesign] = useState<ProfileDesign | null>(null);
+  /** The editor only mounts once the profile response has supplied its saved design. */
+  const [profileReady, setProfileReady] = useState(false);
 
   /** Either the requested member, or the signed-in member's own id. */
   const profileQuery = requestedQuery ?? (user?.id ? `id=${encodeURIComponent(user.id)}` : null);
   const isOwnProfile = !requestedQuery || resolvedUserId === user?.id;
   const profileUserId = requestedQuery ? resolvedUserId : user?.id ?? null;
 
-  // The cover studio has no address of its own any more, so a url that asks for
-  // it lands on the profile and asks for the section there. It is only ever your
-  // own: the studio writes the signed-in member's cover, so on somebody else's
-  // profile the parameter is ignored rather than opening a section the tab bar
-  // does not offer.
+  // Studios have no address of their own, so a supported `?tab=` opens the
+  // matching section on the owner’s profile. Visitor-owned URLs are ignored.
   useEffect(() => {
-    if (appliedTabRef.current) return;
+    // A `?username=` link needs its profile lookup before we know if it belongs
+    // to the signed-in member. Wait for that answer instead of permanently
+    // ignoring an owner’s direct studio link on the first render.
+    if (appliedTabRef.current || isLoading || (requestedQuery && !resolvedUserId)) return;
     appliedTabRef.current = true;
-    if (requestedTab === "cover" && isOwnProfile) setActiveTab("cover");
-  }, [requestedTab, isOwnProfile]);
+    if ((requestedTab === "cover" || requestedTab === "design") && isOwnProfile) setActiveTab(requestedTab);
+  }, [isLoading, isOwnProfile, requestedQuery, requestedTab, resolvedUserId]);
 
   useEffect(() => {
-    if (!profileQuery || !user?.id) return;
+    if (!profileQuery || !user?.id) {
+      setProfileReady(false);
+      return;
+    }
 
     let cancelled = false;
+    setProfileReady(false);
     const loadProfile = async () => {
       try {
         const response = await fetch(`/api/users?${profileQuery}`);
@@ -242,6 +251,8 @@ function ProfileContent() {
           coverConfig: payload.user.coverConfig ?? null,
         });
         setCoverVideoConfig(parseCoverVideoConfig(payload.user.shortVideoCoverConfig));
+        setProfileDesign(parseProfileDesign(payload.user.profileDesign));
+        setProfileReady(true);
         setAvatarUrl(payload.user.avatarUrl ?? (payload.user.id === user.id ? authAvatarUrl : null));
         setProfileDetails({
           name: payload.user.displayName || String(authMetadata.full_name || authMetadata.name || user.email?.split("@")[0] || "Member"),
@@ -799,6 +810,7 @@ function ProfileContent() {
           verified: profileDetails.verified,
         }}
         cover={cover}
+        design={profileDesign}
         isOwner={isOwnProfile}
         followersCount={stats?.followers}
         followingCount={stats?.following}
@@ -1107,6 +1119,18 @@ function ProfileContent() {
           {activeTab === "cover" && isOwnProfile && (
             <div className="p-4">
               <CoverStudio />
+            </div>
+          )}
+
+          {activeTab === "design" && isOwnProfile && (
+            <div className="p-4">
+              {profileReady ? (
+                <ProfileThemeStudio design={profileDesign} onSaved={setProfileDesign} />
+              ) : (
+                <div role="status" className="rounded-xl border border-surface-border p-6 text-sm text-muted-foreground">
+                  Loading your saved profile theme…
+                </div>
+              )}
             </div>
           )}
 

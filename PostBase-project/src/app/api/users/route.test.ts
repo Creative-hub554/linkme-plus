@@ -211,6 +211,25 @@ describe("PUT /api/users", () => {
     });
   });
 
+  it("accepts only the allow-listed public profile theme", async () => {
+    repaired();
+    fakeDb.updateReturns(profiles, [{ ...USER_ROW, profileDesign: { layout: "anime", palette: "sakura", cardStyle: "glass", reducedMotion: false } }]);
+
+    const response = await PUT(put({ profileDesign: { layout: "anime", palette: "sakura", cardStyle: "glass", reducedMotion: false } }));
+
+    expect(response.status).toBe(200);
+    expectGatedUpdate(profiles, { first: true, values: { profileDesign: { layout: "anime", palette: "sakura", cardStyle: "glass", reducedMotion: false } } });
+  });
+
+  it("rejects an unknown profile theme before writing", async () => {
+    repaired();
+
+    const response = await PUT(put({ profileDesign: { layout: "freeform", palette: "sakura", cardStyle: "glass", reducedMotion: false } }));
+
+    expect(response.status).toBe(400);
+    expectGatedNone("writes");
+  });
+
   it("copies changes into Auth metadata when the write fails, and says so", async () => {
     repaired();
     fakeDb.failNextUpdate(profiles);

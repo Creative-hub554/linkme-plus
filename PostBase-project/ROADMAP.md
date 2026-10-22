@@ -41,7 +41,7 @@ Improve ranking, media processing, search relevance, moderation tooling, perform
 
 ## Later releases
 
-Consider integrated marketplace payments, escrow, delivery, refunds, reviews, private/paid groups, events, creator monetization, live video, advanced advertising optimization, multilingual UI, mobile apps, and cross-platform publishing only after the related policy, fraud, and support models are ready.
+Consider integrated marketplace payments, escrow, delivery, refunds, reviews, private/paid groups, events, creator monetization, live video, advanced advertising optimization, multilingual UI, mobile apps, cross-platform publishing, and Profile Theme Studio only after the related policy, fraud, and support models are ready. Profile Theme Studio includes template-based profile layouts, user-uploaded decorative assets, an accessible Standard view, and licensed theme packs where applicable.
 
 ## Milestone gates
 
