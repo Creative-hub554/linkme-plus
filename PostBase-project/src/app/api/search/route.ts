@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { users, profiles, posts, pages, groups, marketplaceListings, jobs, companies, follows } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q");
   const type = url.searchParams.get("type") || "all";
-  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const { limit } = offsetPagination(url.searchParams);
 
   if (!query) {
     return errorResponse("Search query is required");

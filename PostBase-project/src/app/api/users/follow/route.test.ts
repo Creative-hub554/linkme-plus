@@ -389,3 +389,11 @@ describe("POST /api/users/follow", () => {
     expectGatedNone("writes");
   });
 });
+it("friends are mutual follows and retain the block filter", async () => {
+  fakeDb.selectReturns(users, [{ id: USER_ID }]).selectReturns(follows, []);
+  const response = await GET(list(`?userId=${USER_ID}&type=friends`));
+  expect(response.status).toBe(200);
+  expect(fakeDb.selectWheres[1]).toContain("reciprocal");
+  expect(fakeDb.selectWheres[1]).toContain("blocks");
+  expect(fakeDb.selectParams[1]).toContain(USER_ID);
+});

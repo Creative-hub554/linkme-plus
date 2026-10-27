@@ -298,7 +298,8 @@ describe("the profile page", () => {
     await openTab(ui, "About");
     expect(ui.container.textContent).toContain("Visual designer");
     await openTab(ui, "Friends");
-    expect(ui.container.textContent).toContain("Friends are coming soon");
+    expect(ui.container.textContent).toContain("Friends are members who follow each other.");
+    expect(buttonWithText(ui, "View friends")).toBeTruthy();
     await openTab(ui, "More");
     expect(ui.container.textContent).toContain("More sections");
   });
@@ -527,4 +528,12 @@ describe("the profile page", () => {
       description: "the removal failure in the editor",
     });
   });
+});
+test("the profile photo control opens the complete media gallery", async () => {
+  const { ui } = await mountProfile();
+  await ui.waitFor(() => ui.container.textContent?.includes("My first post") ?? false);
+  await openTab(ui, "Photos");
+  await ui.click(buttonWithText(ui, "See all photos") as HTMLElement);
+  await ui.waitFor(() => Boolean(document.querySelector('[role="dialog"]')));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("All photos");
 });

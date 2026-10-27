@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { comments, posts, users, profiles } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse, paginatedResponse } from "@/lib/api-helpers";
@@ -14,9 +15,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const postId = url.searchParams.get("postId");
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
 
   // Realtime names the comment that was just published; the feed hydrates that
   // one by id so it can join an open thread with its author attached.

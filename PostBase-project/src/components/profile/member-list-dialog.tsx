@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { FollowButton } from "@/components/social/follow-button";
 import { RefreshCw, Users } from "lucide-react";
 
-export type MemberListMode = "followers" | "following";
+export type MemberListMode = "followers" | "following" | "friends";
 
 /** The fields a list row needs; matches `GET /api/users/follow`. */
 export interface MemberSummary {
@@ -84,10 +84,10 @@ export function MemberListDialog({
    */
   const [pendingAdd, setPendingAdd] = useState<string | null>(null);
 
-  const title = mode === "followers" ? "Followers" : "Following";
+  const title = mode === "friends" ? "Friends" : mode === "followers" ? "Followers" : "Following";
   // "Following of Maya Chen" is not a sentence anyone would write.
   const heading = ownerName
-    ? mode === "followers"
+    ? mode === "friends" ? `Friends of ${ownerName}` : mode === "followers"
       ? `Followers of ${ownerName}`
       : `Members ${ownerName} follows`
     : title;
@@ -172,6 +172,7 @@ export function MemberListDialog({
    */
   useEffect(() => {
     if (!open || !event) return;
+    if (mode === "friends") { void loadFirstPage(); return; }
 
     if (!event.added) {
       setMembers((previous) => previous.filter((member) => member.id !== event.memberId));
@@ -216,7 +217,7 @@ export function MemberListDialog({
     return () => {
       cancelled = true;
     };
-  }, [event, open]);
+  }, [event, open, mode, loadFirstPage]);
 
   const shown = members.length;
   const totalLabel =
@@ -230,7 +231,7 @@ export function MemberListDialog({
           <DialogDescription aria-live="polite">
             {typeof total === "number" && total > 0
               ? totalLabel
-              : mode === "followers"
+              : mode === "friends" ? "Members who follow each other." : mode === "followers"
               ? "Members who follow this profile."
               : "Members this profile follows."}
           </DialogDescription>
@@ -273,9 +274,9 @@ export function MemberListDialog({
           ) : members.length === 0 ? (
             <EmptyState
               icon={<Users className="h-8 w-8" />}
-              title={mode === "followers" ? "No followers yet" : "Not following anyone yet"}
+              title={mode === "friends" ? "No friends yet" : mode === "followers" ? "No followers yet" : "Not following anyone yet"}
               description={
-                mode === "followers"
+                mode === "friends" ? "Members will appear here when you follow each other." : mode === "followers"
                   ? "When somebody follows this profile, they will appear here."
                   : "The profiles this member follows will appear here."
               }

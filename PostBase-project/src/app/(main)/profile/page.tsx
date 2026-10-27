@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { ProfileMediaGallery } from "@/components/profile/media-gallery";
 import { Button } from "@/components/ui/button";
 import { PostComposer } from "@/components/social/post-composer";
 import type { PostAudience } from "@/lib/post-audiences";
@@ -37,6 +38,7 @@ import type { DynamicCoverConfig } from "@/components/profile/dynamic-cover-canv
 import { parseCoverVideoConfig, type CoverVideoConfig } from "@/lib/cover-video";
 import { shortVideoTemplateById } from "@/components/cover-studio/short-video-templates";
 import { CoverStudio } from "@/components/cover-studio/cover-studio";
+import { ProfileThemeStudio } from "@/components/profile-theme-studio/profile-theme-studio";
 import {
   MapPin,
   Calendar,
@@ -106,9 +108,9 @@ function ProfileContent() {
   const requestedUserId = searchParams.get("user");
   const requestedUsername = searchParams.get("username");
   /**
-   * The section to open on, when a url names one. Only the cover studio is ever
-   * named: the header's shortcut and the redirect from the old `/cover-studio`
-   * address both land on `?tab=cover`.
+   * The section to open on, when a url names one. Only the two studios are
+   * ever named: the header's shortcuts and the redirect from the old
+   * `/cover-studio` address both land on their `?tab=`.
    */
   const requestedTab = searchParams.get("tab");
   const requestedQuery = requestedUserId
@@ -123,6 +125,7 @@ function ProfileContent() {
   const [stats, setStats] = useState<{ followers: number; following: number } | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   /** Which member list is open, if any. */
+  const [gallery, setGallery] = useState<"photos" | "videos" | null>(null);
   const [memberList, setMemberList] = useState<MemberListMode | null>(null);
   /** Latest follow change touching this profile, for the open list. */
   const [followEvent, setFollowEvent] = useState<MemberListEvent | null>(null);
@@ -196,6 +199,7 @@ function ProfileContent() {
     if (appliedTabRef.current) return;
     appliedTabRef.current = true;
     if (requestedTab === "cover" && isOwnProfile) setActiveTab("cover");
+    if (requestedTab === "theme" && isOwnProfile) setActiveTab("theme");
   }, [requestedTab, isOwnProfile]);
 
   useEffect(() => {
@@ -970,7 +974,7 @@ function ProfileContent() {
           {/* Friends Tab */}
           {activeTab === "friends" && (
             <div className="p-6">
-              <EmptyState title="Friends are coming soon" description="Friend connections will appear here once you start connecting with people." />
+              <div className="space-y-3"><p className="text-sm text-muted-foreground">Friends are members who follow each other.</p><Button variant="outline" onClick={() => setMemberList("friends")}>View friends</Button></div>
             </div>
           )}
 
@@ -979,7 +983,7 @@ function ProfileContent() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-navy-800">Photos</h3>
-                <Button variant="ghost" size="sm" className="text-brand-blue text-xs">See all</Button>
+                <Button variant="ghost" size="sm" className="text-brand-blue text-xs" onClick={() => setGallery("photos")}>See all photos</Button>
               </div>
               {mediaLoading ? (
                 <div className="grid grid-cols-3 gap-2" aria-label="Loading photos">
@@ -1025,7 +1029,7 @@ function ProfileContent() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-navy-800">Videos</h3>
-                <Button variant="ghost" size="sm" className="text-brand-blue text-xs">See all</Button>
+                <Button variant="ghost" size="sm" className="text-brand-blue text-xs" onClick={() => setGallery("videos")}>See all videos</Button>
               </div>
               {mediaLoading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Loading videos">
@@ -1082,6 +1086,13 @@ function ProfileContent() {
             </div>
           )}
 
+          {/* Theme Studio Tab */}
+          {activeTab === "theme" && isOwnProfile && (
+            <div className="p-4">
+              <ProfileThemeStudio />
+            </div>
+          )}
+
           {activeTab === "more" && (
             <div className="p-6 space-y-4">
               <h3 className="text-sm font-semibold text-navy-800">More sections</h3>
@@ -1097,6 +1108,7 @@ function ProfileContent() {
           )}
       </Card>
 
+      <ProfileMediaGallery userId={profileUserId} kind={gallery} onClose={() => setGallery(null)} />
       <MemberListDialog
         open={memberList !== null}
         onOpenChange={(nextOpen) => {
@@ -1108,7 +1120,7 @@ function ProfileContent() {
         userId={profileUserId}
         mode={memberList ?? "followers"}
         ownerName={displayName}
-        total={memberList === "following" ? stats?.following : stats?.followers}
+        total={memberList === "friends" ? undefined : memberList === "following" ? stats?.following : stats?.followers}
         viewerId={user.id}
         event={followEvent}
       />
