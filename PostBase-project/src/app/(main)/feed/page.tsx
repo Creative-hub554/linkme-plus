@@ -1,4 +1,5 @@
 "use client";
+import { SponsoredPlacement } from "@/components/advertising/sponsored-placement";
 
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -1246,6 +1247,7 @@ function FeedContent() {
           )}
 
           <PostComposer user={user} onSubmit={handlePost} draft={draft} onDraftUsed={() => setDraft(null)} />
+          <SponsoredPlacement location="feed" />
 
           {focusNotice && (
             <InlineNotice onDismiss={() => setFocusNotice(null)}>{focusNotice}</InlineNotice>
