@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -123,7 +124,7 @@ export function ListingCard({
         </button>
       </div>
       <CardContent className="p-3">
-        <h3 className="font-medium text-sm line-clamp-1">{title}</h3>
+        <h3 className="font-medium text-sm line-clamp-1"><Link href={`/marketplace/${id}`} className="hover:underline">{title}</Link></h3>
         <p className="text-lg font-bold text-brand-blue mt-1">
           {currency === "USD" ? "$" : currency}{price.toFixed(2)}
         </p>

@@ -1,14 +1,15 @@
 "use client";
+import { SponsoredPlacement } from "@/components/advertising/sponsored-placement";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterChip } from "@/components/shared/filter-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobCard } from "@/components/jobs/job-card";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, MapPin, Building2, Briefcase, DollarSign } from "lucide-react";
+import { Search, MapPin } from "lucide-react";
 
 const jobTypes = ["All", "Full-time", "Part-time", "Contract", "Remote", "Internship"];
 
@@ -38,6 +39,10 @@ function formatPosted(value: string) {
 }
 
 export default function JobsPage() {
+  const requestRef = useRef(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const [selectedType, setSelectedType] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useState("");
@@ -46,22 +51,27 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit: "20" });
+      const params = new URLSearchParams({ limit: "20", page: String(page) });
       if (searchQuery.trim()) params.set("q", searchQuery.trim());
       if (selectedType !== "All") params.set("type", selectedType);
       if (location.trim()) params.set("location", location.trim());
       const response = await fetch(`/api/jobs?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to load jobs");
       const payload = await response.json();
+      if (request !== requestRef.current) return;
       setJobs(Array.isArray(payload.data) ? payload.data : []);
-    } catch { setError("We couldn't load jobs right now."); }
-    finally { setLoading(false); }
-  }, [location, searchQuery, selectedType]);
+      setHasMore(Boolean(payload.pagination?.hasMore));
+      setTotal(payload.pagination?.total ?? payload.data?.length ?? 0);
+    } catch { if (request === requestRef.current) setError("We couldn't load jobs right now."); }
+    finally { if (request === requestRef.current) setLoading(false); }
+  }, [location, searchQuery, selectedType, page]);
 
   useEffect(() => { void loadJobs(); }, [loadJobs]);
+  useEffect(() => { setPage(1); }, [location, searchQuery, selectedType]);
 
   return (
     <div className="space-y-6">
@@ -71,7 +81,7 @@ export default function JobsPage() {
           <h1 className="text-2xl font-bold text-navy-800">Jobs</h1>
           <p className="text-sm text-muted-foreground mt-1">Find your next opportunity</p>
         </div>
-        <Button>Post a Job</Button>
+        <div className="flex gap-2"><Button variant="outline" asChild><Link href="/jobs/manage">Manage jobs</Link></Button><Button asChild><Link href="/jobs/new">Post a Job</Link></Button></div>
       </div>
 
       {/* Search */}
@@ -117,24 +127,8 @@ export default function JobsPage() {
         ))}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Total Jobs", value: "2,456", icon: Briefcase },
-          { label: "Remote Jobs", value: "892", icon: Building2 },
-          { label: "This Week", value: "156", icon: Briefcase },
-          { label: "Avg Salary", value: "$95k", icon: DollarSign },
-        ].map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-3 text-center">
-              <stat.icon className="h-5 w-5 mx-auto text-brand-blue mb-1" />
-              <p className="text-lg font-bold text-navy-800">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+      {!loading && !error && <p role="status" className="text-sm text-muted-foreground">{total} matching jobs</p>}
+      {!searchQuery.trim() && !location.trim() && selectedType === "All" && <SponsoredPlacement location="jobs" />}
       {/* Job Listings */}
       {loading ? (
         <div className="space-y-3" aria-label="Loading jobs" aria-busy="true">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-36 rounded-xl" />)}</div>
@@ -152,6 +146,7 @@ export default function JobsPage() {
           })}
         </div>
       )}
+      <div className="flex items-center justify-center gap-3"><Button variant="outline" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>Previous</Button><span>Page {page}</span><Button variant="outline" disabled={!hasMore || loading} onClick={() => setPage(value => value + 1)}>Next</Button></div>
     </div>
   );
 }

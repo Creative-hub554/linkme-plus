@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { categories, marketplaceListings, listingMedia, inventoryItems, productVariants, savedListings } from "@/lib/db/schema";
 import {
@@ -7,7 +8,7 @@ import {
   errorResponse,
   paginatedResponse,
 } from "@/lib/api-helpers";
-import { eq, and, inArray, or, sql, count, desc } from "drizzle-orm";
+import { eq, and, inArray, notInArray, or, ilike, gte, lte, sql, count, desc, isNull } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
 
 /** One entry of the `media` array a client posts when creating a listing. */
@@ -35,6 +36,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const listingId = url.searchParams.get("id");
   const sellerId = url.searchParams.get("sellerId");
+  const mine = url.searchParams.get("mine") === "true";
+  if (mine && !session) return errorResponse("Unauthorized", 401);
   // Both are bound into `uuid` columns below, so a value that is not one is a
   // 400 rather than a cast failure the catch reports as a 500.
   if (listingId && !isUuid(listingId)) return errorResponse("Invalid listing id", 400);
@@ -50,16 +53,32 @@ export async function GET(request: Request) {
     : isUuid(category)
       ? eq(marketplaceListings.categoryId, category)
       : or(eq(categories.name, category), eq(categories.slug, category));
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
+  const search = url.searchParams.get("q")?.trim().slice(0, 200);
+  const min = url.searchParams.get("minPrice");
+  const max = url.searchParams.get("maxPrice");
+  if ((min && (!Number.isSafeInteger(Number(min)) || Number(min) < 0 || Number(min) > 2147483647)) || (max && (!Number.isSafeInteger(Number(max)) || Number(max) < 0 || Number(max) > 2147483647))) return errorResponse("Invalid price filter");
+  if (min && max && Number(min) > Number(max)) return errorResponse("Minimum price must not exceed maximum price");
+  const location = url.searchParams.get("location")?.trim();
+  const conditions = and(
+    mine && session ? eq(marketplaceListings.sellerId, session.user.id) : eq(marketplaceListings.status, "active"), isNull(marketplaceListings.deletedAt),
+    categoryFilter ?? sql`1 = 1`,
+    sellerId ? eq(marketplaceListings.sellerId, sellerId) : sql`1 = 1`,
+    search ? or(ilike(marketplaceListings.title, `%${search}%`), ilike(marketplaceListings.description, `%${search}%`)) : undefined,
+    min ? gte(marketplaceListings.priceMin, Number(min)) : undefined,
+    max ? lte(marketplaceListings.priceMin, Number(max)) : undefined,
+    location ? ilike(marketplaceListings.location, `%${location}%`) : undefined,
+  );
 
   try {
     if (listingId) {
       const [listing] = await db
         .select()
         .from(marketplaceListings)
-        .where(eq(marketplaceListings.id, listingId));
+        .where(and(eq(marketplaceListings.id, listingId), isNull(marketplaceListings.deletedAt), or(
+          notInArray(marketplaceListings.status, ["draft", "removed"]),
+          session ? eq(marketplaceListings.sellerId, session.user.id) : undefined,
+        )));
 
       if (!listing) {
         return errorResponse("Listing not found", 404);
@@ -104,7 +123,9 @@ export async function GET(request: Request) {
       return successResponse({
         listing,
         media,
-        inventory,
+        inventory: inventory && listing.sellerId !== session?.user.id
+          ? { quantity: inventory.quantity, lowStockThreshold: inventory.lowStockThreshold }
+          : inventory,
         variants,
         isSaved: !!isSaved,
       });
@@ -128,19 +149,12 @@ export async function GET(request: Request) {
         location: marketplaceListings.location,
         status: marketplaceListings.status,
         createdAt: marketplaceListings.createdAt,
+        image: sql<string | null>`(select url from listing_media where listing_id = ${marketplaceListings.id} order by "order" asc limit 1)`,
+        sellerName: sql<string | null>`(select coalesce(p.display_name, u.username) from users u left join profiles p on p.user_id = u.id where u.id = ${marketplaceListings.sellerId})`,
       })
       .from(marketplaceListings)
       .leftJoin(categories, eq(marketplaceListings.categoryId, categories.id))
-      .where(
-        and(
-          eq(marketplaceListings.status, "active"),
-          // The filter is already the right predicate for its shape — an id
-          // binds the listing's column, a name or slug the joined row — and
-          // `1 = 1` keeps `and` well-formed when there is no filter at all.
-          categoryFilter ?? sql`1 = 1`,
-          sellerId ? eq(marketplaceListings.sellerId, sellerId) : sql`1 = 1`
-        )
-      )
+      .where(conditions)
       .orderBy(desc(marketplaceListings.createdAt))
       .limit(limit)
       .offset(offset);
@@ -155,13 +169,7 @@ export async function GET(request: Request) {
       .select({ total: count() })
       .from(marketplaceListings)
       .leftJoin(categories, eq(marketplaceListings.categoryId, categories.id))
-      .where(
-        and(
-          eq(marketplaceListings.status, "active"),
-          categoryFilter ?? sql`1 = 1`,
-          sellerId ? eq(marketplaceListings.sellerId, sellerId) : sql`1 = 1`
-        )
-      );
+      .where(conditions);
 
     // The viewer's own saved flags ride the rows the same way the single-listing
     // branch answers `isSaved`: one read for the whole page — the page's ids, not
@@ -215,9 +223,11 @@ export async function POST(request: Request) {
       inventory,
     } = body;
 
-    if (!title) {
+    if (typeof title !== "string" || !title.trim() || title.length > 200) {
       return errorResponse("Title is required");
     }
+    if (priceMin !== undefined && (!Number.isSafeInteger(priceMin) || priceMin < 0 || priceMin > 2147483647)) return errorResponse("Invalid price");
+    if (priceMax !== undefined && (!Number.isSafeInteger(priceMax) || priceMax < 0 || priceMax > 2147483647)) return errorResponse("Invalid price");
     if (categoryId !== undefined && categoryId !== null && (typeof categoryId !== "string" || !isUuid(categoryId))) {
       return errorResponse("Invalid category id", 400);
     }

@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { jobs, companies, jobApplications, pageRoles } from "@/lib/db/schema";
 import {
@@ -7,7 +8,7 @@ import {
   errorResponse,
   paginatedResponse,
 } from "@/lib/api-helpers";
-import { eq, and, inArray, sql, count, desc } from "drizzle-orm";
+import { eq, and, inArray, or, ilike, sql, count, desc } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
 
 /**
@@ -42,15 +43,23 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const jobId = url.searchParams.get("id");
   const companyId = url.searchParams.get("companyId");
+  const manage = url.searchParams.get("manage") === "true";
+  if (manage && !session) return errorResponse("Unauthorized", 401);
   // Both are bound into `uuid` columns below, so a value that is not one is a
   // 400 rather than a cast failure the catch reports as a 500.
   if (jobId && !isUuid(jobId)) return errorResponse("Invalid job id", 400);
   if (companyId && !isUuid(companyId)) return errorResponse("Invalid company id", 400);
   const type = url.searchParams.get("type");
+  const search = url.searchParams.get("q")?.trim().slice(0, 200);
   const location = url.searchParams.get("location");
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
+  const conditions = and(
+    manage && session ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')` : eq(jobs.status, "active"),
+    companyId ? eq(jobs.companyId, companyId) : undefined,
+    type === "Remote" ? eq(jobs.remoteStatus, "remote") : type ? eq(jobs.jobType, type) : undefined,
+    location ? ilike(jobs.location, `%${location}%`) : undefined,
+    search ? or(ilike(jobs.title, `%${search}%`), ilike(jobs.description, `%${search}%`), ilike(companies.name, `%${search}%`), sql`array_to_string(${jobs.skills}, ' ') ilike ${`%${search}%`}`) : undefined,
+  );
 
   try {
     if (jobId) {
@@ -78,7 +87,10 @@ export async function GET(request: Request) {
         })
         .from(jobs)
         .innerJoin(companies, eq(jobs.companyId, companies.id))
-        .where(eq(jobs.id, jobId));
+        .where(and(eq(jobs.id, jobId), or(
+          inArray(jobs.status, ["active", "closed"]),
+          session ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')` : undefined,
+        )));
 
       if (!job) {
         return errorResponse("Job not found", 404);
@@ -121,6 +133,7 @@ export async function GET(request: Request) {
         status: jobs.status,
         deadline: jobs.deadline,
         createdAt: jobs.createdAt,
+        applicationCount: sql<number>`(select count(*)::int from job_applications ja where ja.job_id = ${jobs.id})`,
         company: {
           id: companies.id,
           name: companies.name,
@@ -129,14 +142,7 @@ export async function GET(request: Request) {
       })
       .from(jobs)
       .innerJoin(companies, eq(jobs.companyId, companies.id))
-      .where(
-        and(
-          eq(jobs.status, "active"),
-          companyId ? eq(jobs.companyId, companyId) : sql`1 = 1`,
-          type ? eq(jobs.jobType, type) : sql`1 = 1`,
-          location ? eq(jobs.location, location) : sql`1 = 1`
-        )
-      )
+      .where(conditions)
       .orderBy(desc(jobs.createdAt))
       .limit(limit)
       .offset(offset);
@@ -146,7 +152,8 @@ export async function GET(request: Request) {
     const [{ total }] = await db
       .select({ total: count() })
       .from(jobs)
-      .where(eq(jobs.status, "active"));
+      .innerJoin(companies, eq(jobs.companyId, companies.id))
+      .where(conditions);
 
     // The viewer's own applied flags ride the rows the same way the single-job
     // branch answers `hasApplied` and `applicationStatus`: one read for the whole
@@ -204,7 +211,7 @@ export async function POST(request: Request) {
       deadline,
     } = body;
 
-    if (!companyId || !title) {
+    if (!companyId || typeof title !== "string" || !title.trim() || title.length > 200) {
       return errorResponse("Company ID and title are required");
     }
     if (typeof companyId !== "string" || !isUuid(companyId)) {

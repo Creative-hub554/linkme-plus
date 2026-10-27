@@ -541,3 +541,13 @@ describe("DELETE /api/jobs", () => {
     }
   });
 });
+it("uses search and remote filters on both job rows and their total", async () => {
+  fakeDb.selectReturns(jobs, []).selectReturns(jobs, [{ total: 0 }]);
+  const response = await GET(new Request("http://localhost/api/jobs?q=designer&type=Remote&location=London"));
+  expect(response.status).toBe(200);
+  expect(fakeDb.selectWheres[0]).toContain("ilike");
+  expect(fakeDb.selectParams[0]).toContain("remote");
+  expect(fakeDb.selectParams[0]).toContain("%designer%");
+  expect(fakeDb.selectParams[0]).toContain("%London%");
+  expect(fakeDb.selectParams[1]).toEqual(fakeDb.selectParams[0]);
+});

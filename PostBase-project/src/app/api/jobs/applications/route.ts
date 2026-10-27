@@ -1,7 +1,8 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
-import { jobApplications, jobs, companies, pageRoles, applicationStatusEnum } from "@/lib/db/schema";
+import { jobApplications, jobs, companies, pageRoles, users, profiles, applicationStatusEnum } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse, paginatedResponse } from "@/lib/api-helpers";
-import { eq, and, count, desc } from "drizzle-orm";
+import { eq, and, count, desc, sql } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
 
 /** The statuses the column accepts, read from the enum rather than copied. */
@@ -55,9 +56,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const jobId = url.searchParams.get("jobId");
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
 
   if (!jobId) {
     return errorResponse("Job ID is required");
@@ -91,8 +90,12 @@ export async function GET(request: Request) {
     }
 
     const result = await db
-      .select()
+      .select({ id: jobApplications.id, userId: jobApplications.userId, coverLetter: jobApplications.coverLetter, cvUrl: jobApplications.cvUrl, status: jobApplications.status, createdAt: jobApplications.createdAt,
+        applicant: { username: users.username, name: sql<string>`coalesce(${profiles.displayName}, ${users.username})` },
+      })
       .from(jobApplications)
+      .leftJoin(users, eq(jobApplications.userId, users.id))
+      .leftJoin(profiles, eq(jobApplications.userId, profiles.userId))
       .where(eq(jobApplications.jobId, jobId))
       .orderBy(desc(jobApplications.createdAt))
       .limit(limit)
@@ -117,6 +120,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { jobId, coverLetter, cvUrl } = body;
+    if (coverLetter !== undefined && (typeof coverLetter !== "string" || coverLetter.length > 10000)) return errorResponse("Invalid cover letter");
+    if (cvUrl !== undefined && cvUrl !== null && cvUrl !== "") {
+      try { if (!["http:", "https:"].includes(new URL(cvUrl).protocol)) return errorResponse("CV URL must use HTTP or HTTPS"); }
+      catch { return errorResponse("Invalid CV URL"); }
+    }
 
     if (!jobId) {
       return errorResponse("Job ID is required");
@@ -128,13 +136,14 @@ export async function POST(request: Request) {
     // The job has to exist before anybody applies to it: without this read an
     // application can name a job nothing renders.
     const [job] = await db
-      .select({ id: jobs.id })
+      .select({ id: jobs.id, status: jobs.status, deadline: jobs.deadline })
       .from(jobs)
       .where(eq(jobs.id, jobId));
 
     if (!job) {
       return errorResponse("Job not found", 404);
     }
+    if ((job.status && job.status !== "active") || (job.deadline && job.deadline < new Date())) return errorResponse("This job is no longer accepting applications", 409);
 
     // Check if already applied
     const [existing] = await db
@@ -157,7 +166,10 @@ export async function POST(request: Request) {
         cvUrl,
         status: "pending",
       })
+      .onConflictDoNothing({ target: [jobApplications.jobId, jobApplications.userId] })
       .returning();
+
+    if (!application) return errorResponse("Already applied to this job", 409);
 
     return successResponse({ application }, 201);
   } catch (err) {

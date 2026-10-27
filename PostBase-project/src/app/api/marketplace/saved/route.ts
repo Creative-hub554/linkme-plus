@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { categories, marketplaceListings, savedListings } from "@/lib/db/schema";
 import {
@@ -31,9 +32,7 @@ export async function GET(request: Request) {
   const { session } = await optionalAuth(request);
 
   const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
 
   try {
     if (!session) {

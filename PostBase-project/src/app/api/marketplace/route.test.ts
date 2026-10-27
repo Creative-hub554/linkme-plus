@@ -658,3 +658,21 @@ describe("DELETE /api/marketplace", () => {
     }
   });
 });
+it("applies search and price bounds to both listings and their count", async () => {
+  fakeDb.selectReturns(marketplaceListings, []).selectReturns(marketplaceListings, [{ total: 0 }]);
+  expect((await GET(new Request("http://localhost/api/marketplace?q=camera&minPrice=10&maxPrice=100&location=London"))).status).toBe(200);
+  expect(fakeDb.selectWheres[0]).toContain("ilike");
+  expect(fakeDb.selectParams[0]).toContain("%camera%");
+  expect(fakeDb.selectParams[0]).toContain(10);
+  expect(fakeDb.selectParams[0]).toContain(100);
+  expect(fakeDb.selectParams[1]).toEqual(fakeDb.selectParams[0]);
+});
+it("never returns a seller's private inventory cost to a buyer", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ id: LISTING_ID, sellerId: "someone-else", title: "Camera" }]).selectReturns(listingMedia, []).selectReturns(inventoryItems, [{ quantity: 5, unitCost: 40, sku: "PRIVATE", lowStockThreshold: 2 }]).selectReturns(productVariants, []).selectReturns(savedListings, []);
+  const response = await GET(new Request(`http://localhost/api/marketplace?id=${LISTING_ID}`));
+  expect((await response.json()).inventory).toEqual({ quantity: 5, lowStockThreshold: 2 });
+});
+it("refuses invalid price bounds before reading the database", async () => {
+  expect((await GET(new Request("http://localhost/api/marketplace?minPrice=100&maxPrice=10"))).status).toBe(400);
+  expect(fakeDb.reads).toEqual([]);
+});

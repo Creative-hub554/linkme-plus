@@ -36,7 +36,7 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
-import { GET, POST } from "./route";
+import { GET, POST, PUT } from "./route";
 import { inventoryItems, inventoryMovements, marketplaceListings } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence, expectGatedUpdate } from "@/test/expect-gated";
@@ -303,4 +303,18 @@ describe("POST /api/marketplace/inventory", () => {
       silence.mockRestore();
     }
   });
+});
+it("prevents a stock movement from making the quantity negative", async () => {
+  fakeDb.selectReturns(inventoryItems, [{ id: INVENTORY_ID, listingId: LISTING_ID, quantity: 1 }]).selectReturns(marketplaceListings, [{ sellerId: "seller-1" }]);
+  expect((await POST(jsonRequest("POST", "/api/marketplace/inventory", { inventoryId: INVENTORY_ID, type: "sold", quantity: 2 }))).status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+it("allows a stock count to be corrected to zero", async () => {
+  fakeDb.selectReturns(inventoryItems, [{ id: INVENTORY_ID, listingId: LISTING_ID, quantity: 5 }]).selectReturns(marketplaceListings, [{ sellerId: "seller-1" }]).insertReturns(inventoryMovements, [{ id: MOVEMENT_ID }]);
+  expect((await POST(jsonRequest("POST", "/api/marketplace/inventory", { inventoryId: INVENTORY_ID, type: "adjusted", quantity: 0 }))).status).toBe(201);
+  expect(fakeDb.writes[0].values).toEqual({ quantity: 0 });
+});
+it("does not allow a stranger to initialize someone else's inventory", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ sellerId: "someone-else" }]);
+  expect((await PUT(jsonRequest("PUT", "/api/marketplace/inventory", { listingId: LISTING_ID, sku: "NEW", lowStockThreshold: 5 }))).status).toBe(403); expect(fakeDb.writes).toEqual([]);
 });
