@@ -89,6 +89,8 @@ class FakeQuery implements PromiseLike<Row[]> {
     return this;
   }
 
+  for(_lock: string) { return this; }
+
   orderBy(..._columns: unknown[]) {
     return this;
   }
@@ -116,6 +118,7 @@ class FakeQuery implements PromiseLike<Row[]> {
   onConflictDoNothing(_config?: unknown) {
     return this;
   }
+  onConflictDoUpdate(_config?: unknown) { return this; }
 
   set(values: Row) {
     this.payload = values;
@@ -143,6 +146,9 @@ class FakeQuery implements PromiseLike<Row[]> {
 }
 
 export class FakeDb {
+  /** Transaction boundary for route unit tests; the fake does not simulate SQL rollback. */
+  async transaction<T>(operation: (tx: FakeDb) => Promise<T>): Promise<T> { return operation(this); }
+
   private readonly selects = new Map<string, Row[][]>();
   private readonly updates = new Map<string, Row[][]>();
   private readonly inserts = new Map<string, Row[][]>();
