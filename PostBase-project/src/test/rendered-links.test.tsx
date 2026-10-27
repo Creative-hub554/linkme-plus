@@ -122,6 +122,7 @@ vi.mock("@/utils/supabase/client", () => {
       channel: () => channel,
       removeChannel: () => {},
       auth: {
+        getUser: async () => ({ data: { user: { id: "user-1" } }, error: null }),
         getSession: async () => ({ data: { session: null } }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
         mfa: { listFactors: async () => ({ data: { totp: [] }, error: null }) },
@@ -260,8 +261,17 @@ const post = {
 
 /** What each endpoint answers with, so the populated states are what get judged. */
 const CANNED: Record<string, StubPayload> = {
-  "/api/marketplace": { data: [listing] },
-  "/api/jobs": { data: [job] },
+  "/api/admin/users": { data: [{ id: "user-2", username: "maya_designs", role: "member", restrictionKind: null, restrictedUntil: null }], hasMore: false },
+  "/api/advertising": { campaigns: [], placements: [{ id: "placement-1", name: "Feed banner", location: "feed", dailyRate: 10000, currency: "KHR" }], settings: { merchantName: "Merchant", qrImageUrl: "https://example.com/qr.png", currency: "KHR" }, isAdmin: false, hasMore: false },
+  "/api/advertising/sources": { listings: [], posts: [] },
+  "/api/marketplace/inventory": { inventory: { id: "inventory-1", quantity: 5, lowStockThreshold: 2, sku: "CAMERA", unitCost: 100 }, movements: [] },
+  "/api/jobs/applications": { data: [], pagination: { hasMore: false } },
+  "/api/marketplace": { pagination: { hasMore: false }, data: [listing], listing: { ...listing, sellerId: "user-2", status: "active" }, media: [] },
+  "/api/jobs": { pagination: { hasMore: false }, data: [job], job: { ...job, status: "active" }, hasApplied: false },
+  "/api/marketplace/categories": { categories: [{ id: "category-1", name: "Electronics" }] },
+  "/api/companies": { companies: [{ id: "company-1", name: "Studio" }], pages: [] },
+  "/api/admin/overview": { stats: { users: 4, posts: 8, pendingReports: 1 }, users: [{ id: "user-2", username: "maya_designs", role: "member", createdAt: "2026-09-20T09:00:00.000Z" }], actions: [] },
+  "/api/admin/reports": { data: [{ id: "report-1", targetId: "post-1", targetType: "post", reason: "Spam", status: "pending", createdAt: "2026-09-20T09:00:00.000Z" }], pagination: { hasMore: false } },
   "/api/groups": {
     data: [group],
     group,
@@ -736,6 +746,8 @@ describe("every link the data renders", () => {
         // the page sees them on first render; the search page renders its
         // results only for a query.
         if (route === "/groups/[id]") mocks.routeParams.id = group.id;
+        if (route === "/jobs/[id]") mocks.routeParams.id = job.id;
+        if (route === "/marketplace/[id]") mocks.routeParams.id = listing.id;
         if (route === "/pages/[username]") mocks.routeParams.username = page.username;
         if (route === "/search") mocks.params = new URLSearchParams("q=maya");
 

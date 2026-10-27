@@ -12,6 +12,7 @@ import {
   resolveModule,
 } from "@/test/module-index";
 import { cleanupSurfaces, mountSurface, type MountedSurface } from "@/test/render";
+import { standardProfileThemeConfig } from "@/lib/profile-theme";
 import {
   exportedHttpMethods,
   moduleExports,
@@ -144,6 +145,7 @@ vi.mock("@/utils/supabase/client", () => {
       channel: () => channel,
       removeChannel: () => {},
       auth: {
+        getUser: async () => ({ data: { user: { id: "user-1" } }, error: null }),
         getSession: async () => ({ data: { session: null } }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
         mfa: { listFactors: async () => ({ data: { totp: [] }, error: null }) },
@@ -235,12 +237,21 @@ const post = {
 
 /** What each endpoint answers with, so the populated states are what get audited. */
 const CANNED: Record<string, StubPayload> = {
-  "/api/marketplace": { data: [listing] },
+  "/api/admin/users": { data: [{ id: "user-2", username: "maya_designs", role: "member", restrictionKind: null, restrictedUntil: null }], hasMore: false },
+  "/api/advertising": { campaigns: [], placements: [{ id: "placement-1", name: "Feed banner", location: "feed", dailyRate: 10000, currency: "KHR" }], settings: { merchantName: "Merchant", qrImageUrl: "https://example.com/qr.png", currency: "KHR" }, isAdmin: false, hasMore: false },
+  "/api/advertising/sources": { listings: [], posts: [] },
+  "/api/marketplace/inventory": { inventory: { id: "inventory-1", quantity: 5, lowStockThreshold: 2, sku: "CAMERA", unitCost: 100 }, movements: [] },
+  "/api/jobs/applications": { data: [], pagination: { hasMore: false } },
+  "/api/marketplace": { pagination: { hasMore: false }, data: [listing], listing: { ...listing, sellerId: "user-2", status: "active" }, media: [] },
+  "/api/marketplace/categories": { categories: [{ id: "category-1", name: "Electronics" }] },
+  "/api/companies": { companies: [{ id: "company-1", name: "Studio" }], pages: [] },
+  "/api/admin/overview": { stats: { users: 4, posts: 8, pendingReports: 1 }, users: [{ id: "user-2", username: "maya_designs", role: "member", createdAt: "2026-09-20T09:00:00.000Z" }], actions: [] },
+  "/api/admin/reports": { data: [{ id: "report-1", targetId: "post-1", targetType: "post", reason: "Spam", status: "pending", createdAt: "2026-09-20T09:00:00.000Z" }], pagination: { hasMore: false } },
   // The saved shelf answers the flag contract pointed the other way: only the
   // member's saved rows, each carrying `isSaved: true` — the same field the
   // grid's cards read, so a card cannot tell which read fed it.
   "/api/marketplace/saved": { data: [{ ...listing, isSaved: true }] },
-  "/api/jobs": { data: [job] },
+  "/api/jobs": { pagination: { hasMore: false }, data: [job], job: { ...job, company: { name: "Studio" }, status: "active" }, hasApplied: false },
   // The list is `data`; the detail page reads the same route as `group`, with
   // its stats and whether the viewer is a member. Both in one answer because
   // the app has one endpoint for them, and the audit renders both views.
@@ -1027,15 +1038,14 @@ describe("every rendered surface", () => {
   covers("/admin");
   test("the admin dashboard", async () => {
     const { default: AdminPage } = await import("@/app/(main)/admin/page");
-    await audit(<AdminPage />);
+    await audit(<AdminPage />, { shows: "Spam" });
   });
 
   test("the admin dashboard, with the users tab chosen", async () => {
-    // The pending-approvals panel is hidden until its tab is chosen, and the
-    // Approve buttons on it are the reason to judge it — a reader only reaches
-    // them by switching. By mouse, which is the event a tab activates on.
+    // The real member list is hidden until its tab is chosen.
     const { default: AdminPage } = await import("@/app/(main)/admin/page");
     await audit(<AdminPage />, {
+      shows: "maya_designs",
       interact: async (ui) => {
         const users = [...ui.container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
           (tab) => tab.textContent?.trim() === "Users",
@@ -1213,6 +1223,37 @@ describe("every rendered surface", () => {
  * that holds it — the profile tab it names is exactly what the audited profile
  * case opens with `?tab=cover`.
  */
+describe("new commerce pages", () => {
+  covers("/advertising");
+  test("the advertising campaign form", async () => { const { default: Page } = await import("@/app/(main)/advertising/page"); await audit(<Page />, { shows: "Feed banner", structure: true }); });
+  covers("/jobs/manage");
+  test("the employer application manager", async () => { const { default: Page } = await import("@/app/(main)/jobs/manage/page"); await audit(<Page />, { shows: job.title, structure: true }); });
+  covers("/marketplace/inventory");
+  test("the inventory manager", async () => { const { default: Page } = await import("@/app/(main)/marketplace/inventory/page"); await audit(<Page />, { shows: listing.title, structure: true }); });
+  covers("/jobs/[id]");
+  test("a job and its application form", async () => {
+    mocks.routeParams.id = "job-1";
+    const { default: Page } = await import("@/app/(main)/jobs/[id]/page");
+    await audit(<Page />, { shows: "Studio", structure: true });
+  });
+  covers("/jobs/new");
+  test("the job publishing form", async () => {
+    const { default: Page } = await import("@/app/(main)/jobs/new/page");
+    await audit(<Page />, { shows: "Studio", structure: true });
+  });
+  covers("/marketplace/[id]");
+  test("a listing and its contact form", async () => {
+    mocks.routeParams.id = "listing-1";
+    const { default: Page } = await import("@/app/(main)/marketplace/[id]/page");
+    await audit(<Page />, { shows: listing.title, structure: true });
+  });
+  covers("/marketplace/new");
+  test("the listing publishing form", async () => {
+    const { default: Page } = await import("@/app/(main)/marketplace/new/page");
+    await audit(<Page />, { shows: "Electronics", structure: true });
+  });
+});
+
 describe("the cover studio's old address", () => {
   test("forwards to the profile's cover tab", async () => {
     mocks.navigation.redirects.length = 0;
@@ -1345,7 +1386,17 @@ const COMPONENT_EXCEPTION_KINDS = {
  */
 const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => React.ReactNode> = {
   "../components/ui/button.tsx#Button": (Button) => <Button>Save</Button>,
-  "../components/ui/icon-button.tsx#IconButton": (IconButton) => (
+
+  // The preview takes a validated config and the member's identity, so the
+  // harness gives it the smallest honest one — the Standard view of a named
+  // member — and the audit judges what every reader of the studio meets.
+  "../components/profile-theme-studio/profile-theme-preview.tsx#ProfileThemePreview": (ProfileThemePreview) => (
+    <ProfileThemePreview
+      config={standardProfileThemeConfig}
+      identity={{ name: "Ada Writer", username: "ada", bio: null, avatarUrl: null, location: null, website: null }}
+      reducedMotion={false}
+    />
+  ),  "../components/ui/icon-button.tsx#IconButton": (IconButton) => (
     <IconButton label="Save">
       <svg aria-hidden="true" />
     </IconButton>
@@ -1781,6 +1832,8 @@ const COVERED_BY_FAMILY = new Set(
  * page cases above already do that for most of these.
  */
 const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KINDS> = {
+  "../components/profile/media-gallery.tsx#ProfileMediaGallery": "props",
+  "../components/advertising/sponsored-placement.tsx#SponsoredPlacement": "props",
   // Needs props the harness cannot invent.
   "../components/auth/authenticator-challenge.tsx#AuthenticatorChallenge": "props",
   "../components/groups/group-card.tsx#GroupCard": "props",
