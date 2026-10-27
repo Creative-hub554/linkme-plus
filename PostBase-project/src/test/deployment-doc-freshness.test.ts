@@ -44,9 +44,7 @@ const DOC_NEEDLES: Record<string, string> = {
   bucketName: "linkme-plus-uploads",
   databaseUrl: "`DATABASE_URL`",
   r2PublicUrl: "`R2_PUBLIC_URL`",
-  telegramToken: "`TELEGRAM_BOT_TOKEN`",
   meilisearchKey: "`MEILISEARCH_API_KEY`",
-  googleSecret: "`GOOGLE_CLIENT_SECRET`",
   twilioToken: "`TWILIO_AUTH_TOKEN`",
 };
 
@@ -75,17 +73,13 @@ describe("the deployment guide against the files it instructs about", () => {
     // contract: a variable the guide calls required must still have a row there.
     for (const needle of [
       "DATABASE_URL=",
-      "AUTH_SECRET=",
+      "NEXT_PUBLIC_SUPABASE_URL=",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY=",
       "R2_ACCOUNT_ID=",
       "R2_ACCESS_KEY_ID=",
       "R2_SECRET_ACCESS_KEY=",
       "R2_BUCKET_NAME=",
       "R2_PUBLIC_URL=",
-      "GOOGLE_CLIENT_ID=",
-      "GOOGLE_CLIENT_SECRET=",
-      "FACEBOOK_CLIENT_ID=",
-      "FACEBOOK_CLIENT_SECRET=",
-      "TELEGRAM_BOT_TOKEN=",
       "TWILIO_ACCOUNT_SID=",
       "TWILIO_AUTH_TOKEN=",
       "TWILIO_PHONE_NUMBER=",

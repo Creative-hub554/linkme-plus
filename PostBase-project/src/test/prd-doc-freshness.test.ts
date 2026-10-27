@@ -17,8 +17,8 @@ import { expectDocSelfHeld, expectHeld, readSource } from "./doc-freshness";
  * the code contains, and the section headings and capability prose that no single
  * line of source states. The PRD's entity paragraph is held as a *mapping* — each
  * entity to the schema table that models it — rather than literally, because the
- * schema spells them snake_case and the PRD names them PascalCase; two entities the
- * paragraph names are deliberately mapped to *absence* (see EXCLUDED_ENTITIES), so
+ * schema spells them snake_case and the PRD names them PascalCase; one entity the
+ * paragraph names is deliberately mapped to *absence* (see EXCLUDED_ENTITIES), so
  * the exclusion is held rather than silent.
  */
 
@@ -72,18 +72,21 @@ const ENTITY_MAP: Record<string, string> = {
   BoostedPostCampaign: "boosted_post_campaigns",
   Report: "reports",
   ModerationAction: "moderation_actions",
+  // The platform's payment ledger is the advertising one: campaign payments are
+  // recorded and verified there (`ad_payments`). Marketplace buyer/seller payments
+  // remain outside the platform, per the PRD's payments paragraph.
+  Payment: "ad_payments",
   AuditLog: "audit_logs",
 };
 
 /**
- * The two entities the PRD's paragraph names that no table models yet — a booking
- * ledger and a payment ledger are both "later releases" work. Held as *required
- * absence* rather than skipped: if a table for either appears, this case goes red
- * and tells the editor to refresh the contract's own exclusions in the same commit.
+ * The one entity the PRD's paragraph names that no table models yet — a booking
+ * ledger is "later releases" work. Held as *required absence* rather than skipped:
+ * if a table for it appears, this case goes red and tells the editor to refresh the
+ * contract's own exclusions in the same commit.
  */
 const EXCLUDED_ENTITIES: Record<string, string> = {
   AdvertisementBooking: "booking",
-  Payment: "payment",
 };
 
 describe("the product requirements doc against the app it describes", () => {
@@ -125,12 +128,11 @@ describe("the product requirements doc against the app it describes", () => {
     }
   });
 
-  it("holds the two unmodeled entities to their documented absence", () => {
-    // The exclusion is part of the contract: no booking table and no payment table
-    // exist yet, and the paragraph names them anyway. A table that appears for
-    // either fails here, directing the editor to refresh the entity paragraph —
-    // the mapping above — rather than letting the contract and the schema agree
-    // by accident.
+  it("holds the unmodeled advertisement booking to its documented absence", () => {
+    // The exclusion is part of the contract: no booking table exists yet, and the
+    // paragraph names it anyway. A table that appears for it fails here, directing
+    // the editor to refresh the entity paragraph — the mapping above — rather than
+    // letting the contract and the schema agree by accident.
     for (const [entity, fragment] of Object.entries(EXCLUDED_ENTITIES)) {
       expect(schema.match(new RegExp(`pgTable\\("[^"]*${fragment}`)), entity).toBeNull();
     }

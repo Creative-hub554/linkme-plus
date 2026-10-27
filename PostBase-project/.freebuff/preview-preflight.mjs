@@ -123,6 +123,15 @@ import { join, resolve } from "node:path";
 
 const PROJECT_ROOT = process.cwd();
 
+// Desktop runners may omit System32 from PATH even when the tools are installed.
+function windowsTool(name) {
+  const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
+  const candidate = name === "powershell"
+    ? join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    : join(root, "System32", `${name}.exe`);
+  return existsSync(candidate) ? candidate : name;
+}
+
 /** The lock `vinext dev` writes and reads: `<root>/.vinext/dev/lock.json`. */
 const LOCK_PATH = join(PROJECT_ROOT, ".vinext", "dev", "lock.json");
 
@@ -368,7 +377,7 @@ function listenerOn(port) {
 
   const pids = new Set();
   for (const protocol of ["tcp", "tcpv6"]) {
-    const read = spawnSync("netstat", ["-ano", "-p", protocol], {
+    const read = spawnSync(windowsTool("netstat"), ["-ano", "-p", protocol], {
       encoding: "utf8",
       timeout: LOOKUP_TIMEOUT,
       windowsHide: true,
@@ -422,7 +431,7 @@ function processCommandLine(pid) {
   const script =
     `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
     "if ($p) { Write-Output $p.CommandLine }";
-  const read = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+  const read = spawnSync(windowsTool("powershell"), ["-NoProfile", "-NonInteractive", "-Command", script], {
     encoding: "utf8",
     timeout: LOOKUP_TIMEOUT,
     windowsHide: true,

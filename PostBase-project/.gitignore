@@ -1,3 +1,4 @@
+.tools/
 node_modules/
 .next/
 .env
@@ -5,6 +6,7 @@ node_modules/
 .wrangler/
 .dev.vars
 /dist/
+/sites-deploy/
 .vinext/
 .coverage/
 .ci/
@@ -18,17 +20,22 @@ node_modules/
 .freebuff/collect-apply-pr.md
 .freebuff/.collect-budget-samples/
 .freebuff/collect-gates.md
-# The rendered-links guard's coverage stamp: written by the suite's own close-out,
-# cleared by the runner's test stage at each attempt, read by the runbook's close.
-# Transient like the reporter's sidecars above.
-.freebuff/.rendered-links-coverage.txt
+# The rendered-links, scratch-paths and convention-guards coverage stamps:
+# written by the suites' own close-outs, cleared by the runner's test stage at
+# each attempt, read by the runbook's close. Transient like the reporter's
+# sidecars above.
+.freebuff/.*-coverage.txt
 # The poster's record of what it redacted before posting a comment: written beside the body
 # it maps to, so CI uploads it with the artifact that holds the raw text. Generated, not kept.
 *.redactions.json
 # Session scratch and build output, added at the initial commit
 .temp/
+.tmp/
 .vitest-out/
 *.tsbuildinfo
 .freebuff/*.exe
 .freebuff/*.log
 .freebuff/*.log.err
+/freebuff-sites-build/
+/.open-next/
+/.wrangler/
