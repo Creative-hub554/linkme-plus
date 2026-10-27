@@ -44,7 +44,10 @@ Production was deployed successfully on 2026-10-27 to `linkmeplus.com` and
 Remaining setup: an administrator must configure merchant KHQR and placements
 on `/advertising`, then verify the first real payment in the bank before approval.
 Do not treat a payment screenshot or reference alone as proof of bank credit.
-Preview credential propagation remains a separate verification item.
+Preview credential propagation was verified on 2026-10-27 after the release:
+`GET /api/jobs` returned seeded rows on both preview hosts, so both preview
+secret sets and the live Worker accept the rotated password (see the ledger in
+`credential-rotation.md`).
 
 The following sections retain the pre-release findings for reference.
 
@@ -53,10 +56,12 @@ The following sections retain the pre-release findings for reference.
 1. Complete the database password rotation in `credential-rotation.md`.
    The owner subsequently reported changing the password on 2026-10-27. A
    fresh local `SELECT 1` succeeded using `.env.local`; production `/`, `/jobs`,
-   and `/marketplace` returned HTTP 200 without a server-error page. Confirm
-   both preview consumers and the live Worker hold the rotated credential;
-   public responses alone cannot establish full propagation or rejection of
-   the old password. Never paste the password into chat.
+   and `/marketplace` returned HTTP 200 without a server-error page. The
+   propagation follow-up landed the same day: `GET /api/jobs` returned seeded
+   rows on both preview hosts and both production domains, so each consumer
+   accepts the rotated password. Rejection of the old password is implied by
+   the provider's reset, not tested directly. Never paste the password into
+   chat.
 2. Reconcile production creator functionality before replacing Worker code.
    Production's Supabase migration history includes creator boost, creator
    hub, collaboration/index, and scheduled drafts through migration 0024.
@@ -65,9 +70,12 @@ The following sections retain the pre-release findings for reference.
    filenames or creator schema declarations. Public route checks returned 404
    for `/creator`, `/creator-hub`, and `/creator-boost`; these paths do not
    establish whether other authenticated creator routes exist. Database
-   migration history alone does not prove those features are deployed. Identify
-   the source of the live release or establish its actual route behavior before
-   shipping.
+   migration history alone does not prove those features are deployed. The same
+   three paths were re-probed after the 2026-10-27 release on `linkmeplus.com`,
+   `www.linkmeplus.com` and both preview hosts and answered 404 everywhere, so
+   the deployed Worker serves no creator page at those paths; orphaned
+   migration history remains the simplest explanation. Authenticated-only
+   creator routes still cannot be ruled out by URL probing.
 3. Apply only compatible additive migrations after preflight. Production uses
    a different migration history: do not replay the local Drizzle journal.
    Local `0014_peaceful_franklin_richards.sql` and

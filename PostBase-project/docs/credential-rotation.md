@@ -96,9 +96,17 @@ the steps in one sitting; the expected outage is minutes, not hours.
 - 2026-10-27: owner reported changing the database password. A fresh local
   connection using `.env.local` completed `SELECT 1` successfully without
   printing credentials. Public production `/`, `/jobs`, and `/marketplace`
-  answered HTTP 200 without a server-error page. These checks do not prove
-  every preview secret was updated or that the old password is rejected;
-  downstream rotation verification remains incomplete.
+  answered HTTP 200 without a server-error page.
+
+- 2026-10-27: propagation verified where a credential lives. `GET /api/jobs`
+  answered 200 with seeded rows — a database read, not a cached page — on both
+  preview hosts (`site-fd727782…`, `site-bc8fada9…`), on `linkmeplus.com` and on
+  `www.linkmeplus.com`. That accepts the new password from all three consumers
+  (local `.env.local`, both preview secret sets, the production Worker). The old
+  password's rejection is implied by the provider invalidating it at reset; it
+  was not tested directly, and no credential value was read or printed. The
+  remaining rotation items are the ones no probe can settle: any `dist` copy
+  deletion and the ledger's checklist steps done in one sitting.
 
 - 2026-10-21: `#buffy_verify` throwaway verification account deleted (auth user
   + profile cascade, `remaining: 0`). Not a credential rotation; recorded
