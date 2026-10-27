@@ -15,3 +15,9 @@ test("lists marketplace categories without exposing other modules' categories", 
   });
   expect(fakeDb.selectParams[0]).toEqual(["marketplace"]);
 });
+test("answers 500 with its own message when the category read fails", async () => {
+  fakeDb.failNextSelect(categories, new Error("database unavailable"));
+  const response = await GET();
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: "Unable to load categories" });
+});

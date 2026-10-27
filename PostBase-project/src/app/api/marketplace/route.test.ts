@@ -80,6 +80,23 @@ describe("GET /api/marketplace", () => {
     }
   });
 
+  it("refuses a price filter that is not a non-negative safe integer", async () => {
+    for (const query of [
+      "minPrice=abc",
+      "minPrice=-1",
+      "minPrice=1.5",
+      "maxPrice=2147483648",
+      "maxPrice=abc",
+    ]) {
+      const response = await GET(new Request(`http://localhost/api/marketplace?${query}`));
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid price filter" });
+    }
+    // Refused before either read, so no cast reaches the database.
+    expectGatedNone("reads");
+  });
+
   it("returns one listing by id, with its media, inventory, variants and saved flag", async () => {
     fakeDb
       .selectReturns(marketplaceListings, [{ id: LISTING_ID, title: "Camera" }])
@@ -390,6 +407,16 @@ describe("GET /api/marketplace as a visitor", () => {
     expect(body.data[0].title).toBe("Camera");
   });
 
+  it("answers 401 to mine=true without a session, reading nothing", async () => {
+    session.userId = null;
+
+    const response = await GET(new Request("http://localhost/api/marketplace?mine=true"));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+    expectGatedNone("reads");
+  });
+
   it("reads one listing for a visitor and answers isSaved false without the saved read", async () => {
     session.userId = null;
     fakeDb
@@ -490,6 +517,25 @@ describe("POST /api/marketplace", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid category id" });
+    expectGatedNone("writes");
+  });
+
+  it("refuses a price that is not a non-negative safe integer, writing nothing", async () => {
+    for (const price of [
+      { priceMin: -1 },
+      { priceMin: 1.5 },
+      { priceMin: 2147483648 },
+      { priceMax: -1 },
+      { priceMax: 1.5 },
+      { priceMax: 2147483648 },
+    ]) {
+      const response = await POST(
+        jsonRequest("POST", "/api/marketplace", { title: "Camera", ...price }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid price" });
+    }
     expectGatedNone("writes");
   });
 

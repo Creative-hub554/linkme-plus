@@ -26,3 +26,33 @@ test("delivery requires verified payment, approved creative, live dates and elig
   expect(fakeDb.selectParams[0]).toContain("verified");
   expect(fakeDb.selectParams[0]).toContain("Technology");
 });
+
+test("delivery requires a known placement location", async () => {
+  const unknown = await GET(
+    new Request("http://localhost/api/advertising/serve?location=sidebar"),
+  );
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toEqual({
+    error: "Invalid advertising location",
+  });
+
+  const missing = await GET(
+    new Request("http://localhost/api/advertising/serve"),
+  );
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toEqual({
+    error: "Invalid advertising location",
+  });
+  expect(fakeDb.reads).toEqual([]);
+});
+
+test("a failed delivery read answers 503 rather than an empty ad slot", async () => {
+  fakeDb.failNextSelect(adCampaigns);
+  const response = await GET(
+    new Request("http://localhost/api/advertising/serve?location=feed"),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    error: "Advertising is temporarily unavailable",
+  });
+});

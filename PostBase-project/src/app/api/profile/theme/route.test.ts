@@ -51,6 +51,17 @@ vi.mock("@/lib/r2", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/profile-theme", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/profile-theme")>();
+  return {
+    ...actual,
+    // Every test uses the real validator. One test stubs its answer so the
+    // route's own decoration-count guard can be reached: a config the validator
+    // accepts is capped at the same maximum, so no real request can exceed it.
+    normalizeProfileThemeConfig: vi.fn(actual.normalizeProfileThemeConfig),
+  };
+});
+
 import { GET, POST } from "./route";
 import { ensureLocalUserProfile } from "@/lib/db/ensure-profile";
 import { profiles, users } from "@/lib/db/schema";
@@ -58,6 +69,8 @@ import { assertStorageConfigured, deleteStoredObjects, putObject } from "@/lib/r
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import {
   defaultProfileThemeBlocks,
+  MAX_PROFILE_THEME_DECORATIONS,
+  normalizeProfileThemeConfig,
   profileThemeLayouts,
   profileThemeStyles,
   standardProfileThemeConfig,
@@ -243,6 +256,17 @@ describe("POST /api/profile/theme", () => {
     expectGatedNone("writes");
   });
 
+  it("answers 500 with the parse message when the config is not JSON", async () => {
+    const response = await POST(saveRequest("not json"));
+
+    // The parse failure is answered by its own message, not by the outer
+    // handler carrying whatever `JSON.parse` happened to throw.
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Theme configuration must be valid JSON" });
+    expect(putObject).not.toHaveBeenCalled();
+    expectGatedNone("writes");
+  });
+
   it("refuses a config the model does not accept, uploading and writing nothing", async () => {
     for (const broken of [
       "not json",
@@ -262,6 +286,39 @@ describe("POST /api/profile/theme", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "Every unsaved decoration needs its file" });
+    expect(putObject).not.toHaveBeenCalled();
+    expectGatedNone("writes");
+  });
+
+  it("refuses more decoration files than the studio allows, before uploading", async () => {
+    // A config the validator accepts never carries more than the maximum, so
+    // this count guard is unreachable through a real request; the validator's
+    // own cap is pinned in its own test. Stubbing the accepted answer pins the
+    // route's last-line refusal, which must not fall through to the upload path.
+    const staged = Array.from({ length: MAX_PROFILE_THEME_DECORATIONS + 1 }, (_, index) => ({
+      id: `deco-${index}`,
+      url: null,
+      zone: "corner-top-left" as const,
+    }));
+    vi.mocked(normalizeProfileThemeConfig).mockReturnValueOnce({
+      ...VALID_CONFIG,
+      decorations: staged.map((decoration) => ({
+        ...decoration,
+        url: "https://placeholder.invalid/decoration",
+      })),
+    });
+
+    const response = await POST(
+      saveRequest(
+        { ...VALID_CONFIG, decorations: staged },
+        staged.map((_, index) => imageFile(`deco-${index}.png`)),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: `You can pin up to ${MAX_PROFILE_THEME_DECORATIONS} decorations`,
+    });
     expect(putObject).not.toHaveBeenCalled();
     expectGatedNone("writes");
   });

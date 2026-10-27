@@ -225,6 +225,16 @@ describe("GET /api/jobs as a visitor", () => {
     expect(body.data[0].title).toBe("Staff Engineer");
   });
 
+  it("answers 401 to manage=true without a session, reading nothing", async () => {
+    session.userId = null;
+
+    const response = await GET(new Request("http://localhost/api/jobs?manage=true"));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+    expectGatedNone("reads");
+  });
+
   it("reads one job for a visitor and answers hasApplied false without the application read", async () => {
     session.userId = null;
     fakeDb.selectReturns(jobs, [{ id: JOB_ID, title: "Staff Engineer" }]);

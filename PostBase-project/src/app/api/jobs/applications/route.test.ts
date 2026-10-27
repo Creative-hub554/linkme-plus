@@ -153,6 +153,75 @@ describe("POST /api/jobs/applications", () => {
     expectGatedNone("writes");
   });
 
+  it("refuses a cover letter that is not a string, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, coverLetter: 123 }),
+    );
+
+    expect(response.status).toBe(400);
+    // Not the presence guard and not the job read: the message is this guard's.
+    expect(await response.json()).toEqual({ error: "Invalid cover letter" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a cover letter longer than 10000 characters, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", {
+        jobId: JOB_ID,
+        coverLetter: "a".repeat(10001),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid cover letter" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a CV URL that cannot be parsed, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, cvUrl: "not a url" }),
+    );
+
+    expect(response.status).toBe(400);
+    // The parse throws inside the route's own try, and its own catch answers this
+    // message — not the application write's generic 500.
+    expect(await response.json()).toEqual({ error: "Invalid CV URL" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a CV URL whose protocol is not http or https, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", {
+        jobId: JOB_ID,
+        cvUrl: "ftp://test.r2.dev/cv/applicant-1.pdf",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "CV URL must use HTTP or HTTPS" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("treats an empty CV URL as no CV at all", async () => {
+    fakeDb
+      .selectReturns(jobs, [{ id: JOB_ID, status: "active" }])
+      .selectReturns(jobApplications, [])
+      .insertReturns(jobApplications, [{ id: APPLICATION_ID, status: "pending" }]);
+
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, cvUrl: "" }),
+    );
+
+    expect(response.status).toBe(201);
+    expectGatedSequence("writes", [
+      { table: "job_applications", values: expect.objectContaining({ jobId: JOB_ID, cvUrl: "" }) },
+    ]);
+  });
+
   it("answers 500 and writes nothing when the application insert fails", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb

@@ -74,3 +74,59 @@ test("a concurrent company creator reuses the winning company", async () => {
   fakeDb.selectReturns(pageRoles, [{ id: "admin-role" }]).selectReturns(pages, [{ name: "Studio" }]).selectReturns(companies, []).insertReturns(companies, []).selectReturns(companies, [{ id: "winner", name: "Studio" }]);
   const response = await POST(request({ pageId: PAGE })); expect(response.status).toBe(200); expect(await response.json()).toEqual({ company: { id: "winner", name: "Studio" } });
 });
+test("refuses a missing or malformed Page id, reading nothing", async () => {
+  for (const body of [{}, { pageId: "" }, { pageId: "not-a-page" }, { pageId: 42 }]) {
+    fakeDb.selectReturns(pageRoles, [{ id: "role" }]);
+    const response = await POST(request(body));
+    expect(response.status, JSON.stringify(body)).toBe(400);
+    expect(await response.json(), JSON.stringify(body)).toEqual({
+      error: "Select a valid Page",
+    });
+  }
+  // The id is checked before any read, so the scripted role row was not taken.
+  expect(fakeDb.reads).toEqual([]);
+  expect(fakeDb.writes).toEqual([]);
+});
+test("answers 404 when the Page no longer exists", async () => {
+  fakeDb
+    .selectReturns(pageRoles, [{ id: "role" }])
+    .selectReturns(pages, []);
+  const response = await POST(request({ pageId: PAGE }));
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: "Page not found" });
+  expect(fakeDb.writes).toEqual([]);
+});
+test("answers 409 when the conflicting insert's row cannot be reread", async () => {
+  fakeDb
+    .selectReturns(pageRoles, [{ id: "role" }])
+    .selectReturns(pages, [{ name: "Studio" }])
+    .selectReturns(companies, [])
+    .insertReturns(companies, [])
+    .selectReturns(companies, []);
+  const response = await POST(request({ pageId: PAGE }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: "Company creation conflicted. Please retry.",
+  });
+  expect(fakeDb.writes).toEqual([
+    { table: "companies", values: { pageId: PAGE, name: "Studio" } },
+  ]);
+});
+test("answers 500 when the company list cannot be read", async () => {
+  fakeDb.failNextSelect(companies, new Error("database unavailable"));
+  const response = await GET(new Request("http://localhost/api/companies"));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({
+    error: "Unable to load your companies",
+  });
+});
+test("answers 500 when the company cannot be inserted", async () => {
+  fakeDb
+    .selectReturns(pageRoles, [{ id: "role" }])
+    .selectReturns(pages, [{ name: "Studio" }])
+    .selectReturns(companies, [])
+    .failNextInsert(companies, new Error("database unavailable"));
+  const response = await POST(request({ pageId: PAGE }));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: "Unable to create company" });
+});

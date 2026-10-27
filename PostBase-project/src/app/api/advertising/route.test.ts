@@ -149,7 +149,9 @@ test("a member reads their campaigns beside the placements and KHQR settings", a
     .selectReturns(users, [{ role: "member" }])
     .selectReturns(adCampaigns, [row])
     .selectReturns(adPlacements, [{ id, location: "feed" }])
-    .selectReturns(adPaymentSettings, [{ id: "khqr", merchantName: "Merchant" }]);
+    .selectReturns(adPaymentSettings, [
+      { id: "khqr", merchantName: "Merchant" },
+    ]);
   const response = await GET(request("GET"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
@@ -166,7 +168,10 @@ test("a member reads their campaigns beside the placements and KHQR settings", a
 
 function bookingWindow(days: number) {
   const start = new Date(Date.now() + 86400000);
-  return { startDate: start, endDate: new Date(start.getTime() + days * 86400000) };
+  return {
+    startDate: start,
+    endDate: new Date(start.getTime() + days * 86400000),
+  };
 }
 
 test("promoting an active listing books against the listing's own media and category", async () => {
@@ -176,7 +181,11 @@ test("promoting an active listing books against the listing's own media and cate
       { id, dailyRate: 5000, currency: "KHR", location: "marketplace" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ])
     .selectReturns(marketplaceListings, [
       {
@@ -225,7 +234,11 @@ test("a sold-out listing cannot be promoted", async () => {
       { id, dailyRate: 5000, currency: "KHR", location: "marketplace" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ])
     .selectReturns(marketplaceListings, [
       {
@@ -259,7 +272,11 @@ test("boosting a Page post takes its headline and first image from the post", as
       { id, dailyRate: 7000, currency: "KHR", location: "feed" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ])
     .selectReturns(posts, [
       {
@@ -302,7 +319,11 @@ test("a non-administrator cannot boost a Page post", async () => {
       { id, dailyRate: 7000, currency: "KHR", location: "feed" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ])
     .selectReturns(posts, [
       {
@@ -337,11 +358,19 @@ test("pausing and resuming an owned campaign follows the payment state", async (
   expect((await PUT(request("PUT", { id, action: "pause" }))).status).toBe(200);
   expect(fakeDb.writes[0].values).toEqual({ status: "paused" });
 
-  fakeDb.selectReturns(adCampaigns, [owned]).selectReturns(adPayments, [{ status: "awaiting" }]);
-  expect((await PUT(request("PUT", { id, action: "resume" }))).status).toBe(409);
+  fakeDb
+    .selectReturns(adCampaigns, [owned])
+    .selectReturns(adPayments, [{ status: "awaiting" }]);
+  expect((await PUT(request("PUT", { id, action: "resume" }))).status).toBe(
+    409,
+  );
 
-  fakeDb.selectReturns(adCampaigns, [owned]).selectReturns(adPayments, [{ status: "verified" }]);
-  expect((await PUT(request("PUT", { id, action: "resume" }))).status).toBe(200);
+  fakeDb
+    .selectReturns(adCampaigns, [owned])
+    .selectReturns(adPayments, [{ status: "verified" }]);
+  expect((await PUT(request("PUT", { id, action: "resume" }))).status).toBe(
+    200,
+  );
   expect(fakeDb.writes.at(-1)?.values).toEqual({ status: "pending_review" });
 });
 
@@ -360,13 +389,210 @@ test("a campaign that has already ended cannot be changed", async () => {
   expect(fakeDb.writes).toEqual([]);
 });
 
+function bookablePlacement(location: "feed" | "marketplace" | "jobs") {
+  fakeDb
+    .selectReturns(adPlacements, [
+      { id, dailyRate: 5000, currency: "KHR", location },
+    ])
+    .selectReturns(adPaymentSettings, [
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
+    ]);
+}
+
 test("a booking must name a known campaign type and a real placement", async () => {
-  expect((await POST(request("POST", { type: "video" }))).status).toBe(400);
-  expect(
-    (await POST(request("POST", { type: "banner", placementId: "not-a-uuid" })))
-      .status,
-  ).toBe(400);
+  const invalidType = await POST(request("POST", { type: "video" }));
+  expect(invalidType.status).toBe(400);
+  expect(await invalidType.json()).toEqual({
+    error: "Select a valid campaign type and placement",
+  });
+
+  const nonStringPlacement = await POST(
+    request("POST", { type: "banner", placementId: 42 }),
+  );
+  expect(nonStringPlacement.status).toBe(400);
+  expect(await nonStringPlacement.json()).toEqual({
+    error: "Select a valid campaign type and placement",
+  });
+
+  const invalidPlacement = await POST(
+    request("POST", { type: "banner", placementId: "not-a-uuid" }),
+  );
+  expect(invalidPlacement.status).toBe(400);
+  expect(await invalidPlacement.json()).toEqual({
+    error: "Select a valid campaign type and placement",
+  });
   expect(fakeDb.reads).toEqual([]);
+});
+
+test("a campaign total beyond the stored budget limit is refused", async () => {
+  const body = {
+    type: "banner",
+    placementId: id,
+    ...bookingWindow(1),
+    headline: "Our shop",
+    imageUrl: "https://example.com/banner.png",
+    destinationUrl: "https://example.com",
+  };
+  fakeDb
+    .selectReturns(adPlacements, [
+      { id, dailyRate: 3000000000, currency: "KHR", location: "feed" },
+    ])
+    .selectReturns(adPaymentSettings, [
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
+    ]);
+  const overLimit = await POST(request("POST", body));
+  expect(overLimit.status).toBe(400);
+  expect(await overLimit.json()).toEqual({
+    error: "Campaign total is too large",
+  });
+
+  fakeDb
+    .selectReturns(adPlacements, [
+      { id, dailyRate: 1e300, currency: "KHR", location: "feed" },
+    ])
+    .selectReturns(adPaymentSettings, [
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
+    ]);
+  const notSafe = await POST(request("POST", body));
+  expect(notSafe.status).toBe(400);
+  expect(await notSafe.json()).toEqual({
+    error: "Campaign total is too large",
+  });
+  expect(fakeDb.writes).toEqual([]);
+});
+
+test("a promotion or boost must carry a uuid source", async () => {
+  for (const extra of [{}, { sourceId: 42 }, { sourceId: "not-a-uuid" }]) {
+    bookablePlacement("feed");
+    const response = await POST(
+      request("POST", {
+        type: "boost",
+        placementId: id,
+        ...bookingWindow(1),
+        ...extra,
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Select a valid source post or listing",
+    });
+  }
+  expect(fakeDb.writes).toEqual([]);
+});
+
+test("a listing promotion must use a marketplace placement", async () => {
+  bookablePlacement("feed");
+  const response = await POST(
+    request("POST", {
+      type: "promotion",
+      placementId: id,
+      sourceId: "33333333-3333-4333-8333-333333333333",
+      ...bookingWindow(1),
+    }),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: "Listing promotions belong in marketplace placements",
+  });
+  expect(fakeDb.reads).toEqual(["ad_placements", "ad_payment_settings"]);
+  expect(fakeDb.writes).toEqual([]);
+});
+
+test("only the caller's active, undeleted listings can be promoted", async () => {
+  const listingId = "33333333-3333-4333-8333-333333333333";
+  const owned = {
+    id: listingId,
+    sellerId: auth.id,
+    status: "active",
+    deletedAt: null,
+    title: "Vintage chair",
+  };
+  const cases = [
+    [],
+    [{ ...owned, sellerId: "someone-else" }],
+    [{ ...owned, status: "draft" }],
+    [{ ...owned, deletedAt: new Date() }],
+  ];
+  for (const rows of cases) {
+    bookablePlacement("marketplace");
+    fakeDb.selectReturns(marketplaceListings, rows);
+    const response = await POST(
+      request("POST", {
+        type: "promotion",
+        placementId: id,
+        sourceId: listingId,
+        ...bookingWindow(1),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Only your active listings can be promoted",
+    });
+  }
+  expect(fakeDb.writes).toEqual([]);
+});
+
+test("a post boost must use a feed placement", async () => {
+  bookablePlacement("marketplace");
+  const response = await POST(
+    request("POST", {
+      type: "boost",
+      placementId: id,
+      sourceId: "44444444-4444-4444-8444-444444444444",
+      ...bookingWindow(1),
+    }),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: "Boosted posts belong in feed placements",
+  });
+  expect(fakeDb.writes).toEqual([]);
+});
+
+test("a boost must target a published, public, undeleted Page post", async () => {
+  const postId = "44444444-4444-4444-8444-444444444444";
+  const published = {
+    id: postId,
+    pageId: "page-1",
+    visibility: "public",
+    deletedAt: null,
+    content: "Page news",
+  };
+  const cases = [
+    [],
+    [{ ...published, pageId: null }],
+    [{ ...published, visibility: "private" }],
+    [{ ...published, deletedAt: new Date() }],
+  ];
+  for (const rows of cases) {
+    bookablePlacement("feed");
+    fakeDb.selectReturns(posts, rows);
+    const response = await POST(
+      request("POST", {
+        type: "boost",
+        placementId: id,
+        sourceId: postId,
+        ...bookingWindow(1),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Choose a published public Page post",
+    });
+  }
+  expect(fakeDb.writes).toEqual([]);
 });
 
 test("a booking window must start in the future and cover at most 90 days", async () => {
@@ -417,7 +643,11 @@ test("a placement with no rate or no matching KHQR agreement is refused", async 
       { id, dailyRate: 5000, currency: "KHR", location: "feed" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "USD" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "USD",
+      },
     ]);
   expect((await POST(request("POST", body))).status).toBe(503);
 });
@@ -428,7 +658,11 @@ test("a banner must carry a headline, destination and image", async () => {
       { id, dailyRate: 5000, currency: "KHR", location: "feed" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ]);
   const response = await POST(
     request("POST", {
@@ -457,7 +691,11 @@ test("a failed booking write does not report success", async () => {
       { id, dailyRate: 5000, currency: "KHR", location: "feed" },
     ])
     .selectReturns(adPaymentSettings, [
-      { merchantName: "Merchant", qrImageUrl: "https://example.com/khqr.png", currency: "KHR" },
+      {
+        merchantName: "Merchant",
+        qrImageUrl: "https://example.com/khqr.png",
+        currency: "KHR",
+      },
     ])
     .failNextInsert(adCampaigns);
   const response = await POST(
@@ -477,9 +715,9 @@ test("a failed booking write does not report success", async () => {
 });
 
 test("a payment must name a campaign and carry a reference and payer", async () => {
-  expect((await PUT(request("PUT", { id: "nope", action: "payment" }))).status).toBe(
-    400,
-  );
+  expect(
+    (await PUT(request("PUT", { id: "nope", action: "payment" }))).status,
+  ).toBe(400);
   fakeDb.selectReturns(adCampaigns, [
     {
       id,
@@ -548,7 +786,10 @@ test("a duplicate transaction reference is reported against the campaign", async
       },
     ])
     .selectReturns(adPayments, [{ status: "awaiting" }])
-    .failNextUpdate(adPayments, Object.assign(new Error("duplicate"), { code: "23505" }));
+    .failNextUpdate(
+      adPayments,
+      Object.assign(new Error("duplicate"), { code: "23505" }),
+    );
   const response = await PUT(
     request("PUT", {
       id,

@@ -19,3 +19,23 @@ test("promotion sources are scoped to owned listings and administered public Pag
   expect(fakeDb.selectParams[1]).toContain("admin");
   expect(fakeDb.selectParams[1]).toContain("public");
 });
+
+test("a failed promotion source read answers 500 rather than an empty picker", async () => {
+  fakeDb.failNextSelect(marketplaceListings);
+  const listingsFailure = await GET(
+    new Request("http://localhost/api/advertising/sources"),
+  );
+  expect(listingsFailure.status).toBe(500);
+  expect(await listingsFailure.json()).toEqual({
+    error: "Unable to load promotion sources",
+  });
+
+  fakeDb.selectReturns(marketplaceListings, []).failNextSelect(posts);
+  const postsFailure = await GET(
+    new Request("http://localhost/api/advertising/sources"),
+  );
+  expect(postsFailure.status).toBe(500);
+  expect(await postsFailure.json()).toEqual({
+    error: "Unable to load promotion sources",
+  });
+});

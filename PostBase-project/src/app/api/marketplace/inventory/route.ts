@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     if (typeof inventoryId !== "string" || !isUuid(inventoryId)) return errorResponse("Invalid inventory ID");
     if (!["added", "sold", "damaged", "expired", "adjusted", "returned"].includes(type)) return errorResponse("Invalid movement type");
     if (!Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647 || (type !== "adjusted" && quantity === 0)) return errorResponse("Quantity must be a valid non-negative whole number");
-    if (variantId) return errorResponse("Adjust the base product here; variant stock adjustments are not supported");
+    if (variantId) return errorResponse("Adjust the base product here — variant stock adjustments are not supported");
     if (reason !== undefined && (typeof reason !== "string" || reason.length > 100)) return errorResponse("Reason must be at most 100 characters");
 
     return await db.transaction(async tx => {
