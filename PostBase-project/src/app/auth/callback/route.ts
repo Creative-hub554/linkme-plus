@@ -71,6 +71,8 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
+      // Password recovery must remain usable when the application database is down.
+      if (next === "/reset-password") return NextResponse.redirect(`${origin}${next}`);
       try {
         await provisionUser(data.user);
         return NextResponse.redirect(`${origin}${next}`);

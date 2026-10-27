@@ -144,3 +144,9 @@ describe("GET /auth/callback", () => {
     }
   });
 });
+it("reaches password recovery without requiring application database provisioning", async () => {
+  exchange.mockResolvedValue({ data: { user: USER }, error: null });
+  const response = await GET(callback("?code=recovery-code&next=/reset-password"));
+  expect(located(response)).toBe("http://localhost/reset-password");
+  expect(fakeDb.reads).toEqual([]);
+});
