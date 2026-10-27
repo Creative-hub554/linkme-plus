@@ -1,3 +1,4 @@
+import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { reports, users, reportStatusEnum } from "@/lib/db/schema";
 import { requireAuth, errorResponse, paginatedResponse } from "@/lib/api-helpers";
@@ -25,9 +26,7 @@ export async function GET(request: Request) {
     requestedStatus === "all"
       ? "all"
       : reportStatusEnum.enumValues.find((value) => value === requestedStatus) ?? "pending";
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const offset = (page - 1) * limit;
+  const { page, limit, offset } = offsetPagination(url.searchParams);
 
   try {
     const result = await db

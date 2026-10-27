@@ -164,6 +164,7 @@ describe("POST /api/admin/moderate", () => {
     // action and reason; the report is then resolved; the audit row records the
     // same action under `moderation.`.
     expectGatedSequence("writes", [
+      { table: "posts", values: { deletedAt: expect.any(Date) } },
       {
         table: "moderation_actions",
         values: {
@@ -204,4 +205,11 @@ describe("POST /api/admin/moderate", () => {
       "audit_logs",
     ]);
   });
+});
+it("dismisses a report without recording a content removal", async () => {
+  scriptAdminAndReport("pending");
+  const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "dismiss", reason: "No violation" }));
+  expect(response.status).toBe(201);
+  expect(fakeDb.writes.map(write => write.table)).toEqual(["reports", "audit_logs"]);
+  expect(fakeDb.writes[0].values).toEqual({ status: "dismissed" });
 });
