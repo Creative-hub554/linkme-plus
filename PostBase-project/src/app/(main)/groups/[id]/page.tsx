@@ -26,6 +26,7 @@ interface GroupPostMedia {
 }
 
 interface GroupPost {
+  topicId?: string | null;
   id: string;
   content?: string | null;
   createdAt: string;
@@ -262,6 +263,7 @@ export default function GroupView() {
               );
               return (
                 <PostCard
+                  topicId={post.topicId}
                   key={post.id}
                   id={post.id}
                   // The member who wrote it, which is who a group post is by: a

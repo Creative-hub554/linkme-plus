@@ -1,0 +1,45 @@
+__vite_ssr_exportName__("useAmbientPlayback", () => { try { return useAmbientPlayback } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useEffect","useState"]});
+"use client";
+
+/**
+* Whether something that moves on its own — the landing page's live preview, the
+* sign-in page's live visual — should be moving right now.
+*
+* The answer is the system's motion preference read once at mount and again whenever
+* it changes, *and then* whatever the viewer last said. The preference can only ever
+* start it stopped, never start it moving, and the play control overrides a
+* preference that would keep it still. That is the whole reason the preference is
+* read here rather than inside a caller's interval: a guard in the interval can only
+* ever refuse the viewer, which is exactly how both of those surfaces once sat
+* motionless under a button that claimed to be playing, with no way to start them.
+*
+* It lives in one place because there are two of these now, they share this policy
+* exactly, and differ only in their cadence and their content — a copied rule is a
+* place for the two to disagree later.
+*
+* `true` is the initial value rather than a read of `matchMedia`, because the server
+* renders these components too and cannot know the preference: reading it during the
+* first render would make the two disagree about which button to draw. `true` is what
+* the server draws, and the effect below corrects it a frame later on a device that
+* asked for stillness.
+*/
+function useAmbientPlayback(defaultPlaying = true) {
+	const [playing, setPlaying] = (0,__vite_ssr_import_0__.useState)(defaultPlaying);
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+		const honourPreference = () => {
+			// A viewer who turns the preference on mid-visit stops whatever is moving,
+			// rather than watching it run to the end of the session.
+			if (query.matches) setPlaying(false);
+		};
+		honourPreference();
+		query.addEventListener("change", honourPreference);
+		return () => query.removeEventListener("change", honourPreference);
+	}, []);
+	return [playing, setPlaying];
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBRkE7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQTBCTyxTQUFTLG1CQUNkLGlCQUFpQixNQUM2QjtDQUM5QyxNQUFNLENBQUMsU0FBUyxjQUFjLG1DQUFTLGNBQWM7Q0FFckQsMENBQWdCO0VBQ2QsTUFBTSxRQUFRLE9BQU8sV0FBVyxrQ0FBa0M7RUFDbEUsTUFBTSx5QkFBeUI7OztHQUc3QixJQUFJLE1BQU0sU0FBUyxXQUFXLEtBQUs7RUFDckM7RUFDQSxpQkFBaUI7RUFDakIsTUFBTSxpQkFBaUIsVUFBVSxnQkFBZ0I7RUFDakQsYUFBYSxNQUFNLG9CQUFvQixVQUFVLGdCQUFnQjtDQUNuRSxHQUFHLENBQUMsQ0FBQztDQUVMLE9BQU8sQ0FBQyxTQUFTLFVBQVU7QUFDN0IiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInVzZS1hbWJpZW50LXBsYXliYWNrLnRzIl0sInNvdXJjZXNDb250ZW50IjpbIlwidXNlIGNsaWVudFwiO1xuXG5pbXBvcnQgeyB1c2VFZmZlY3QsIHVzZVN0YXRlLCB0eXBlIERpc3BhdGNoLCB0eXBlIFNldFN0YXRlQWN0aW9uIH0gZnJvbSBcInJlYWN0XCI7XG5cbi8qKlxuICogV2hldGhlciBzb21ldGhpbmcgdGhhdCBtb3ZlcyBvbiBpdHMgb3duIOKAlCB0aGUgbGFuZGluZyBwYWdlJ3MgbGl2ZSBwcmV2aWV3LCB0aGVcbiAqIHNpZ24taW4gcGFnZSdzIGxpdmUgdmlzdWFsIOKAlCBzaG91bGQgYmUgbW92aW5nIHJpZ2h0IG5vdy5cbiAqXG4gKiBUaGUgYW5zd2VyIGlzIHRoZSBzeXN0ZW0ncyBtb3Rpb24gcHJlZmVyZW5jZSByZWFkIG9uY2UgYXQgbW91bnQgYW5kIGFnYWluIHdoZW5ldmVyXG4gKiBpdCBjaGFuZ2VzLCAqYW5kIHRoZW4qIHdoYXRldmVyIHRoZSB2aWV3ZXIgbGFzdCBzYWlkLiBUaGUgcHJlZmVyZW5jZSBjYW4gb25seSBldmVyXG4gKiBzdGFydCBpdCBzdG9wcGVkLCBuZXZlciBzdGFydCBpdCBtb3ZpbmcsIGFuZCB0aGUgcGxheSBjb250cm9sIG92ZXJyaWRlcyBhXG4gKiBwcmVmZXJlbmNlIHRoYXQgd291bGQga2VlcCBpdCBzdGlsbC4gVGhhdCBpcyB0aGUgd2hvbGUgcmVhc29uIHRoZSBwcmVmZXJlbmNlIGlzXG4gKiByZWFkIGhlcmUgcmF0aGVyIHRoYW4gaW5zaWRlIGEgY2FsbGVyJ3MgaW50ZXJ2YWw6IGEgZ3VhcmQgaW4gdGhlIGludGVydmFsIGNhbiBvbmx5XG4gKiBldmVyIHJlZnVzZSB0aGUgdmlld2VyLCB3aGljaCBpcyBleGFjdGx5IGhvdyBib3RoIG9mIHRob3NlIHN1cmZhY2VzIG9uY2Ugc2F0XG4gKiBtb3Rpb25sZXNzIHVuZGVyIGEgYnV0dG9uIHRoYXQgY2xhaW1lZCB0byBiZSBwbGF5aW5nLCB3aXRoIG5vIHdheSB0byBzdGFydCB0aGVtLlxuICpcbiAqIEl0IGxpdmVzIGluIG9uZSBwbGFjZSBiZWNhdXNlIHRoZXJlIGFyZSB0d28gb2YgdGhlc2Ugbm93LCB0aGV5IHNoYXJlIHRoaXMgcG9saWN5XG4gKiBleGFjdGx5LCBhbmQgZGlmZmVyIG9ubHkgaW4gdGhlaXIgY2FkZW5jZSBhbmQgdGhlaXIgY29udGVudCDigJQgYSBjb3BpZWQgcnVsZSBpcyBhXG4gKiBwbGFjZSBmb3IgdGhlIHR3byB0byBkaXNhZ3JlZSBsYXRlci5cbiAqXG4gKiBgdHJ1ZWAgaXMgdGhlIGluaXRpYWwgdmFsdWUgcmF0aGVyIHRoYW4gYSByZWFkIG9mIGBtYXRjaE1lZGlhYCwgYmVjYXVzZSB0aGUgc2VydmVyXG4gKiByZW5kZXJzIHRoZXNlIGNvbXBvbmVudHMgdG9vIGFuZCBjYW5ub3Qga25vdyB0aGUgcHJlZmVyZW5jZTogcmVhZGluZyBpdCBkdXJpbmcgdGhlXG4gKiBmaXJzdCByZW5kZXIgd291bGQgbWFrZSB0aGUgdHdvIGRpc2FncmVlIGFib3V0IHdoaWNoIGJ1dHRvbiB0byBkcmF3LiBgdHJ1ZWAgaXMgd2hhdFxuICogdGhlIHNlcnZlciBkcmF3cywgYW5kIHRoZSBlZmZlY3QgYmVsb3cgY29ycmVjdHMgaXQgYSBmcmFtZSBsYXRlciBvbiBhIGRldmljZSB0aGF0XG4gKiBhc2tlZCBmb3Igc3RpbGxuZXNzLlxuICovXG5leHBvcnQgZnVuY3Rpb24gdXNlQW1iaWVudFBsYXliYWNrKFxuICBkZWZhdWx0UGxheWluZyA9IHRydWUsXG4pOiBbYm9vbGVhbiwgRGlzcGF0Y2g8U2V0U3RhdGVBY3Rpb248Ym9vbGVhbj4+XSB7XG4gIGNvbnN0IFtwbGF5aW5nLCBzZXRQbGF5aW5nXSA9IHVzZVN0YXRlKGRlZmF1bHRQbGF5aW5nKTtcblxuICB1c2VFZmZlY3QoKCkgPT4ge1xuICAgIGNvbnN0IHF1ZXJ5ID0gd2luZG93Lm1hdGNoTWVkaWEoXCIocHJlZmVycy1yZWR1Y2VkLW1vdGlvbjogcmVkdWNlKVwiKTtcbiAgICBjb25zdCBob25vdXJQcmVmZXJlbmNlID0gKCkgPT4ge1xuICAgICAgLy8gQSB2aWV3ZXIgd2hvIHR1cm5zIHRoZSBwcmVmZXJlbmNlIG9uIG1pZC12aXNpdCBzdG9wcyB3aGF0ZXZlciBpcyBtb3ZpbmcsXG4gICAgICAvLyByYXRoZXIgdGhhbiB3YXRjaGluZyBpdCBydW4gdG8gdGhlIGVuZCBvZiB0aGUgc2Vzc2lvbi5cbiAgICAgIGlmIChxdWVyeS5tYXRjaGVzKSBzZXRQbGF5aW5nKGZhbHNlKTtcbiAgICB9O1xuICAgIGhvbm91clByZWZlcmVuY2UoKTtcbiAgICBxdWVyeS5hZGRFdmVudExpc3RlbmVyKFwiY2hhbmdlXCIsIGhvbm91clByZWZlcmVuY2UpO1xuICAgIHJldHVybiAoKSA9PiBxdWVyeS5yZW1vdmVFdmVudExpc3RlbmVyKFwiY2hhbmdlXCIsIGhvbm91clByZWZlcmVuY2UpO1xuICB9LCBbXSk7XG5cbiAgcmV0dXJuIFtwbGF5aW5nLCBzZXRQbGF5aW5nXTtcbn1cbiJdLCJmaWxlIjoiL3NyYy9ob29rcy91c2UtYW1iaWVudC1wbGF5YmFjay50cyJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvaG9va3MvdXNlLWFtYmllbnQtcGxheWJhY2sudHMiLCIvc3JjL2hvb2tzL3VzZS1hbWJpZW50LXBsYXliYWNrLnRzIixbXV0=

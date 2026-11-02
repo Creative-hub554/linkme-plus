@@ -70,7 +70,7 @@ beforeEach(() => {
 describe("POST /api/jobs/applications", () => {
   it("records the applicant as the session's user, not the body's", async () => {
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [])
       .insertReturns(jobApplications, [{ id: APPLICATION_ID, status: "pending" }]);
 
@@ -117,7 +117,7 @@ describe("POST /api/jobs/applications", () => {
     // The duplicate check is the route's own guard: a row already there for
     // (job, user) means the request stops before the insert.
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [{ id: APPLICATION_ID }]);
 
     const response = await POST(
@@ -208,7 +208,7 @@ describe("POST /api/jobs/applications", () => {
 
   it("treats an empty CV URL as no CV at all", async () => {
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID, status: "active" }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active" }])
       .selectReturns(jobApplications, [])
       .insertReturns(jobApplications, [{ id: APPLICATION_ID, status: "pending" }]);
 
@@ -225,7 +225,7 @@ describe("POST /api/jobs/applications", () => {
   it("answers 500 and writes nothing when the application insert fails", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [])
       .failNextInsert(jobApplications, new Error("database unavailable"));
     try {
@@ -520,13 +520,13 @@ describe("GET /api/jobs/applications", () => {
   });
 });
 it("rejects applications after a job closes or its deadline passes", async () => {
-  fakeDb.selectReturns(jobs, [{ id: JOB_ID, status: "closed" }]);
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "closed" }]);
   expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
-  fakeDb.selectReturns(jobs, [{ id: JOB_ID, status: "active", deadline: new Date("2020-01-01") }]);
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active", deadline: new Date("2020-01-01") }]);
   expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
   expect(fakeDb.writes).toEqual([]);
 });
 it("answers a concurrent application conflict without reporting a second success", async () => {
-  fakeDb.selectReturns(jobs, [{ id: JOB_ID, status: "active" }]).selectReturns(jobApplications, []).insertReturns(jobApplications, []);
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active" }]).selectReturns(jobApplications, []).insertReturns(jobApplications, []);
   expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
 });

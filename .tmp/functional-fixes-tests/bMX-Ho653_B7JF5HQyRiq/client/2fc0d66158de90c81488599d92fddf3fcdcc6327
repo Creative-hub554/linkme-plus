@@ -1,0 +1,27 @@
+__vite_ssr_exportName__("THEME_ICONS", () => { try { return THEME_ICONS } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Monitor","Moon","Sun"]});
+
+/**
+* One icon per theme, in one place.
+*
+* Every picker of the theme draws its glyphs here — the settings card and the
+* nav's mobile panel (both through `ThemeChoiceGroup`) and the nav's account
+* menu (`ThemeMenuItems`) — and they must not disagree about which glyph means
+* "System". The label comes from `THEMES` in `theme.ts`; this is the picture
+* beside it.
+*
+* Not in `theme.ts`, and the reason is bundle-shaped rather than tidy: that
+* module is imported by the database schema and by an API route that returns
+* JSON, so putting three icon components behind it would ship them to the
+* server for a route that never draws anything. Nothing on the server imports
+* this file.
+*/
+const THEME_ICONS = {
+	light: __vite_ssr_import_0__.Sun,
+	dark: __vite_ssr_import_0__.Moon,
+	system: __vite_ssr_import_0__.Monitor
+};
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7Ozs7Ozs7Ozs7Ozs7OztBQWtCTyxNQUFNLGNBQWM7Q0FDekIsT0FBTztDQUNQLE1BQU07Q0FDTixRQUFRO0FBQ1YiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInRoZW1lLWljb25zLnRzIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IE1vbml0b3IsIE1vb24sIFN1biB9IGZyb20gXCJsdWNpZGUtcmVhY3RcIjtcbmltcG9ydCB0eXBlIHsgVGhlbWVDaG9pY2UgfSBmcm9tIFwiQC9saWIvdGhlbWVcIjtcblxuLyoqXG4gKiBPbmUgaWNvbiBwZXIgdGhlbWUsIGluIG9uZSBwbGFjZS5cbiAqXG4gKiBFdmVyeSBwaWNrZXIgb2YgdGhlIHRoZW1lIGRyYXdzIGl0cyBnbHlwaHMgaGVyZSDigJQgdGhlIHNldHRpbmdzIGNhcmQgYW5kIHRoZVxuICogbmF2J3MgbW9iaWxlIHBhbmVsIChib3RoIHRocm91Z2ggYFRoZW1lQ2hvaWNlR3JvdXBgKSBhbmQgdGhlIG5hdidzIGFjY291bnRcbiAqIG1lbnUgKGBUaGVtZU1lbnVJdGVtc2ApIOKAlCBhbmQgdGhleSBtdXN0IG5vdCBkaXNhZ3JlZSBhYm91dCB3aGljaCBnbHlwaCBtZWFuc1xuICogXCJTeXN0ZW1cIi4gVGhlIGxhYmVsIGNvbWVzIGZyb20gYFRIRU1FU2AgaW4gYHRoZW1lLnRzYDsgdGhpcyBpcyB0aGUgcGljdHVyZVxuICogYmVzaWRlIGl0LlxuICpcbiAqIE5vdCBpbiBgdGhlbWUudHNgLCBhbmQgdGhlIHJlYXNvbiBpcyBidW5kbGUtc2hhcGVkIHJhdGhlciB0aGFuIHRpZHk6IHRoYXRcbiAqIG1vZHVsZSBpcyBpbXBvcnRlZCBieSB0aGUgZGF0YWJhc2Ugc2NoZW1hIGFuZCBieSBhbiBBUEkgcm91dGUgdGhhdCByZXR1cm5zXG4gKiBKU09OLCBzbyBwdXR0aW5nIHRocmVlIGljb24gY29tcG9uZW50cyBiZWhpbmQgaXQgd291bGQgc2hpcCB0aGVtIHRvIHRoZVxuICogc2VydmVyIGZvciBhIHJvdXRlIHRoYXQgbmV2ZXIgZHJhd3MgYW55dGhpbmcuIE5vdGhpbmcgb24gdGhlIHNlcnZlciBpbXBvcnRzXG4gKiB0aGlzIGZpbGUuXG4gKi9cbmV4cG9ydCBjb25zdCBUSEVNRV9JQ09OUyA9IHtcbiAgbGlnaHQ6IFN1bixcbiAgZGFyazogTW9vbixcbiAgc3lzdGVtOiBNb25pdG9yLFxufSBzYXRpc2ZpZXMgUmVjb3JkPFRoZW1lQ2hvaWNlLCB0eXBlb2YgU3VuPjtcbiJdLCJmaWxlIjoiL3NyYy9saWIvdGhlbWUtaWNvbnMudHMifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvbGliL3RoZW1lLWljb25zLnRzIiwiL3NyYy9saWIvdGhlbWUtaWNvbnMudHMiLFtdXQ==

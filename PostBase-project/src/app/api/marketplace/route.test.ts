@@ -38,6 +38,8 @@ import {
   marketplaceListings,
   productVariants,
   savedListings,
+  users,
+  accountSubscriptions,
 } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedInsert, expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
@@ -60,6 +62,29 @@ beforeEach(() => {
   resetFakeDb();
   vi.clearAllMocks();
   session.userId = "seller-1";
+  fakeDb.selectReturns(users, [{ id: "seller-1" }]);
+});
+
+it("blocks the 51st stored product before any insert", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ total: 50 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  const response = await POST(jsonRequest("POST", "/api/marketplace", { title: "One too many" }));
+  expect(response.status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+
+it("blocks publication of a 31st public product without deleting its draft", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ id: LISTING_ID, sellerId: "seller-1", status: "draft" }]);
+  fakeDb.selectReturns(marketplaceListings, [{ total: 40 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  const response = await PUT(jsonRequest("PUT", "/api/marketplace", { id: LISTING_ID, status: "active" }));
+  expect(response.status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+
+it("uses a paid seller tier without counting stock units or variants", async () => {
+  fakeDb.selectReturns(accountSubscriptions, [{ tier: "pro" }]);
+  fakeDb.selectReturns(marketplaceListings, [{ total: 50 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  fakeDb.insertReturns(marketplaceListings, [{ id: LISTING_ID }]);
+  expect((await POST(jsonRequest("POST", "/api/marketplace", { title: "A Pro product" }))).status).toBe(201);
 });
 
 describe("GET /api/marketplace", () => {

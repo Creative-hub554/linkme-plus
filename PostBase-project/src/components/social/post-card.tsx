@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ReportPostDialog } from "@/components/social/report-post-dialog";
 import { PostOptionsMenu } from "@/components/social/post-options-menu";
 import type { PostEdit } from "@/components/social/post-edit-dialog";
+import { feedTopics } from "@/lib/feed-topics";
 
 interface Author {
   name: string;
@@ -37,6 +38,7 @@ export interface PostActivity {
 }
 
 interface PostCardProps {
+  topicId?: string | null;
   id: string;
   author: Author;
   content: string;
@@ -107,7 +109,7 @@ function useReconciledCount(authoritative: number) {
 
 const stickers = ["❤️", "😂", "🔥", "👏", "🎉", "😍"];
 
-export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false }: PostCardProps) {
+export function PostCard({ id, topicId, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false }: PostCardProps) {
   const [liked, setLiked] = useState(initialLiked);
   const [reaction, setReaction] = useState<string | null>(initialLiked ? "like" : null);
   const [saved, setSaved] = useState(initialSaved);
@@ -302,6 +304,7 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
       className={cn("overflow-visible border-surface-border/90 shadow-sm transition-shadow", pending ? "opacity-70" : "hover:shadow-md")}
     >
       <CardContent className="p-4 sm:p-5">
+        {topicId && <span className="text-xs text-muted-foreground">{feedTopics.find(topic => topic.id === topicId)?.en}</span>}
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10 shrink-0 ring-2 ring-brand-blue/10">
             <AvatarImage src={author.avatar} alt={`${author.name}'s profile picture`} />
@@ -344,6 +347,7 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
               </div>
               {!pending && (onDelete
                 ? <PostOptionsMenu
+                  topicId={topicId}
                     postId={id}
                     content={content}
                     visibility={visibility}

@@ -1,0 +1,106 @@
+__vite_ssr_exportName__("TypingIndicator", () => { try { return TypingIndicator } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useEffect","useState"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/hooks/use-websocket.ts", {"importedNames":["useWebSocket"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/realtime/typing-indicator.tsx";
+
+function TypingIndicator({ conversationId, className }) {
+	const [typingUsers, setTypingUsers] = (0,__vite_ssr_import_0__.useState)([]);
+	const { lastMessage } = (0,__vite_ssr_import_1__.useWebSocket)();
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		if (!lastMessage || lastMessage.conversationId !== conversationId) return;
+		switch (lastMessage.type) {
+			case "typing": {
+				const { userId, timestamp } = lastMessage;
+				if (typeof userId !== "string" || typeof timestamp !== "number") break;
+				setTypingUsers((prev) => {
+					// Don't add duplicate users
+					if (prev.some((u) => u.userId === userId)) {
+						return prev;
+					};
+					return [...prev, {
+						userId,
+						timestamp
+					}];
+				});
+				break;
+			}
+			case "stop-typing": {
+				const { userId } = lastMessage;
+				if (typeof userId !== "string") break;
+				setTypingUsers((prev) => prev.filter((u) => u.userId !== userId));
+				break;
+			}
+			case "message": {
+				// Remove user from typing when they send a message
+				const { userId } = lastMessage;
+				if (typeof userId !== "string") break;
+				setTypingUsers((prev) => prev.filter((u) => u.userId !== userId));
+				break;
+			}
+		}
+	}, [lastMessage, conversationId]);
+	// Auto-remove stale typing indicators after 5 seconds
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		const interval = setInterval(() => {
+			const now = Date.now();
+			setTypingUsers((prev) => prev.filter((u) => now - u.timestamp < 5e3));
+		}, 1e3);
+		return () => clearInterval(interval);
+	}, []);
+	if (typingUsers.length === 0) return null;
+	const text = typingUsers.length === 1 ? "Someone is typing" : typingUsers.length === 2 ? "2 people are typing" : "Several people are typing";
+	return /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("div", {
+		className: (0,__vite_ssr_import_2__.cn)("flex items-center gap-2 text-sm text-muted-foreground", className),
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("div", {
+			className: "flex gap-1",
+			children: [
+				/* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("span", {
+					className: "h-1.5 w-1.5 rounded-full bg-brand-blue animate-bounce",
+					style: { animationDelay: "0ms" }
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 83,
+					columnNumber: 9
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("span", {
+					className: "h-1.5 w-1.5 rounded-full bg-brand-blue animate-bounce",
+					style: { animationDelay: "150ms" }
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 84,
+					columnNumber: 9
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("span", {
+					className: "h-1.5 w-1.5 rounded-full bg-brand-blue animate-bounce",
+					style: { animationDelay: "300ms" }
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 85,
+					columnNumber: 9
+				}, this)
+			]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 82,
+			columnNumber: 7
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("span", { children: text }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 87,
+			columnNumber: 7
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 81,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTs7QUFKQTs7Ozs7O0FBZ0JPLFNBQVMsZ0JBQWdCLEVBQUUsZ0JBQWdCLGFBQW1DO0NBQ25GLE1BQU0sQ0FBQyxhQUFhLGtCQUFrQixtQ0FBdUIsQ0FBQyxDQUFDO0NBQy9ELE1BQU0sRUFBRSxnQkFBZ0Isd0NBQWE7Q0FFckMsMENBQWdCO0VBQ2QsSUFBSSxDQUFDLGVBQWUsWUFBWSxtQkFBbUIsZ0JBQWdCO0VBRW5FLFFBQVEsWUFBWSxNQUFwQjtHQUNFLEtBQUssVUFBVTtJQUNiLE1BQU0sRUFBRSxRQUFRLGNBQWM7SUFDOUIsSUFBSSxPQUFPLFdBQVcsWUFBWSxPQUFPLGNBQWMsVUFBVTtJQUNqRSxnQkFBZ0IsU0FBUzs7S0FFdkIsSUFBSSxLQUFLLE1BQU0sTUFBTSxFQUFFLFdBQVcsTUFBTSxHQUFHO01BQ3pDLE9BQU87S0FDVDtLQUNBLE9BQU8sQ0FBQyxHQUFHLE1BQU07TUFBRTtNQUFRO0tBQVUsQ0FBQztJQUN4QyxDQUFDO0lBQ0Q7R0FDRjtHQUVBLEtBQUssZUFBZTtJQUNsQixNQUFNLEVBQUUsV0FBVztJQUNuQixJQUFJLE9BQU8sV0FBVyxVQUFVO0lBQ2hDLGdCQUFnQixTQUNkLEtBQUssUUFBUSxNQUFNLEVBQUUsV0FBVyxNQUFNLENBQ3hDO0lBQ0E7R0FDRjtHQUVBLEtBQUssV0FBVzs7SUFFZCxNQUFNLEVBQUUsV0FBVztJQUNuQixJQUFJLE9BQU8sV0FBVyxVQUFVO0lBQ2hDLGdCQUFnQixTQUNkLEtBQUssUUFBUSxNQUFNLEVBQUUsV0FBVyxNQUFNLENBQ3hDO0lBQ0E7R0FDRjtFQUNGO0NBQ0YsR0FBRyxDQUFDLGFBQWEsY0FBYyxDQUFDOztDQUdoQywwQ0FBZ0I7RUFDZCxNQUFNLFdBQVcsa0JBQWtCO0dBQ2pDLE1BQU0sTUFBTSxLQUFLLElBQUk7R0FDckIsZ0JBQWdCLFNBQ2QsS0FBSyxRQUFRLE1BQU0sTUFBTSxFQUFFLFlBQVksR0FBSSxDQUM3QztFQUNGLEdBQUcsR0FBSTtFQUVQLGFBQWEsY0FBYyxRQUFRO0NBQ3JDLEdBQUcsQ0FBQyxDQUFDO0NBRUwsSUFBSSxZQUFZLFdBQVcsR0FBRyxPQUFPO0NBRXJDLE1BQU0sT0FDSixZQUFZLFdBQVcsSUFDbkIsc0JBQ0EsWUFBWSxXQUFXLElBQ3ZCLHdCQUNBO0NBRU4sT0FDRSxpREFBQyxPQUFEO0VBQUssV0FBVyw2QkFBRyx5REFBeUQsU0FBUztZQUFyRixDQUNFLGlEQUFDLE9BQUQ7R0FBSyxXQUFVO2FBQWY7SUFDRSxpREFBQyxRQUFEO0tBQU0sV0FBVTtLQUF3RCxPQUFPLEVBQUUsZ0JBQWdCLE1BQU07SUFBSTs7Ozs7SUFDM0csaURBQUMsUUFBRDtLQUFNLFdBQVU7S0FBd0QsT0FBTyxFQUFFLGdCQUFnQixRQUFRO0lBQUk7Ozs7O0lBQzdHLGlEQUFDLFFBQUQ7S0FBTSxXQUFVO0tBQXdELE9BQU8sRUFBRSxnQkFBZ0IsUUFBUTtJQUFJOzs7OztHQUMxRzs7Ozs7WUFDTCxpREFBQyxRQUFELFlBQU8sS0FBVzs7OztVQUNmOzs7Ozs7QUFFVCIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsidHlwaW5nLWluZGljYXRvci50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCB7IHVzZUVmZmVjdCwgdXNlU3RhdGUgfSBmcm9tIFwicmVhY3RcIjtcbmltcG9ydCB7IHVzZVdlYlNvY2tldCB9IGZyb20gXCJAL2hvb2tzL3VzZS13ZWJzb2NrZXRcIjtcbmltcG9ydCB7IGNuIH0gZnJvbSBcIkAvbGliL3V0aWxzXCI7XG5cbmludGVyZmFjZSBUeXBpbmdJbmRpY2F0b3JQcm9wcyB7XG4gIGNvbnZlcnNhdGlvbklkOiBzdHJpbmc7XG4gIGNsYXNzTmFtZT86IHN0cmluZztcbn1cblxuaW50ZXJmYWNlIFR5cGluZ1VzZXIge1xuICB1c2VySWQ6IHN0cmluZztcbiAgdGltZXN0YW1wOiBudW1iZXI7XG59XG5cbmV4cG9ydCBmdW5jdGlvbiBUeXBpbmdJbmRpY2F0b3IoeyBjb252ZXJzYXRpb25JZCwgY2xhc3NOYW1lIH06IFR5cGluZ0luZGljYXRvclByb3BzKSB7XG4gIGNvbnN0IFt0eXBpbmdVc2Vycywgc2V0VHlwaW5nVXNlcnNdID0gdXNlU3RhdGU8VHlwaW5nVXNlcltdPihbXSk7XG4gIGNvbnN0IHsgbGFzdE1lc3NhZ2UgfSA9IHVzZVdlYlNvY2tldCgpO1xuXG4gIHVzZUVmZmVjdCgoKSA9PiB7XG4gICAgaWYgKCFsYXN0TWVzc2FnZSB8fCBsYXN0TWVzc2FnZS5jb252ZXJzYXRpb25JZCAhPT0gY29udmVyc2F0aW9uSWQpIHJldHVybjtcblxuICAgIHN3aXRjaCAobGFzdE1lc3NhZ2UudHlwZSkge1xuICAgICAgY2FzZSBcInR5cGluZ1wiOiB7XG4gICAgICAgIGNvbnN0IHsgdXNlcklkLCB0aW1lc3RhbXAgfSA9IGxhc3RNZXNzYWdlO1xuICAgICAgICBpZiAodHlwZW9mIHVzZXJJZCAhPT0gXCJzdHJpbmdcIiB8fCB0eXBlb2YgdGltZXN0YW1wICE9PSBcIm51bWJlclwiKSBicmVhaztcbiAgICAgICAgc2V0VHlwaW5nVXNlcnMoKHByZXYpID0+IHtcbiAgICAgICAgICAvLyBEb24ndCBhZGQgZHVwbGljYXRlIHVzZXJzXG4gICAgICAgICAgaWYgKHByZXYuc29tZSgodSkgPT4gdS51c2VySWQgPT09IHVzZXJJZCkpIHtcbiAgICAgICAgICAgIHJldHVybiBwcmV2O1xuICAgICAgICAgIH1cbiAgICAgICAgICByZXR1cm4gWy4uLnByZXYsIHsgdXNlcklkLCB0aW1lc3RhbXAgfV07XG4gICAgICAgIH0pO1xuICAgICAgICBicmVhaztcbiAgICAgIH1cblxuICAgICAgY2FzZSBcInN0b3AtdHlwaW5nXCI6IHtcbiAgICAgICAgY29uc3QgeyB1c2VySWQgfSA9IGxhc3RNZXNzYWdlO1xuICAgICAgICBpZiAodHlwZW9mIHVzZXJJZCAhPT0gXCJzdHJpbmdcIikgYnJlYWs7XG4gICAgICAgIHNldFR5cGluZ1VzZXJzKChwcmV2KSA9PlxuICAgICAgICAgIHByZXYuZmlsdGVyKCh1KSA9PiB1LnVzZXJJZCAhPT0gdXNlcklkKVxuICAgICAgICApO1xuICAgICAgICBicmVhaztcbiAgICAgIH1cblxuICAgICAgY2FzZSBcIm1lc3NhZ2VcIjoge1xuICAgICAgICAvLyBSZW1vdmUgdXNlciBmcm9tIHR5cGluZyB3aGVuIHRoZXkgc2VuZCBhIG1lc3NhZ2VcbiAgICAgICAgY29uc3QgeyB1c2VySWQgfSA9IGxhc3RNZXNzYWdlO1xuICAgICAgICBpZiAodHlwZW9mIHVzZXJJZCAhPT0gXCJzdHJpbmdcIikgYnJlYWs7XG4gICAgICAgIHNldFR5cGluZ1VzZXJzKChwcmV2KSA9PlxuICAgICAgICAgIHByZXYuZmlsdGVyKCh1KSA9PiB1LnVzZXJJZCAhPT0gdXNlcklkKVxuICAgICAgICApO1xuICAgICAgICBicmVhaztcbiAgICAgIH1cbiAgICB9XG4gIH0sIFtsYXN0TWVzc2FnZSwgY29udmVyc2F0aW9uSWRdKTtcblxuICAvLyBBdXRvLXJlbW92ZSBzdGFsZSB0eXBpbmcgaW5kaWNhdG9ycyBhZnRlciA1IHNlY29uZHNcbiAgdXNlRWZmZWN0KCgpID0+IHtcbiAgICBjb25zdCBpbnRlcnZhbCA9IHNldEludGVydmFsKCgpID0+IHtcbiAgICAgIGNvbnN0IG5vdyA9IERhdGUubm93KCk7XG4gICAgICBzZXRUeXBpbmdVc2VycygocHJldikgPT5cbiAgICAgICAgcHJldi5maWx0ZXIoKHUpID0+IG5vdyAtIHUudGltZXN0YW1wIDwgNTAwMClcbiAgICAgICk7XG4gICAgfSwgMTAwMCk7XG5cbiAgICByZXR1cm4gKCkgPT4gY2xlYXJJbnRlcnZhbChpbnRlcnZhbCk7XG4gIH0sIFtdKTtcblxuICBpZiAodHlwaW5nVXNlcnMubGVuZ3RoID09PSAwKSByZXR1cm4gbnVsbDtcblxuICBjb25zdCB0ZXh0ID1cbiAgICB0eXBpbmdVc2Vycy5sZW5ndGggPT09IDFcbiAgICAgID8gXCJTb21lb25lIGlzIHR5cGluZ1wiXG4gICAgICA6IHR5cGluZ1VzZXJzLmxlbmd0aCA9PT0gMlxuICAgICAgPyBcIjIgcGVvcGxlIGFyZSB0eXBpbmdcIlxuICAgICAgOiBcIlNldmVyYWwgcGVvcGxlIGFyZSB0eXBpbmdcIjtcblxuICByZXR1cm4gKFxuICAgIDxkaXYgY2xhc3NOYW1lPXtjbihcImZsZXggaXRlbXMtY2VudGVyIGdhcC0yIHRleHQtc20gdGV4dC1tdXRlZC1mb3JlZ3JvdW5kXCIsIGNsYXNzTmFtZSl9PlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGdhcC0xXCI+XG4gICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cImgtMS41IHctMS41IHJvdW5kZWQtZnVsbCBiZy1icmFuZC1ibHVlIGFuaW1hdGUtYm91bmNlXCIgc3R5bGU9e3sgYW5pbWF0aW9uRGVsYXk6IFwiMG1zXCIgfX0gLz5cbiAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwiaC0xLjUgdy0xLjUgcm91bmRlZC1mdWxsIGJnLWJyYW5kLWJsdWUgYW5pbWF0ZS1ib3VuY2VcIiBzdHlsZT17eyBhbmltYXRpb25EZWxheTogXCIxNTBtc1wiIH19IC8+XG4gICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cImgtMS41IHctMS41IHJvdW5kZWQtZnVsbCBiZy1icmFuZC1ibHVlIGFuaW1hdGUtYm91bmNlXCIgc3R5bGU9e3sgYW5pbWF0aW9uRGVsYXk6IFwiMzAwbXNcIiB9fSAvPlxuICAgICAgPC9kaXY+XG4gICAgICA8c3Bhbj57dGV4dH08L3NwYW4+XG4gICAgPC9kaXY+XG4gICk7XG59XG4iXSwiZmlsZSI6Ii9zcmMvY29tcG9uZW50cy9yZWFsdGltZS90eXBpbmctaW5kaWNhdG9yLnRzeCJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9yZWFsdGltZS90eXBpbmctaW5kaWNhdG9yLnRzeCIsIi9zcmMvY29tcG9uZW50cy9yZWFsdGltZS90eXBpbmctaW5kaWNhdG9yLnRzeCIsW11d

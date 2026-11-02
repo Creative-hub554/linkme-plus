@@ -1,0 +1,39 @@
+{
+  "gate": "pass",
+  "exitCode": 0,
+  "stages": [
+    {
+      "name": "mutation",
+      "label": "mutation sweep",
+      "pass": true,
+      "summary": "590 mutation(s) checked, no survivors — 0 thin-margin limb(s) — 63 of 114 decision(s) un-struck",
+      "details": [
+        {
+          "mark": "WARN UN-STRUCK GROWTH",
+          "detail": "63 of 114 decision(s) un-struck, past the recorded baseline of 61 by 2 — `node .freebuff/mutation-guards.mjs --baseline` names the decisions, `--write-baseline` re-records the list once strikes reach them again"
+        }
+      ],
+      "raw": []
+    }
+  ],
+  "failed": [],
+  "skipped": [],
+  "stoppedEarly": false,
+  "keepGoing": false,
+  "maxFailures": null,
+  "cacheTtlMs": 604800000,
+  "unchanged": [],
+  "reused": [],
+  "expired": [],
+  "excluded": [],
+  "suspects": [],
+  "recorded": "slice",
+  "coverageStamp": null,
+  "annotations": [
+    {
+      "level": "warning",
+      "title": "mutation sweep",
+      "message": "63 of 114 decision(s) un-struck, past the recorded baseline of 61 by 2 — `node .freebuff/mutation-guards.mjs --baseline` names the decisions, `--write-baseline` re-records the list once strikes reach them again"
+    }
+  ]
+}

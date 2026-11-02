@@ -1,4 +1,6 @@
 "use client";
+import { PostTopicSelect } from "@/components/social/post-topic-select";
+
 
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,19 +35,20 @@ export function GroupComposer({ groupId, groupName, onPosted }: GroupComposerPro
   // ever mounted twice, and a duplicate id breaks `for` silently.
   const fieldId = useId();
   const [content, setContent] = useState("");
+  const [topicId, setTopicId] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const publish = async () => {
     const text = content.trim();
-    if (!text || posting) return;
+    if (!text || posting || !topicId) return;
     setPosting(true);
     setError(null);
     try {
       const response = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, groupId }),
+        body: JSON.stringify({ content: text, topicId, groupId }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error ?? "Could not publish");
@@ -75,6 +78,7 @@ export function GroupComposer({ groupId, groupName, onPosted }: GroupComposerPro
         maxLength={2000}
         rows={3}
       />
+      <PostTopicSelect value={topicId} onChange={setTopicId} />
       <div className="flex flex-wrap items-center gap-2">
         {/* Said rather than chosen: the audience is a fact about where this is
             being published, so it is a sentence and not a control. */}
@@ -85,7 +89,7 @@ export function GroupComposer({ groupId, groupName, onPosted }: GroupComposerPro
         <span role="status" aria-live="polite" className="text-xs font-medium text-red-600">
           {error ?? ""}
         </span>
-        <Button type="submit" size="sm" className="ml-auto" disabled={!content.trim() || posting}>
+        <Button type="submit" size="sm" className="ml-auto" disabled={!content.trim() || posting || !topicId}>
           {posting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
           Post
         </Button>

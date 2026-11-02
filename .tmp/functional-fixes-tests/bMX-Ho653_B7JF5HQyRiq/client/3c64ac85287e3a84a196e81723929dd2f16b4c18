@@ -1,0 +1,22 @@
+__vite_ssr_exportName__("formatPostTime", () => { try { return formatPostTime } catch {} });
+/**
+* "3h ago" for a post's timestamp.
+*
+* Lifted out of the feed and the profile page, which held an identical copy
+* each, so the Page view is not a third. Everything here is relative to *now*,
+* which is why it is a function rather than a stored string: a post's age is a
+* fact about the reader's clock, not about the row.
+*/
+function formatPostTime(value) {
+	const date = new Date(value);
+	const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1e3));
+	if (seconds < 60) return "just now";
+	if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+	if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+	if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+	return date.toLocaleDateString();
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7Ozs7Ozs7O0FBUU8sU0FBUyxlQUFlLE9BQXVCO0NBQ3BELE1BQU0sT0FBTyxJQUFJLEtBQUssS0FBSztDQUMzQixNQUFNLFVBQVUsS0FBSyxJQUFJLEdBQUcsS0FBSyxPQUFPLEtBQUssSUFBSSxJQUFJLEtBQUssUUFBUSxLQUFLLEdBQUksQ0FBQztDQUM1RSxJQUFJLFVBQVUsSUFBSSxPQUFPO0NBQ3pCLElBQUksVUFBVSxNQUFNLE9BQU8sR0FBRyxLQUFLLE1BQU0sVUFBVSxFQUFFLEVBQUU7Q0FDdkQsSUFBSSxVQUFVLE9BQU8sT0FBTyxHQUFHLEtBQUssTUFBTSxVQUFVLElBQUksRUFBRTtDQUMxRCxJQUFJLFVBQVUsUUFBUSxPQUFPLEdBQUcsS0FBSyxNQUFNLFVBQVUsS0FBSyxFQUFFO0NBQzVELE9BQU8sS0FBSyxtQkFBbUI7QUFDakMiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInBvc3QtdGltZS50cyJdLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIFwiM2ggYWdvXCIgZm9yIGEgcG9zdCdzIHRpbWVzdGFtcC5cbiAqXG4gKiBMaWZ0ZWQgb3V0IG9mIHRoZSBmZWVkIGFuZCB0aGUgcHJvZmlsZSBwYWdlLCB3aGljaCBoZWxkIGFuIGlkZW50aWNhbCBjb3B5XG4gKiBlYWNoLCBzbyB0aGUgUGFnZSB2aWV3IGlzIG5vdCBhIHRoaXJkLiBFdmVyeXRoaW5nIGhlcmUgaXMgcmVsYXRpdmUgdG8gKm5vdyosXG4gKiB3aGljaCBpcyB3aHkgaXQgaXMgYSBmdW5jdGlvbiByYXRoZXIgdGhhbiBhIHN0b3JlZCBzdHJpbmc6IGEgcG9zdCdzIGFnZSBpcyBhXG4gKiBmYWN0IGFib3V0IHRoZSByZWFkZXIncyBjbG9jaywgbm90IGFib3V0IHRoZSByb3cuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBmb3JtYXRQb3N0VGltZSh2YWx1ZTogc3RyaW5nKTogc3RyaW5nIHtcbiAgY29uc3QgZGF0ZSA9IG5ldyBEYXRlKHZhbHVlKTtcbiAgY29uc3Qgc2Vjb25kcyA9IE1hdGgubWF4KDAsIE1hdGguZmxvb3IoKERhdGUubm93KCkgLSBkYXRlLmdldFRpbWUoKSkgLyAxMDAwKSk7XG4gIGlmIChzZWNvbmRzIDwgNjApIHJldHVybiBcImp1c3Qgbm93XCI7XG4gIGlmIChzZWNvbmRzIDwgMzYwMCkgcmV0dXJuIGAke01hdGguZmxvb3Ioc2Vjb25kcyAvIDYwKX1tIGFnb2A7XG4gIGlmIChzZWNvbmRzIDwgODY0MDApIHJldHVybiBgJHtNYXRoLmZsb29yKHNlY29uZHMgLyAzNjAwKX1oIGFnb2A7XG4gIGlmIChzZWNvbmRzIDwgNjA0ODAwKSByZXR1cm4gYCR7TWF0aC5mbG9vcihzZWNvbmRzIC8gODY0MDApfWQgYWdvYDtcbiAgcmV0dXJuIGRhdGUudG9Mb2NhbGVEYXRlU3RyaW5nKCk7XG59XG4iXSwiZmlsZSI6Ii9zcmMvbGliL3Bvc3QtdGltZS50cyJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvbGliL3Bvc3QtdGltZS50cyIsIi9zcmMvbGliL3Bvc3QtdGltZS50cyIsW11d

@@ -1,0 +1,38 @@
+__vite_ssr_exportName__("OnlineStatus", () => { try { return OnlineStatus } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/components/ui/status-indicator.tsx", {"importedNames":["StatusIndicator"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/hooks/use-presence.ts", {"importedNames":["usePresence"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/realtime/online-status.tsx";
+
+function OnlineStatus({ userId, showText = false, size = "md", className }) {
+	const { isUserOnline, formatLastSeen } = (0,__vite_ssr_import_1__.usePresence)();
+	const isOnline = isUserOnline(userId);
+	const lastSeen = formatLastSeen(userId);
+	// "Last seen Unknown" is what a straight interpolation produced the moment
+	// this sentence started being read aloud; with nothing known, the honest
+	// answer is the one the dot was already giving.
+	const status = isOnline ? "Online" : lastSeen ? `Last seen ${lastSeen}` : "Offline";
+	// The dot and the words are one component now, so this can no longer be
+	// written as a coloured dot with nothing behind it: `StatusIndicator` has no
+	// spelling without a label, and it hides the mark from a reader rather than
+	// the sentence. Green against grey is also the pair a red-green reader is most
+	// likely to lose, which is why the words are not allowed to be decoration.
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)((0,__vite_ssr_import_0__.StatusIndicator), {
+		label: status,
+		tone: isOnline ? "success" : "neutral",
+		size,
+		showText,
+		className
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 33,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7O0FBSEE7Ozs7O0FBWU8sU0FBUyxhQUFhLEVBQzNCLFFBQ0EsV0FBVyxPQUNYLE9BQU8sTUFDUCxhQUNvQjtDQUNwQixNQUFNLEVBQUUsY0FBYyxtQkFBbUIsdUNBQVk7Q0FDckQsTUFBTSxXQUFXLGFBQWEsTUFBTTtDQUNwQyxNQUFNLFdBQVcsZUFBZSxNQUFNOzs7O0NBSXRDLE1BQU0sU0FBUyxXQUFXLFdBQVcsV0FBVyxhQUFhLGFBQWE7Ozs7OztDQU8xRSxPQUNFLG9EQUFDLHdDQUFEO0VBQ0UsT0FBTztFQUNQLE1BQU0sV0FBVyxZQUFZO0VBQ3ZCO0VBQ0k7RUFDQztDQUNaOzs7OztBQUVMIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJvbmxpbmUtc3RhdHVzLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcblxuaW1wb3J0IHsgU3RhdHVzSW5kaWNhdG9yIH0gZnJvbSBcIkAvY29tcG9uZW50cy91aS9zdGF0dXMtaW5kaWNhdG9yXCI7XG5pbXBvcnQgeyB1c2VQcmVzZW5jZSB9IGZyb20gXCJAL2hvb2tzL3VzZS1wcmVzZW5jZVwiO1xuXG5pbnRlcmZhY2UgT25saW5lU3RhdHVzUHJvcHMge1xuICB1c2VySWQ6IHN0cmluZztcbiAgc2hvd1RleHQ/OiBib29sZWFuO1xuICBzaXplPzogXCJzbVwiIHwgXCJtZFwiIHwgXCJsZ1wiO1xuICBjbGFzc05hbWU/OiBzdHJpbmc7XG59XG5cbmV4cG9ydCBmdW5jdGlvbiBPbmxpbmVTdGF0dXMoe1xuICB1c2VySWQsXG4gIHNob3dUZXh0ID0gZmFsc2UsXG4gIHNpemUgPSBcIm1kXCIsXG4gIGNsYXNzTmFtZSxcbn06IE9ubGluZVN0YXR1c1Byb3BzKSB7XG4gIGNvbnN0IHsgaXNVc2VyT25saW5lLCBmb3JtYXRMYXN0U2VlbiB9ID0gdXNlUHJlc2VuY2UoKTtcbiAgY29uc3QgaXNPbmxpbmUgPSBpc1VzZXJPbmxpbmUodXNlcklkKTtcbiAgY29uc3QgbGFzdFNlZW4gPSBmb3JtYXRMYXN0U2Vlbih1c2VySWQpO1xuICAvLyBcIkxhc3Qgc2VlbiBVbmtub3duXCIgaXMgd2hhdCBhIHN0cmFpZ2h0IGludGVycG9sYXRpb24gcHJvZHVjZWQgdGhlIG1vbWVudFxuICAvLyB0aGlzIHNlbnRlbmNlIHN0YXJ0ZWQgYmVpbmcgcmVhZCBhbG91ZDsgd2l0aCBub3RoaW5nIGtub3duLCB0aGUgaG9uZXN0XG4gIC8vIGFuc3dlciBpcyB0aGUgb25lIHRoZSBkb3Qgd2FzIGFscmVhZHkgZ2l2aW5nLlxuICBjb25zdCBzdGF0dXMgPSBpc09ubGluZSA/IFwiT25saW5lXCIgOiBsYXN0U2VlbiA/IGBMYXN0IHNlZW4gJHtsYXN0U2Vlbn1gIDogXCJPZmZsaW5lXCI7XG5cbiAgLy8gVGhlIGRvdCBhbmQgdGhlIHdvcmRzIGFyZSBvbmUgY29tcG9uZW50IG5vdywgc28gdGhpcyBjYW4gbm8gbG9uZ2VyIGJlXG4gIC8vIHdyaXR0ZW4gYXMgYSBjb2xvdXJlZCBkb3Qgd2l0aCBub3RoaW5nIGJlaGluZCBpdDogYFN0YXR1c0luZGljYXRvcmAgaGFzIG5vXG4gIC8vIHNwZWxsaW5nIHdpdGhvdXQgYSBsYWJlbCwgYW5kIGl0IGhpZGVzIHRoZSBtYXJrIGZyb20gYSByZWFkZXIgcmF0aGVyIHRoYW5cbiAgLy8gdGhlIHNlbnRlbmNlLiBHcmVlbiBhZ2FpbnN0IGdyZXkgaXMgYWxzbyB0aGUgcGFpciBhIHJlZC1ncmVlbiByZWFkZXIgaXMgbW9zdFxuICAvLyBsaWtlbHkgdG8gbG9zZSwgd2hpY2ggaXMgd2h5IHRoZSB3b3JkcyBhcmUgbm90IGFsbG93ZWQgdG8gYmUgZGVjb3JhdGlvbi5cbiAgcmV0dXJuIChcbiAgICA8U3RhdHVzSW5kaWNhdG9yXG4gICAgICBsYWJlbD17c3RhdHVzfVxuICAgICAgdG9uZT17aXNPbmxpbmUgPyBcInN1Y2Nlc3NcIiA6IFwibmV1dHJhbFwifVxuICAgICAgc2l6ZT17c2l6ZX1cbiAgICAgIHNob3dUZXh0PXtzaG93VGV4dH1cbiAgICAgIGNsYXNzTmFtZT17Y2xhc3NOYW1lfVxuICAgIC8+XG4gICk7XG59XG4iXSwiZmlsZSI6Ii9zcmMvY29tcG9uZW50cy9yZWFsdGltZS9vbmxpbmUtc3RhdHVzLnRzeCJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9yZWFsdGltZS9vbmxpbmUtc3RhdHVzLnRzeCIsIi9zcmMvY29tcG9uZW50cy9yZWFsdGltZS9vbmxpbmUtc3RhdHVzLnRzeCIsW11d

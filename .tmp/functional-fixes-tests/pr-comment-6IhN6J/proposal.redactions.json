@@ -1,0 +1,17 @@
+{
+  "body": "proposal.md",
+  "posted": "PATCH repos/o/r/issues/comments/42",
+  "redactions": 2,
+  "substitutions": [
+    {
+      "rule": "url-credentials",
+      "matched": "postgresql://builder:hunter2@",
+      "replacement": "postgresql://<redacted>@"
+    },
+    {
+      "rule": "secret-name",
+      "matched": ".env.production",
+      "replacement": "<redacted>"
+    }
+  ]
+}

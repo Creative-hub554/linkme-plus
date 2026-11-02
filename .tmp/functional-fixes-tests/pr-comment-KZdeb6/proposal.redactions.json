@@ -1,0 +1,17 @@
+{
+  "body": "proposal.md",
+  "posted": "POST repos/o/r/issues/7/comments",
+  "redactions": 2,
+  "substitutions": [
+    {
+      "rule": "url-credentials",
+      "matched": "postgresql://builder:hunter2@",
+      "replacement": "postgresql://<redacted>@"
+    },
+    {
+      "rule": "private-key",
+      "matched": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----",
+      "replacement": "<redacted>"
+    }
+  ]
+}

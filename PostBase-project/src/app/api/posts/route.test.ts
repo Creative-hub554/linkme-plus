@@ -68,7 +68,7 @@ vi.mock("@/lib/db/ensure-profile", () => ({
 }));
 
 import { DELETE, GET, POST, PUT } from "./route";
-import { posts, postMedia, pages, pageRoles, groups, groupMembers } from "@/lib/db/schema";
+import { posts, postMedia, pages, pageRoles, groups, groupMembers, profiles } from "@/lib/db/schema";
 import { ensureLocalUserProfile } from "@/lib/db/ensure-profile";
 import { deleteStoredObjects } from "@/lib/r2";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
@@ -87,7 +87,7 @@ function jsonRequest(method: string, path: string, body?: unknown) {
     method,
     ...(body === undefined
       ? {}
-      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify((method === "POST" || method === "PUT") && body && typeof body === "object" ? { topicId: "community", ...body } : body) }),
   });
 }
 
@@ -103,6 +103,32 @@ function existing(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+it("requires a recognized category for every new post", async () => {
+  for (const topicId of [null, "", "unknown-category"]) {
+    const response = await POST(jsonRequest("POST", "/api/posts", { content: "New post", topicId }));
+    expect(response.status).toBe(400);
+    expect(fakeDb.writes.filter(write => write.table === "posts")).toEqual([]);
+  }
+});
+
+it("home feed filtering applies saved topics without replacing audience checks", async () => {
+  fakeDb.selectReturns(profiles, [{ appearance: { feed: { topics: ["news"], format: "posts" } } }]);
+  fakeDb.selectReturns(posts, []);
+  const response = await GET(new Request("http://localhost/api/posts?feed=true"));
+  expect(response.status).toBe(200);
+  const predicate = fakeDb.selectWheres.find(value => value.includes('"posts"."topic_id"'));
+  expect(predicate).toContain("visibility");
+  expect(predicate).toContain("short_video");
+  expect(fakeDb.selectParams.some(values => values.includes("news"))).toBe(true);
+});
+
+it("a cursor from different feed preferences cannot continue pagination", async () => {
+  fakeDb.selectReturns(profiles, [{ appearance: { feed: { topics: ["news"], format: "posts" } } }]);
+  const response = await GET(new Request("http://localhost/api/posts?feed=true&cursor=all%3A~old-cursor"));
+  expect(response.status).toBe(400);
+  expect(fakeDb.reads).not.toContain("posts");
+});
 
 beforeEach(() => {
   resetFakeDb();
@@ -312,6 +338,7 @@ describe("PUT /api/posts", () => {
       {
         table: "posts",
         values: {
+          topicId: "community",
           content: "An edit",
           visibility: "public",
           hashtags: [],
@@ -338,6 +365,7 @@ describe("PUT /api/posts", () => {
       {
         table: "posts",
         values: {
+          topicId: "community",
           content: "The original text",
           visibility: "group",
           hashtags: [],
@@ -423,6 +451,7 @@ describe("POST /api/posts", () => {
       {
         table: "posts",
         values: {
+          topicId: "community",
           authorId: "author-1",
           pageId: null,
           groupId: null,

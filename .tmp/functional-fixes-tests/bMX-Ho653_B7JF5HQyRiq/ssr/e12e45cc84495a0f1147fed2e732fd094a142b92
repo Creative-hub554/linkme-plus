@@ -1,0 +1,70 @@
+__vite_ssr_exportName__("makeScratchDir", () => { try { return makeScratchDir } catch {} });
+__vite_ssr_exportName__("removeScratchDir", () => { try { return removeScratchDir } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("node:fs", {"importedNames":["mkdtempSync","rmSync"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("node:os", {"importedNames":["tmpdir"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("node:path", {"importedNames":["join"]});
+
+
+
+/**
+* The throwaway directory a suite builds for itself, and the one place it is taken away.
+*
+* A suite that runs a real process or a real gate needs a scratch tree — a fake checkout, a
+* stub script, a fixture payload — and each one used to hand-roll the same two calls:
+* `mkdtempSync(join(tmpdir(), "<name>-"))` to make it, and a recursive `rmSync` in `afterAll`
+* to remove it. The removal is the half that bites. On Windows a handle the OS, a search
+* indexer or an antivirus has not let go of yet makes `rmSync` throw `EBUSY` or `EPERM`, and a
+* throw out of `afterAll` fails the *suite* while every test in it passed — a red run with
+* nothing red in it, which `.freebuff/ci.mjs`'s `failureOutsideTests` can now name but which
+* still costs a full investigation to find out was a temporary file.
+*
+* None of that is a claim about the code under test, so it is not allowed to fail a run. The
+* removal retries first — `maxRetries`/`retryDelay` are Node's own linear backoff for exactly
+* those errnos, and apply only to a `recursive` removal — and then gives up *loudly*, the same
+* way `src/test/checkout-watch.ts` reports a checkout moving under the suite and gets out of
+* the way. A scratch directory left in the temp dir is an environment fact; a red suite is
+* not.
+*/
+/**
+* How many times a failed removal is retried before it is reported and abandoned.
+*
+* Ten steps of a linear backoff is under three seconds of waiting at worst, which a
+* `hookTimeout` absorbs and a human never notices — and it is a bound rather than a target:
+* anything still refusing after it is reported rather than waited out, because a suite must
+* not spend seconds of every run covering for a file nobody will let go.
+*/
+const REMOVE_RETRIES = 10;
+/** The first backoff step, in ms; each retry waits one step longer (Node's linear backoff). */
+const RETRY_DELAY_MS = 50;
+/** A fresh scratch directory under the OS temp dir, named for the suite that asked for it. */
+function makeScratchDir(prefix) {
+	return (0,__vite_ssr_import_0__.mkdtempSync)((0,__vite_ssr_import_2__.join)((0,__vite_ssr_import_1__.tmpdir)(), prefix));
+};
+/**
+* Removes `dir` and everything under it, and never throws.
+*
+* The retry is for the ordinary case — the handle is released a moment later — and the catch
+* is for everything else, including the reasons no retry can help. A throw here would leave
+* `afterAll` failing a suite whose tests all passed, which is the whole reason this is a
+* function rather than a call. `write` is a parameter rather than `console.warn` directly for
+* the same reason `reportDrift` takes one: the give-up branch can then be driven without
+* capturing the console.
+*/
+function removeScratchDir(dir, write = (message) => console.warn(message)) {
+	try {
+		(0,__vite_ssr_import_0__.rmSync)(dir, {
+			recursive: true,
+			force: true,
+			maxRetries: REMOVE_RETRIES,
+			retryDelay: RETRY_DELAY_MS
+		});
+	} catch (error) {
+		const code = error?.code;
+		const reason = code ?? (error instanceof Error ? error.message : String(error));
+		write(`[scratch] ${dir} could not be removed (${reason}) — left where it is. A temp directory is ` + "not the code under test, so this is reported rather than failed.");
+	}
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7QUFBQTtBQUNBO0FBQ0E7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUE4QkEsTUFBTSxpQkFBaUI7O0FBR3ZCLE1BQU0saUJBQWlCOztBQUdoQixTQUFTLGVBQWUsUUFBd0I7Q0FDckQsT0FBTyxzQ0FBWSwrQkFBSyxrQ0FBTyxFQUFHLE1BQU0sQ0FBQztBQUMzQzs7Ozs7Ozs7Ozs7QUFZTyxTQUFTLGlCQUNkLEtBQ0EsU0FBb0MsWUFBWSxRQUFRLEtBQUssT0FBTyxHQUM5RDtDQUNOLElBQUk7RUFDRixpQ0FBTyxLQUFLO0dBQ1YsV0FBVztHQUNYLE9BQU87R0FDUCxZQUFZO0dBQ1osWUFBWTtFQUNkLENBQUM7Q0FDSCxTQUFTLE9BQU87RUFDZCxNQUFNLE9BQVEsT0FBb0M7RUFDbEQsTUFBTSxTQUFTLFNBQVMsaUJBQWlCLFFBQVEsTUFBTSxVQUFVLE9BQU8sS0FBSztFQUM3RSxNQUNFLGFBQWEsSUFBSSx5QkFBeUIsT0FBTyw4Q0FDL0Msa0VBQ0o7Q0FDRjtBQUNGIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJzY3JhdGNoLnRzIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IG1rZHRlbXBTeW5jLCBybVN5bmMgfSBmcm9tIFwibm9kZTpmc1wiO1xuaW1wb3J0IHsgdG1wZGlyIH0gZnJvbSBcIm5vZGU6b3NcIjtcbmltcG9ydCB7IGpvaW4gfSBmcm9tIFwibm9kZTpwYXRoXCI7XG5cbi8qKlxuICogVGhlIHRocm93YXdheSBkaXJlY3RvcnkgYSBzdWl0ZSBidWlsZHMgZm9yIGl0c2VsZiwgYW5kIHRoZSBvbmUgcGxhY2UgaXQgaXMgdGFrZW4gYXdheS5cbiAqXG4gKiBBIHN1aXRlIHRoYXQgcnVucyBhIHJlYWwgcHJvY2VzcyBvciBhIHJlYWwgZ2F0ZSBuZWVkcyBhIHNjcmF0Y2ggdHJlZSDigJQgYSBmYWtlIGNoZWNrb3V0LCBhXG4gKiBzdHViIHNjcmlwdCwgYSBmaXh0dXJlIHBheWxvYWQg4oCUIGFuZCBlYWNoIG9uZSB1c2VkIHRvIGhhbmQtcm9sbCB0aGUgc2FtZSB0d28gY2FsbHM6XG4gKiBgbWtkdGVtcFN5bmMoam9pbih0bXBkaXIoKSwgXCI8bmFtZT4tXCIpKWAgdG8gbWFrZSBpdCwgYW5kIGEgcmVjdXJzaXZlIGBybVN5bmNgIGluIGBhZnRlckFsbGBcbiAqIHRvIHJlbW92ZSBpdC4gVGhlIHJlbW92YWwgaXMgdGhlIGhhbGYgdGhhdCBiaXRlcy4gT24gV2luZG93cyBhIGhhbmRsZSB0aGUgT1MsIGEgc2VhcmNoXG4gKiBpbmRleGVyIG9yIGFuIGFudGl2aXJ1cyBoYXMgbm90IGxldCBnbyBvZiB5ZXQgbWFrZXMgYHJtU3luY2AgdGhyb3cgYEVCVVNZYCBvciBgRVBFUk1gLCBhbmQgYVxuICogdGhyb3cgb3V0IG9mIGBhZnRlckFsbGAgZmFpbHMgdGhlICpzdWl0ZSogd2hpbGUgZXZlcnkgdGVzdCBpbiBpdCBwYXNzZWQg4oCUIGEgcmVkIHJ1biB3aXRoXG4gKiBub3RoaW5nIHJlZCBpbiBpdCwgd2hpY2ggYC5mcmVlYnVmZi9jaS5tanNgJ3MgYGZhaWx1cmVPdXRzaWRlVGVzdHNgIGNhbiBub3cgbmFtZSBidXQgd2hpY2hcbiAqIHN0aWxsIGNvc3RzIGEgZnVsbCBpbnZlc3RpZ2F0aW9uIHRvIGZpbmQgb3V0IHdhcyBhIHRlbXBvcmFyeSBmaWxlLlxuICpcbiAqIE5vbmUgb2YgdGhhdCBpcyBhIGNsYWltIGFib3V0IHRoZSBjb2RlIHVuZGVyIHRlc3QsIHNvIGl0IGlzIG5vdCBhbGxvd2VkIHRvIGZhaWwgYSBydW4uIFRoZVxuICogcmVtb3ZhbCByZXRyaWVzIGZpcnN0IOKAlCBgbWF4UmV0cmllc2AvYHJldHJ5RGVsYXlgIGFyZSBOb2RlJ3Mgb3duIGxpbmVhciBiYWNrb2ZmIGZvciBleGFjdGx5XG4gKiB0aG9zZSBlcnJub3MsIGFuZCBhcHBseSBvbmx5IHRvIGEgYHJlY3Vyc2l2ZWAgcmVtb3ZhbCDigJQgYW5kIHRoZW4gZ2l2ZXMgdXAgKmxvdWRseSosIHRoZSBzYW1lXG4gKiB3YXkgYHNyYy90ZXN0L2NoZWNrb3V0LXdhdGNoLnRzYCByZXBvcnRzIGEgY2hlY2tvdXQgbW92aW5nIHVuZGVyIHRoZSBzdWl0ZSBhbmQgZ2V0cyBvdXQgb2ZcbiAqIHRoZSB3YXkuIEEgc2NyYXRjaCBkaXJlY3RvcnkgbGVmdCBpbiB0aGUgdGVtcCBkaXIgaXMgYW4gZW52aXJvbm1lbnQgZmFjdDsgYSByZWQgc3VpdGUgaXNcbiAqIG5vdC5cbiAqL1xuXG4vKipcbiAqIEhvdyBtYW55IHRpbWVzIGEgZmFpbGVkIHJlbW92YWwgaXMgcmV0cmllZCBiZWZvcmUgaXQgaXMgcmVwb3J0ZWQgYW5kIGFiYW5kb25lZC5cbiAqXG4gKiBUZW4gc3RlcHMgb2YgYSBsaW5lYXIgYmFja29mZiBpcyB1bmRlciB0aHJlZSBzZWNvbmRzIG9mIHdhaXRpbmcgYXQgd29yc3QsIHdoaWNoIGFcbiAqIGBob29rVGltZW91dGAgYWJzb3JicyBhbmQgYSBodW1hbiBuZXZlciBub3RpY2VzIOKAlCBhbmQgaXQgaXMgYSBib3VuZCByYXRoZXIgdGhhbiBhIHRhcmdldDpcbiAqIGFueXRoaW5nIHN0aWxsIHJlZnVzaW5nIGFmdGVyIGl0IGlzIHJlcG9ydGVkIHJhdGhlciB0aGFuIHdhaXRlZCBvdXQsIGJlY2F1c2UgYSBzdWl0ZSBtdXN0XG4gKiBub3Qgc3BlbmQgc2Vjb25kcyBvZiBldmVyeSBydW4gY292ZXJpbmcgZm9yIGEgZmlsZSBub2JvZHkgd2lsbCBsZXQgZ28uXG4gKi9cbmNvbnN0IFJFTU9WRV9SRVRSSUVTID0gMTA7XG5cbi8qKiBUaGUgZmlyc3QgYmFja29mZiBzdGVwLCBpbiBtczsgZWFjaCByZXRyeSB3YWl0cyBvbmUgc3RlcCBsb25nZXIgKE5vZGUncyBsaW5lYXIgYmFja29mZikuICovXG5jb25zdCBSRVRSWV9ERUxBWV9NUyA9IDUwO1xuXG4vKiogQSBmcmVzaCBzY3JhdGNoIGRpcmVjdG9yeSB1bmRlciB0aGUgT1MgdGVtcCBkaXIsIG5hbWVkIGZvciB0aGUgc3VpdGUgdGhhdCBhc2tlZCBmb3IgaXQuICovXG5leHBvcnQgZnVuY3Rpb24gbWFrZVNjcmF0Y2hEaXIocHJlZml4OiBzdHJpbmcpOiBzdHJpbmcge1xuICByZXR1cm4gbWtkdGVtcFN5bmMoam9pbih0bXBkaXIoKSwgcHJlZml4KSk7XG59XG5cbi8qKlxuICogUmVtb3ZlcyBgZGlyYCBhbmQgZXZlcnl0aGluZyB1bmRlciBpdCwgYW5kIG5ldmVyIHRocm93cy5cbiAqXG4gKiBUaGUgcmV0cnkgaXMgZm9yIHRoZSBvcmRpbmFyeSBjYXNlIOKAlCB0aGUgaGFuZGxlIGlzIHJlbGVhc2VkIGEgbW9tZW50IGxhdGVyIOKAlCBhbmQgdGhlIGNhdGNoXG4gKiBpcyBmb3IgZXZlcnl0aGluZyBlbHNlLCBpbmNsdWRpbmcgdGhlIHJlYXNvbnMgbm8gcmV0cnkgY2FuIGhlbHAuIEEgdGhyb3cgaGVyZSB3b3VsZCBsZWF2ZVxuICogYGFmdGVyQWxsYCBmYWlsaW5nIGEgc3VpdGUgd2hvc2UgdGVzdHMgYWxsIHBhc3NlZCwgd2hpY2ggaXMgdGhlIHdob2xlIHJlYXNvbiB0aGlzIGlzIGFcbiAqIGZ1bmN0aW9uIHJhdGhlciB0aGFuIGEgY2FsbC4gYHdyaXRlYCBpcyBhIHBhcmFtZXRlciByYXRoZXIgdGhhbiBgY29uc29sZS53YXJuYCBkaXJlY3RseSBmb3JcbiAqIHRoZSBzYW1lIHJlYXNvbiBgcmVwb3J0RHJpZnRgIHRha2VzIG9uZTogdGhlIGdpdmUtdXAgYnJhbmNoIGNhbiB0aGVuIGJlIGRyaXZlbiB3aXRob3V0XG4gKiBjYXB0dXJpbmcgdGhlIGNvbnNvbGUuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiByZW1vdmVTY3JhdGNoRGlyKFxuICBkaXI6IHN0cmluZyxcbiAgd3JpdGU6IChtZXNzYWdlOiBzdHJpbmcpID0+IHZvaWQgPSAobWVzc2FnZSkgPT4gY29uc29sZS53YXJuKG1lc3NhZ2UpLFxuKTogdm9pZCB7XG4gIHRyeSB7XG4gICAgcm1TeW5jKGRpciwge1xuICAgICAgcmVjdXJzaXZlOiB0cnVlLFxuICAgICAgZm9yY2U6IHRydWUsXG4gICAgICBtYXhSZXRyaWVzOiBSRU1PVkVfUkVUUklFUyxcbiAgICAgIHJldHJ5RGVsYXk6IFJFVFJZX0RFTEFZX01TLFxuICAgIH0pO1xuICB9IGNhdGNoIChlcnJvcikge1xuICAgIGNvbnN0IGNvZGUgPSAoZXJyb3IgYXMgeyBjb2RlPzogc3RyaW5nIH0gfCBudWxsKT8uY29kZTtcbiAgICBjb25zdCByZWFzb24gPSBjb2RlID8/IChlcnJvciBpbnN0YW5jZW9mIEVycm9yID8gZXJyb3IubWVzc2FnZSA6IFN0cmluZyhlcnJvcikpO1xuICAgIHdyaXRlKFxuICAgICAgYFtzY3JhdGNoXSAke2Rpcn0gY291bGQgbm90IGJlIHJlbW92ZWQgKCR7cmVhc29ufSkg4oCUIGxlZnQgd2hlcmUgaXQgaXMuIEEgdGVtcCBkaXJlY3RvcnkgaXMgYCArXG4gICAgICAgIFwibm90IHRoZSBjb2RlIHVuZGVyIHRlc3QsIHNvIHRoaXMgaXMgcmVwb3J0ZWQgcmF0aGVyIHRoYW4gZmFpbGVkLlwiLFxuICAgICk7XG4gIH1cbn1cbiJdLCJmaWxlIjoiL3NyYy90ZXN0L3NjcmF0Y2gudHMifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvdGVzdC9zY3JhdGNoLnRzIiwiL3NyYy90ZXN0L3NjcmF0Y2gudHMiLFtdXQ==

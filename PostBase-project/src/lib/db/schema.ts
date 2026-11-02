@@ -8,7 +8,10 @@ import {
   jsonb,
   pgEnum,
   uniqueIndex,
+  check,
+  index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { postAudiences } from "@/lib/post-audiences";
 // Type-only, and erased at build time: the accent's allowed values are the ones
 // the picker offers, and `profiles.appearance` is typed by that same union so
@@ -128,6 +131,20 @@ export const profiles = pgTable("profiles", {
 });
 
 // ─── Social ─────────────────────────────────────────────────────
+export const accountSubscriptions = pgTable("account_subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 20 }).notNull(),
+  tier: varchar("tier", { length: 20 }).notNull(),
+  startsAt: timestamp("starts_at").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("account_subscriptions_user_kind_unique").on(table.userId, table.kind),
+  check("account_subscriptions_period_valid", sql`${table.expiresAt} > ${table.startsAt}`),
+  check("account_subscriptions_plan_valid", sql`(${table.kind} = 'seller' and ${table.tier} in ('pro','plus','ultra')) or (${table.kind} = 'employer' and ${table.tier} = 'employer')`),
+]).enableRLS();
+
 export const follows = pgTable("follows", {
   id: uuid("id").defaultRandom().primaryKey(),
   followerId: uuid("follower_id")
@@ -158,6 +175,7 @@ export const posts = pgTable("posts", {
   pageId: uuid("page_id"),
   groupId: uuid("group_id"),
   type: postTypeEnum("type").default("text").notNull(),
+  topicId: varchar("topic_id", { length: 32 }),
   content: text("content"),
   visibility: visibilityEnum("visibility").default("public").notNull(),
   hashtags: text("hashtags").array(),
@@ -165,7 +183,10 @@ export const posts = pgTable("posts", {
   editedAt: timestamp("edited_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, table => [
+  check("posts_topic_id_valid", sql`${table.topicId} IS NULL OR ${table.topicId} IN ('comedy','news','education','food','lifestyle','technology','business','shopping','entertainment','community')`),
+  index("posts_topic_created_id_idx").on(table.topicId, table.createdAt.desc(), table.id.desc()).where(sql`${table.deletedAt} IS NULL`),
+]);
 
 export const postMedia = pgTable("post_media", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -407,6 +428,14 @@ export const jobs = pgTable("jobs", {
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 200 }).notNull(),
+  publisherId: uuid("publisher_id").references(() => users.id),
+  reviewStatus: varchar("review_status", { length: 30 }).default("pending_review").notNull(),
+  reviewNote: text("review_note"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  officeEvidenceIds: uuid("office_evidence_ids").array().default([]).notNull(),
+  pendingRevision: jsonb("pending_revision").$type<Record<string, unknown>>(),
+  firstPublishedAt: timestamp("first_published_at"),
   location: varchar("location", { length: 100 }),
   remoteStatus: varchar("remote_status", { length: 30 }),
   jobType: varchar("job_type", { length: 30 }),
@@ -419,6 +448,52 @@ export const jobs = pgTable("jobs", {
   deadline: timestamp("deadline"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }).enableRLS();
+
+export const privateEvidence = pgTable("private_evidence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  purpose: varchar("purpose", { length: 20 }).notNull(),
+  objectKey: text("object_key").notNull(),
+  contentType: varchar("content_type", { length: 40 }).notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  deleteAfter: timestamp("delete_after"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [
+  check("private_evidence_purpose_valid", sql`${table.purpose} in ('national_id','office')`),
+  uniqueIndex("private_evidence_object_key_unique").on(table.objectKey),
+  index("private_evidence_owner_idx").on(table.ownerId),
+]).enableRLS();
+
+// Matches the existing production type and table; new private fields are additive.
+export const verificationRequestStatusEnum = pgEnum("verification_request_status", ["pending", "approved", "rejected"]);
+export const verificationRequests = pgTable("verification_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  evidenceUrls: text("evidence_urls").array().notNull().default([]),
+  status: verificationRequestStatusEnum("status").notNull().default("pending"),
+  reviewNote: text("review_note"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  verificationKind: varchar("verification_kind", { length: 30 }),
+  privateEvidenceIds: uuid("private_evidence_ids").array().notNull().default([]),
+  revokedAt: timestamp("revoked_at"),
+}, table => [index("verification_requests_user_kind_idx").on(table.userId, table.verificationKind, table.status)]).enableRLS();
+
+export const jobPublications = pgTable("job_publications", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+  publisherId: uuid("publisher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  allowance: varchar("allowance", { length: 10 }).notNull(),
+  approvedAt: timestamp("approved_at").notNull().defaultNow(),
+  periodStart: timestamp("period_start"),
+}, table => [
+  uniqueIndex("job_publications_job_unique").on(table.jobId),
+  index("job_publications_publisher_idx").on(table.publisherId, table.approvedAt),
+  check("job_publications_allowance_valid", sql`${table.allowance} in ('free','paid')`),
+]).enableRLS();
 
 export const jobApplications = pgTable("job_applications", {
   id: uuid("id").defaultRandom().primaryKey(),

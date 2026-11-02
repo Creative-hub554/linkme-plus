@@ -1,0 +1,144 @@
+__vite_ssr_exportName__("default", () => { try { return AboutPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/components/ui/card.tsx", {"importedNames":["Card","CardContent","CardHeader","CardTitle"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/app/(static)/about/page.tsx";
+
+function AboutPage() {
+	return /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+		className: "max-w-3xl mx-auto space-y-8 py-8",
+		children: [
+			/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+				className: "text-center",
+				children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h1", {
+					className: "text-3xl font-bold text-navy-800",
+					children: "About LinkMe+"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 7,
+					columnNumber: 9
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+					className: "text-muted-foreground mt-2",
+					children: "Building the future of community and commerce"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 8,
+					columnNumber: 9
+				}, this)]
+			}, void 0, true, {
+				fileName: _jsxFileName,
+				lineNumber: 6,
+				columnNumber: 7
+			}, this),
+			/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.Card), { children: /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardContent), {
+				className: "p-6 space-y-4 text-sm text-muted-foreground",
+				children: [
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "LinkMe+ is a community and professional social platform where people, creators, businesses, and organizations publish content, build audiences, sell products, create communities, and discover work." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 13,
+						columnNumber: 11
+					}, this),
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "Our mission is to create a trusted, inclusive space where meaningful connections drive opportunity — whether that means finding a job, launching a business, learning a skill, or simply sharing what matters to you." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 17,
+						columnNumber: 11
+					}, this),
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "Built with modern technology and a commitment to user safety, LinkMe+ combines the best of social networking, marketplace commerce, professional networking, and community building into one seamless platform." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 22,
+						columnNumber: 11
+					}, this)
+				]
+			}, void 0, true, {
+				fileName: _jsxFileName,
+				lineNumber: 12,
+				columnNumber: 9
+			}, this) }, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 11,
+				columnNumber: 7
+			}, this),
+			/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.Card), { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardHeader), { children: /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardTitle), {
+				level: 2,
+				className: "text-base",
+				children: "Our Values"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 32,
+				columnNumber: 11
+			}, this) }, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 31,
+				columnNumber: 9
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardContent), {
+				className: "space-y-3 text-sm text-muted-foreground",
+				children: [
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+						className: "font-medium text-foreground",
+						children: "Trust First"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 38,
+						columnNumber: 13
+					}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "Every feature is designed with safety and transparency in mind." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 39,
+						columnNumber: 13
+					}, this)] }, void 0, true, {
+						fileName: _jsxFileName,
+						lineNumber: 37,
+						columnNumber: 11
+					}, this),
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+						className: "font-medium text-foreground",
+						children: "Community Driven"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 42,
+						columnNumber: 13
+					}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "We build what our users need, not what we think they should want." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 43,
+						columnNumber: 13
+					}, this)] }, void 0, true, {
+						fileName: _jsxFileName,
+						lineNumber: 41,
+						columnNumber: 11
+					}, this),
+					/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+						className: "font-medium text-foreground",
+						children: "Open & Fair"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 46,
+						columnNumber: 13
+					}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "Everyone deserves equal access to opportunity and connection." }, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 47,
+						columnNumber: 13
+					}, this)] }, void 0, true, {
+						fileName: _jsxFileName,
+						lineNumber: 45,
+						columnNumber: 11
+					}, this)
+				]
+			}, void 0, true, {
+				fileName: _jsxFileName,
+				lineNumber: 36,
+				columnNumber: 9
+			}, this)] }, void 0, true, {
+				fileName: _jsxFileName,
+				lineNumber: 30,
+				columnNumber: 7
+			}, this)
+		]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 5,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7OztBQUVlLFNBQVMsWUFBWTtDQUNsQyxPQUNFLGlEQUFDLE9BQUQ7RUFBSyxXQUFVO1lBQWY7R0FDRSxpREFBQyxPQUFEO0lBQUssV0FBVTtjQUFmLENBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBbUM7SUFBaUI7Ozs7Y0FDbEUsaURBQUMsS0FBRDtLQUFHLFdBQVU7ZUFBNkI7SUFBZ0Q7Ozs7WUFDdkY7Ozs7OztHQUVMLG9EQUFDLDZCQUFELFlBQ0Usb0RBQUMsb0NBQUQ7SUFBYSxXQUFVO2NBQXZCO0tBQ0UsaURBQUMsS0FBRCxZQUFHLHdNQUdBOzs7OztLQUNILGlEQUFDLEtBQUQsWUFBRyx3TkFJQTs7Ozs7S0FDSCxpREFBQyxLQUFELFlBQUcsa05BSUE7Ozs7O0lBQ1E7Ozs7O1lBQ1Q7Ozs7O0dBRU4sb0RBQUMsNkJBQUQsYUFDRSxvREFBQyxtQ0FBRCxZQUNFLG9EQUFDLGtDQUFEO0lBQVcsT0FBTztJQUFHLFdBQVU7Y0FBWTtHQUVoQzs7OztZQUNEOzs7O2FBQ1osb0RBQUMsb0NBQUQ7SUFBYSxXQUFVO2NBQXZCO0tBQ0UsaURBQUMsT0FBRCxhQUNFLGlEQUFDLEtBQUQ7TUFBRyxXQUFVO2dCQUE4QjtLQUFjOzs7O2VBQ3pELGlEQUFDLEtBQUQsWUFBRyxrRUFBa0U7Ozs7YUFDbEU7Ozs7O0tBQ0wsaURBQUMsT0FBRCxhQUNFLGlEQUFDLEtBQUQ7TUFBRyxXQUFVO2dCQUE4QjtLQUFtQjs7OztlQUM5RCxpREFBQyxLQUFELFlBQUcsb0VBQW9FOzs7O2FBQ3BFOzs7OztLQUNMLGlEQUFDLE9BQUQsYUFDRSxpREFBQyxLQUFEO01BQUcsV0FBVTtnQkFBOEI7S0FBYzs7OztlQUN6RCxpREFBQyxLQUFELFlBQUcsZ0VBQWdFOzs7O2FBQ2hFOzs7OztJQUNNOzs7OztXQUNUOzs7OztFQUNIOzs7Ozs7QUFFVCIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsicGFnZS50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgQ2FyZCwgQ2FyZENvbnRlbnQsIENhcmRIZWFkZXIsIENhcmRUaXRsZSB9IGZyb20gXCJAL2NvbXBvbmVudHMvdWkvY2FyZFwiO1xuXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBBYm91dFBhZ2UoKSB7XG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9XCJtYXgtdy0zeGwgbXgtYXV0byBzcGFjZS15LTggcHktOFwiPlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlclwiPlxuICAgICAgICA8aDEgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtbmF2eS04MDBcIj5BYm91dCBMaW5rTWUrPC9oMT5cbiAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1tdXRlZC1mb3JlZ3JvdW5kIG10LTJcIj5CdWlsZGluZyB0aGUgZnV0dXJlIG9mIGNvbW11bml0eSBhbmQgY29tbWVyY2U8L3A+XG4gICAgICA8L2Rpdj5cblxuICAgICAgPENhcmQ+XG4gICAgICAgIDxDYXJkQ29udGVudCBjbGFzc05hbWU9XCJwLTYgc3BhY2UteS00IHRleHQtc20gdGV4dC1tdXRlZC1mb3JlZ3JvdW5kXCI+XG4gICAgICAgICAgPHA+XG4gICAgICAgICAgICBMaW5rTWUrIGlzIGEgY29tbXVuaXR5IGFuZCBwcm9mZXNzaW9uYWwgc29jaWFsIHBsYXRmb3JtIHdoZXJlIHBlb3BsZSwgY3JlYXRvcnMsIGJ1c2luZXNzZXMsXG4gICAgICAgICAgICBhbmQgb3JnYW5pemF0aW9ucyBwdWJsaXNoIGNvbnRlbnQsIGJ1aWxkIGF1ZGllbmNlcywgc2VsbCBwcm9kdWN0cywgY3JlYXRlIGNvbW11bml0aWVzLCBhbmQgZGlzY292ZXIgd29yay5cbiAgICAgICAgICA8L3A+XG4gICAgICAgICAgPHA+XG4gICAgICAgICAgICBPdXIgbWlzc2lvbiBpcyB0byBjcmVhdGUgYSB0cnVzdGVkLCBpbmNsdXNpdmUgc3BhY2Ugd2hlcmUgbWVhbmluZ2Z1bCBjb25uZWN0aW9ucyBkcml2ZVxuICAgICAgICAgICAgb3Bwb3J0dW5pdHkg4oCUIHdoZXRoZXIgdGhhdCBtZWFucyBmaW5kaW5nIGEgam9iLCBsYXVuY2hpbmcgYSBidXNpbmVzcywgbGVhcm5pbmcgYSBza2lsbCxcbiAgICAgICAgICAgIG9yIHNpbXBseSBzaGFyaW5nIHdoYXQgbWF0dGVycyB0byB5b3UuXG4gICAgICAgICAgPC9wPlxuICAgICAgICAgIDxwPlxuICAgICAgICAgICAgQnVpbHQgd2l0aCBtb2Rlcm4gdGVjaG5vbG9neSBhbmQgYSBjb21taXRtZW50IHRvIHVzZXIgc2FmZXR5LCBMaW5rTWUrIGNvbWJpbmVzIHRoZSBiZXN0XG4gICAgICAgICAgICBvZiBzb2NpYWwgbmV0d29ya2luZywgbWFya2V0cGxhY2UgY29tbWVyY2UsIHByb2Zlc3Npb25hbCBuZXR3b3JraW5nLCBhbmQgY29tbXVuaXR5IGJ1aWxkaW5nXG4gICAgICAgICAgICBpbnRvIG9uZSBzZWFtbGVzcyBwbGF0Zm9ybS5cbiAgICAgICAgICA8L3A+XG4gICAgICAgIDwvQ2FyZENvbnRlbnQ+XG4gICAgICA8L0NhcmQ+XG5cbiAgICAgIDxDYXJkPlxuICAgICAgICA8Q2FyZEhlYWRlcj5cbiAgICAgICAgICA8Q2FyZFRpdGxlIGxldmVsPXsyfSBjbGFzc05hbWU9XCJ0ZXh0LWJhc2VcIj5cbiAgICAgICAgICAgIE91ciBWYWx1ZXNcbiAgICAgICAgICA8L0NhcmRUaXRsZT5cbiAgICAgICAgPC9DYXJkSGVhZGVyPlxuICAgICAgICA8Q2FyZENvbnRlbnQgY2xhc3NOYW1lPVwic3BhY2UteS0zIHRleHQtc20gdGV4dC1tdXRlZC1mb3JlZ3JvdW5kXCI+XG4gICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIHRleHQtZm9yZWdyb3VuZFwiPlRydXN0IEZpcnN0PC9wPlxuICAgICAgICAgICAgPHA+RXZlcnkgZmVhdHVyZSBpcyBkZXNpZ25lZCB3aXRoIHNhZmV0eSBhbmQgdHJhbnNwYXJlbmN5IGluIG1pbmQuPC9wPlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJmb250LW1lZGl1bSB0ZXh0LWZvcmVncm91bmRcIj5Db21tdW5pdHkgRHJpdmVuPC9wPlxuICAgICAgICAgICAgPHA+V2UgYnVpbGQgd2hhdCBvdXIgdXNlcnMgbmVlZCwgbm90IHdoYXQgd2UgdGhpbmsgdGhleSBzaG91bGQgd2FudC48L3A+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIHRleHQtZm9yZWdyb3VuZFwiPk9wZW4gJiBGYWlyPC9wPlxuICAgICAgICAgICAgPHA+RXZlcnlvbmUgZGVzZXJ2ZXMgZXF1YWwgYWNjZXNzIHRvIG9wcG9ydHVuaXR5IGFuZCBjb25uZWN0aW9uLjwvcD5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9DYXJkQ29udGVudD5cbiAgICAgIDwvQ2FyZD5cbiAgICA8L2Rpdj5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKHN0YXRpYylcXGFib3V0XFxwYWdlLnRzeCJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhzdGF0aWMpL2Fib3V0L3BhZ2UudHN4IiwiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKHN0YXRpYylcXGFib3V0XFxwYWdlLnRzeCIsW11d

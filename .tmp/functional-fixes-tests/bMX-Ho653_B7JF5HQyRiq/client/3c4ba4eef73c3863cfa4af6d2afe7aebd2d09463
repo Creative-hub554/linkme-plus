@@ -1,0 +1,44 @@
+__vite_ssr_exportName__("MediaImage", () => { try { return MediaImage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useState"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/ui/media.tsx";
+
+/**
+* An image that reports its own failure.
+*
+* It holds *which source failed* rather than a copy of the source. Copying
+* `src` into state on mount — which this did — means a caller that swaps the
+* image never sees the new one: editing a profile cover changed the prop, and
+* the cover kept showing the old picture until something remounted it.
+*/
+function MediaImage({ src, alt, className, fallback, loading = "lazy", onError }) {
+	const [failedSrc, setFailedSrc] = (0,__vite_ssr_import_0__.useState)(null);
+	const useFallback = failedSrc === src && fallback !== undefined;
+	const imgSrc = useFallback ? fallback : src;
+	const handleError = () => {
+		// `failedSrc === src` means the source already failed once — so this is the
+		// fallback failing too, and swapping again would loop.
+		if (failedSrc === src) return;
+		setFailedSrc(src);
+		onError?.();
+	};
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("img", {
+		src: imgSrc,
+		alt,
+		className: (0,__vite_ssr_import_1__.cn)("object-cover", className),
+		loading,
+		onError: handleError
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 54,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7O0FBSEE7Ozs7Ozs7Ozs7Ozs7QUErQk8sU0FBUyxXQUFXLEVBQ3pCLEtBQ0EsS0FDQSxXQUNBLFVBQ0EsVUFBVSxRQUNWLFdBQ2tCO0NBQ2xCLE1BQU0sQ0FBQyxXQUFXLGdCQUFnQixtQ0FBd0IsSUFBSTtDQUU5RCxNQUFNLGNBQWMsY0FBYyxPQUFPLGFBQWE7Q0FDdEQsTUFBTSxTQUFTLGNBQWMsV0FBVztDQUV4QyxNQUFNLG9CQUFvQjs7O0VBR3hCLElBQUksY0FBYyxLQUFLO0VBQ3ZCLGFBQWEsR0FBRztFQUNoQixVQUFVO0NBQ1o7Q0FFQSxPQUNFLGlEQUFDLE9BQUQ7RUFDRSxLQUFLO0VBQ0E7RUFDTCxXQUFXLDZCQUFHLGdCQUFnQixTQUFTO0VBQzlCO0VBQ1QsU0FBUztDQUNWOzs7OztBQUVMIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJtZWRpYS50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCB7IHVzZVN0YXRlIH0gZnJvbSBcInJlYWN0XCI7XG5pbXBvcnQgeyBjbiB9IGZyb20gXCJAL2xpYi91dGlsc1wiO1xuXG5pbnRlcmZhY2UgTWVkaWFJbWFnZVByb3BzIHtcbiAgc3JjOiBzdHJpbmc7XG4gIGFsdDogc3RyaW5nO1xuICBjbGFzc05hbWU/OiBzdHJpbmc7XG4gIC8qKlxuICAgKiBXaGF0IHRvIHNob3cgaW5zdGVhZCB3aGVuIHtAbGluayBzcmN9IGZhaWxzIHRvIGxvYWQuIE9wdC1pbiwgYW5kIHRoZXJlIGlzIG5vXG4gICAqIGRlZmF1bHQ6IHRoaXMgcHJvamVjdCBzZXJ2ZXMgbm8gc3RhdGljIGFzc2V0cyBhdCBhbGwgKHRoZXJlIGlzIG5vIGBwdWJsaWMvYFxuICAgKiBkaXJlY3RvcnkpLCBzbyB0aGUgZGVmYXVsdCB0aGF0IHVzZWQgdG8gYmUgaGVyZSDigJQgYC9pbWFnZXMvcGxhY2Vob2xkZXIucG5nYFxuICAgKiDigJQgY291bGQgbmV2ZXIgcmVzb2x2ZS4gQSBicm9rZW4gaW1hZ2Ugc3dhcHBlZCBpdHNlbGYgZm9yIGEgc2Vjb25kIGJyb2tlblxuICAgKiBpbWFnZSBhbmQgbWFkZSBhIHNlY29uZCBmYWlsaW5nIHJlcXVlc3QgdG8gcHJvdmUgaXQuIFdpdGggbm8gZmFsbGJhY2sgdGhlXG4gICAqIGJyb3dzZXIgc2hvd3MgdGhlIGBhbHRgLCB3aGljaCBhdCBsZWFzdCBzYXlzIHdoYXQgaXMgbWlzc2luZy5cbiAgICovXG4gIGZhbGxiYWNrPzogc3RyaW5nO1xuICBsb2FkaW5nPzogXCJsYXp5XCIgfCBcImVhZ2VyXCI7XG4gIC8qKiBUb2xkIG9uY2UgcGVyIGZhaWxpbmcgc291cmNlLCB3aGV0aGVyIG9yIG5vdCBhIGZhbGxiYWNrIHdhcyBnaXZlbi4gKi9cbiAgb25FcnJvcj86ICgpID0+IHZvaWQ7XG59XG5cbi8qKlxuICogQW4gaW1hZ2UgdGhhdCByZXBvcnRzIGl0cyBvd24gZmFpbHVyZS5cbiAqXG4gKiBJdCBob2xkcyAqd2hpY2ggc291cmNlIGZhaWxlZCogcmF0aGVyIHRoYW4gYSBjb3B5IG9mIHRoZSBzb3VyY2UuIENvcHlpbmdcbiAqIGBzcmNgIGludG8gc3RhdGUgb24gbW91bnQg4oCUIHdoaWNoIHRoaXMgZGlkIOKAlCBtZWFucyBhIGNhbGxlciB0aGF0IHN3YXBzIHRoZVxuICogaW1hZ2UgbmV2ZXIgc2VlcyB0aGUgbmV3IG9uZTogZWRpdGluZyBhIHByb2ZpbGUgY292ZXIgY2hhbmdlZCB0aGUgcHJvcCwgYW5kXG4gKiB0aGUgY292ZXIga2VwdCBzaG93aW5nIHRoZSBvbGQgcGljdHVyZSB1bnRpbCBzb21ldGhpbmcgcmVtb3VudGVkIGl0LlxuICovXG5leHBvcnQgZnVuY3Rpb24gTWVkaWFJbWFnZSh7XG4gIHNyYyxcbiAgYWx0LFxuICBjbGFzc05hbWUsXG4gIGZhbGxiYWNrLFxuICBsb2FkaW5nID0gXCJsYXp5XCIsXG4gIG9uRXJyb3IsXG59OiBNZWRpYUltYWdlUHJvcHMpIHtcbiAgY29uc3QgW2ZhaWxlZFNyYywgc2V0RmFpbGVkU3JjXSA9IHVzZVN0YXRlPHN0cmluZyB8IG51bGw+KG51bGwpO1xuXG4gIGNvbnN0IHVzZUZhbGxiYWNrID0gZmFpbGVkU3JjID09PSBzcmMgJiYgZmFsbGJhY2sgIT09IHVuZGVmaW5lZDtcbiAgY29uc3QgaW1nU3JjID0gdXNlRmFsbGJhY2sgPyBmYWxsYmFjayA6IHNyYztcblxuICBjb25zdCBoYW5kbGVFcnJvciA9ICgpID0+IHtcbiAgICAvLyBgZmFpbGVkU3JjID09PSBzcmNgIG1lYW5zIHRoZSBzb3VyY2UgYWxyZWFkeSBmYWlsZWQgb25jZSDigJQgc28gdGhpcyBpcyB0aGVcbiAgICAvLyBmYWxsYmFjayBmYWlsaW5nIHRvbywgYW5kIHN3YXBwaW5nIGFnYWluIHdvdWxkIGxvb3AuXG4gICAgaWYgKGZhaWxlZFNyYyA9PT0gc3JjKSByZXR1cm47XG4gICAgc2V0RmFpbGVkU3JjKHNyYyk7XG4gICAgb25FcnJvcj8uKCk7XG4gIH07XG5cbiAgcmV0dXJuIChcbiAgICA8aW1nXG4gICAgICBzcmM9e2ltZ1NyY31cbiAgICAgIGFsdD17YWx0fVxuICAgICAgY2xhc3NOYW1lPXtjbihcIm9iamVjdC1jb3ZlclwiLCBjbGFzc05hbWUpfVxuICAgICAgbG9hZGluZz17bG9hZGluZ31cbiAgICAgIG9uRXJyb3I9e2hhbmRsZUVycm9yfVxuICAgIC8+XG4gICk7XG59XG4iXSwiZmlsZSI6Ii9zcmMvY29tcG9uZW50cy91aS9tZWRpYS50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy91aS9tZWRpYS50c3giLCIvc3JjL2NvbXBvbmVudHMvdWkvbWVkaWEudHN4IixbXV0=

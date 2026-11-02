@@ -1,0 +1,67 @@
+__vite_ssr_exportName__("StatusIndicator", () => { try { return StatusIndicator } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js");
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/ui/status-indicator.tsx";
+
+const sizeClasses = {
+	sm: "h-2 w-2",
+	md: "h-3 w-3",
+	lg: "h-4 w-4"
+};
+const toneClasses = {
+	success: "bg-green-500",
+	warning: "bg-yellow-500",
+	danger: "bg-red-500",
+	info: "bg-brand-blue",
+	neutral: "bg-gray-400"
+};
+/**
+* A state drawn as a mark, with the words that say what it is.
+*
+* `OnlineStatus` was a green dot or a grey dot and nothing else — the colour was
+* the entire message, which is also the pair a reader with a red-green
+* deficiency is most likely to lose. It was fixed by pairing the dot with text,
+* and this is that pairing as a component so it does not have to be remembered:
+* `label` is required, the mark is always `aria-hidden`, and the words are
+* always in the markup whether or not the caller wanted them on screen.
+*
+* It renders a `<span>`, because a mark sits inside things — a conversation row,
+* a button, a notification item — and a `<div>` there is invalid markup inside a
+* button. The dot is a span too, so a caller's `className` lands on the wrapper
+* exactly as it would on a hand-written dot's parent.
+*
+* The text stays muted whatever the tone: the colour belongs to the mark, and
+* colouring the sentence as well would be the same signal delivered twice.
+*/
+function StatusIndicator({ label, tone = "neutral", size = "md", showText = false, className }) {
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("span", {
+		className: (0,__vite_ssr_import_1__.cn)("inline-flex items-center gap-2", className),
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("span", {
+			"aria-hidden": "true",
+			className: (0,__vite_ssr_import_1__.cn)("rounded-full", sizeClasses[size], toneClasses[tone])
+		}, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 65,
+			columnNumber: 7
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("span", {
+			className: (0,__vite_ssr_import_1__.cn)("text-xs text-muted-foreground", !showText && "sr-only"),
+			children: label
+		}, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 66,
+			columnNumber: 7
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 62,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7O0FBSEE7Ozs7O0FBcUJBLE1BQU0sY0FBYztDQUNsQixJQUFJO0NBQ0osSUFBSTtDQUNKLElBQUk7QUFDTjtBQUVBLE1BQU0sY0FBMEM7Q0FDOUMsU0FBUztDQUNULFNBQVM7Q0FDVCxRQUFRO0NBQ1IsTUFBTTtDQUNOLFNBQVM7QUFDWDs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQW9CTyxTQUFTLGdCQUFnQixFQUM5QixPQUNBLE9BQU8sV0FDUCxPQUFPLE1BQ1AsV0FBVyxPQUNYLGFBQ3VCO0NBQ3ZCLE9BQ0UsaURBQUMsUUFBRDtFQUFNLFdBQVcsNkJBQUcsa0NBQWtDLFNBQVM7WUFBL0QsQ0FHRSxpREFBQyxRQUFEO0dBQU0sZUFBWTtHQUFPLFdBQVcsNkJBQUcsZ0JBQWdCLFlBQVksT0FBTyxZQUFZLEtBQUs7RUFBSTs7OztZQUMvRixpREFBQyxRQUFEO0dBQU0sV0FBVyw2QkFBRyxpQ0FBaUMsQ0FBQyxZQUFZLFNBQVM7YUFBSTtFQUFZOzs7O1VBQ3ZGOzs7Ozs7QUFFViIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsic3RhdHVzLWluZGljYXRvci50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCAqIGFzIFJlYWN0IGZyb20gXCJyZWFjdFwiO1xuaW1wb3J0IHsgY24gfSBmcm9tIFwiQC9saWIvdXRpbHNcIjtcblxuZXhwb3J0IHR5cGUgU3RhdHVzVG9uZSA9IFwic3VjY2Vzc1wiIHwgXCJ3YXJuaW5nXCIgfCBcImRhbmdlclwiIHwgXCJpbmZvXCIgfCBcIm5ldXRyYWxcIjtcblxuZXhwb3J0IGludGVyZmFjZSBTdGF0dXNJbmRpY2F0b3JQcm9wcyB7XG4gIC8qKlxuICAgKiBXaGF0IHRoZSBzdGF0ZSAqaXMqLCBpbiB3b3Jkcy4gUmVxdWlyZWQsIGFuZCB0aGF0IGlzIHRoZSBlbnRpcmUgcG9pbnQ6IHRoZVxuICAgKiBtYXJrIGJlbG93IGl0IGlzIGEgY29sb3VyLCBhbmQgYSBjb2xvdXIgaGFzIG5vIG1lYW5pbmcgdG8gYSByZWFkZXIgd2hvXG4gICAqIGNhbm5vdCBzZWUgaXQuXG4gICAqL1xuICBsYWJlbDogc3RyaW5nO1xuICB0b25lPzogU3RhdHVzVG9uZTtcbiAgc2l6ZT86IFwic21cIiB8IFwibWRcIiB8IFwibGdcIjtcbiAgLyoqIERyYXcgdGhlIHdvcmRzIGFzIHdlbGwgYXMgdGhlIG1hcmsgaW5zdGVhZCBvZiBvbmx5IHJlYWRpbmcgdGhlbSBvdXQuICovXG4gIHNob3dUZXh0PzogYm9vbGVhbjtcbiAgY2xhc3NOYW1lPzogc3RyaW5nO1xufVxuXG5jb25zdCBzaXplQ2xhc3NlcyA9IHtcbiAgc206IFwiaC0yIHctMlwiLFxuICBtZDogXCJoLTMgdy0zXCIsXG4gIGxnOiBcImgtNCB3LTRcIixcbn07XG5cbmNvbnN0IHRvbmVDbGFzc2VzOiBSZWNvcmQ8U3RhdHVzVG9uZSwgc3RyaW5nPiA9IHtcbiAgc3VjY2VzczogXCJiZy1ncmVlbi01MDBcIixcbiAgd2FybmluZzogXCJiZy15ZWxsb3ctNTAwXCIsXG4gIGRhbmdlcjogXCJiZy1yZWQtNTAwXCIsXG4gIGluZm86IFwiYmctYnJhbmQtYmx1ZVwiLFxuICBuZXV0cmFsOiBcImJnLWdyYXktNDAwXCIsXG59O1xuXG4vKipcbiAqIEEgc3RhdGUgZHJhd24gYXMgYSBtYXJrLCB3aXRoIHRoZSB3b3JkcyB0aGF0IHNheSB3aGF0IGl0IGlzLlxuICpcbiAqIGBPbmxpbmVTdGF0dXNgIHdhcyBhIGdyZWVuIGRvdCBvciBhIGdyZXkgZG90IGFuZCBub3RoaW5nIGVsc2Ug4oCUIHRoZSBjb2xvdXIgd2FzXG4gKiB0aGUgZW50aXJlIG1lc3NhZ2UsIHdoaWNoIGlzIGFsc28gdGhlIHBhaXIgYSByZWFkZXIgd2l0aCBhIHJlZC1ncmVlblxuICogZGVmaWNpZW5jeSBpcyBtb3N0IGxpa2VseSB0byBsb3NlLiBJdCB3YXMgZml4ZWQgYnkgcGFpcmluZyB0aGUgZG90IHdpdGggdGV4dCxcbiAqIGFuZCB0aGlzIGlzIHRoYXQgcGFpcmluZyBhcyBhIGNvbXBvbmVudCBzbyBpdCBkb2VzIG5vdCBoYXZlIHRvIGJlIHJlbWVtYmVyZWQ6XG4gKiBgbGFiZWxgIGlzIHJlcXVpcmVkLCB0aGUgbWFyayBpcyBhbHdheXMgYGFyaWEtaGlkZGVuYCwgYW5kIHRoZSB3b3JkcyBhcmVcbiAqIGFsd2F5cyBpbiB0aGUgbWFya3VwIHdoZXRoZXIgb3Igbm90IHRoZSBjYWxsZXIgd2FudGVkIHRoZW0gb24gc2NyZWVuLlxuICpcbiAqIEl0IHJlbmRlcnMgYSBgPHNwYW4+YCwgYmVjYXVzZSBhIG1hcmsgc2l0cyBpbnNpZGUgdGhpbmdzIOKAlCBhIGNvbnZlcnNhdGlvbiByb3csXG4gKiBhIGJ1dHRvbiwgYSBub3RpZmljYXRpb24gaXRlbSDigJQgYW5kIGEgYDxkaXY+YCB0aGVyZSBpcyBpbnZhbGlkIG1hcmt1cCBpbnNpZGUgYVxuICogYnV0dG9uLiBUaGUgZG90IGlzIGEgc3BhbiB0b28sIHNvIGEgY2FsbGVyJ3MgYGNsYXNzTmFtZWAgbGFuZHMgb24gdGhlIHdyYXBwZXJcbiAqIGV4YWN0bHkgYXMgaXQgd291bGQgb24gYSBoYW5kLXdyaXR0ZW4gZG90J3MgcGFyZW50LlxuICpcbiAqIFRoZSB0ZXh0IHN0YXlzIG11dGVkIHdoYXRldmVyIHRoZSB0b25lOiB0aGUgY29sb3VyIGJlbG9uZ3MgdG8gdGhlIG1hcmssIGFuZFxuICogY29sb3VyaW5nIHRoZSBzZW50ZW5jZSBhcyB3ZWxsIHdvdWxkIGJlIHRoZSBzYW1lIHNpZ25hbCBkZWxpdmVyZWQgdHdpY2UuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBTdGF0dXNJbmRpY2F0b3Ioe1xuICBsYWJlbCxcbiAgdG9uZSA9IFwibmV1dHJhbFwiLFxuICBzaXplID0gXCJtZFwiLFxuICBzaG93VGV4dCA9IGZhbHNlLFxuICBjbGFzc05hbWUsXG59OiBTdGF0dXNJbmRpY2F0b3JQcm9wcykge1xuICByZXR1cm4gKFxuICAgIDxzcGFuIGNsYXNzTmFtZT17Y24oXCJpbmxpbmUtZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTJcIiwgY2xhc3NOYW1lKX0+XG4gICAgICB7LyogRGVjb3JhdGl2ZTogdGhlIHdvcmRzIGJlbG93IGNhcnJ5IHRoZSBzdGF0ZSBlaXRoZXIgd2F5LCBzbyBleHBvc2luZyBhXG4gICAgICAgICAgc3BhbiB3aXRoIG5vIHRleHQgb25seSBhZGRzIG5vaXNlLiAqL31cbiAgICAgIDxzcGFuIGFyaWEtaGlkZGVuPVwidHJ1ZVwiIGNsYXNzTmFtZT17Y24oXCJyb3VuZGVkLWZ1bGxcIiwgc2l6ZUNsYXNzZXNbc2l6ZV0sIHRvbmVDbGFzc2VzW3RvbmVdKX0gLz5cbiAgICAgIDxzcGFuIGNsYXNzTmFtZT17Y24oXCJ0ZXh0LXhzIHRleHQtbXV0ZWQtZm9yZWdyb3VuZFwiLCAhc2hvd1RleHQgJiYgXCJzci1vbmx5XCIpfT57bGFiZWx9PC9zcGFuPlxuICAgIDwvc3Bhbj5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3VpL3N0YXR1cy1pbmRpY2F0b3IudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy91aS9zdGF0dXMtaW5kaWNhdG9yLnRzeCIsIi9zcmMvY29tcG9uZW50cy91aS9zdGF0dXMtaW5kaWNhdG9yLnRzeCIsW11d

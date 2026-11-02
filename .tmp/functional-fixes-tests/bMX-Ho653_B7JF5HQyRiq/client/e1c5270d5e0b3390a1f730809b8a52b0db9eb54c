@@ -1,0 +1,87 @@
+__vite_ssr_exportName__("ThemeMenuItems", () => { try { return ThemeMenuItems } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Check"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/providers/theme-provider.tsx", {"importedNames":["useTheme"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/components/ui/dropdown-menu.tsx", {"importedNames":["DropdownMenuRadioGroup","DropdownMenuRadioItem"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/src/lib/theme-icons.ts", {"importedNames":["THEME_ICONS"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/src/lib/theme.ts", {"importedNames":["THEMES"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/layout/theme-menu-items.tsx";
+
+/**
+* The theme, switchable from the nav's account menu.
+*
+* Three `menuitemradio`s rather than three buttons: a menu is not a place a
+* bare `role="group"` of buttons may sit, and Radix's radio items give each
+* option `role="menuitemradio"` with `aria-checked`, so the chosen theme is
+* *said* rather than only ticked — the same pairing the settings card gets from
+* its own radio group. `aria-label` on the group is what keeps the audit's
+* "a group of options must have a name" rule satisfied, since Radix renders the
+* group as a bare `role="group"` with no name of its own — the items' own
+* `aria-checked` is what satisfies the other half.
+*
+* Its own component, and that is load-bearing rather than tidiness: it calls
+* `useTheme`, which throws without a `ThemeProvider`, and it is rendered inside
+* the menu's *content* — which Radix mounts only while the menu is open. So the
+* hook is never called in a render of `MainNav` that has no menu on screen.
+* `main-nav.test.tsx` renders the nav to static markup with no provider at all,
+* and it stays green because of that; calling `useTheme` in `MainNav` itself
+* would have broken it (and would have re-rendered the whole nav on every theme
+* change for nothing).
+*
+* Radix closes the menu when an item is selected, which is the conventional
+* thing for a menu to do and gives immediate feedback: the page behind changes
+* as the menu goes. The alternative — keeping it open so the three can be
+* compared — costs a second dismissal at the end, which is the click this
+* exists to save.
+*/
+function ThemeMenuItems() {
+	const { theme, setTheme } = (0,__vite_ssr_import_1__.useTheme)();
+	return /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)((0,__vite_ssr_import_2__.DropdownMenuRadioGroup), {
+		"aria-label": "Theme",
+		value: theme,
+		onValueChange: (value) => setTheme(value),
+		children: __vite_ssr_import_4__.THEMES.map((option) => {
+			const Icon = __vite_ssr_import_3__.THEME_ICONS[option.id];
+			return /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)((0,__vite_ssr_import_2__.DropdownMenuRadioItem), {
+				value: option.id,
+				children: [
+					/* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)(Icon, {
+						className: "mr-2 h-4 w-4",
+						"aria-hidden": "true"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 49,
+						columnNumber: 13
+					}, this),
+					option.label,
+					theme === option.id && /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)((0,__vite_ssr_import_0__.Check), {
+						className: "ml-auto h-4 w-4",
+						"aria-hidden": "true"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 57,
+						columnNumber: 37
+					}, this)
+				]
+			}, option.id, true, {
+				fileName: _jsxFileName,
+				lineNumber: 48,
+				columnNumber: 11
+			}, this);
+		})
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 40,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7O0FBTkE7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBbUNPLFNBQVMsaUJBQWlCO0NBQy9CLE1BQU0sRUFBRSxPQUFPLGFBQWEsb0NBQVM7Q0FFckMsT0FDRSxvREFBQywrQ0FBRDtFQUNFLGNBQVc7RUFDWCxPQUFPO0VBQ1AsZ0JBQWdCLFVBQVUsU0FBUyxLQUFvQjtZQUV0RCw2QkFBTyxLQUFLLFdBQVc7R0FDdEIsTUFBTSxPQUFPLGtDQUFZLE9BQU87R0FDaEMsT0FDRSxvREFBQyw4Q0FBRDtJQUF1QyxPQUFPLE9BQU87Y0FBckQ7S0FDRSxpREFBQyxNQUFEO01BQU0sV0FBVTtNQUFlLGVBQVk7S0FBUTs7Ozs7S0FDbEQsT0FBTztLQU9QLFVBQVUsT0FBTyxNQUFNLG9EQUFDLDhCQUFEO01BQU8sV0FBVTtNQUFrQixlQUFZO0tBQVE7Ozs7O0lBQzFEO01BVkssT0FBTzs7OztVQVVaO0VBRTNCLENBQUM7Q0FDcUI7Ozs7O0FBRTVCIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJ0aGVtZS1tZW51LWl0ZW1zLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcblxuaW1wb3J0IHsgQ2hlY2sgfSBmcm9tIFwibHVjaWRlLXJlYWN0XCI7XG5pbXBvcnQgeyB1c2VUaGVtZSB9IGZyb20gXCJAL2NvbXBvbmVudHMvcHJvdmlkZXJzL3RoZW1lLXByb3ZpZGVyXCI7XG5pbXBvcnQgeyBEcm9wZG93bk1lbnVSYWRpb0dyb3VwLCBEcm9wZG93bk1lbnVSYWRpb0l0ZW0gfSBmcm9tIFwiQC9jb21wb25lbnRzL3VpL2Ryb3Bkb3duLW1lbnVcIjtcbmltcG9ydCB7IFRIRU1FX0lDT05TIH0gZnJvbSBcIkAvbGliL3RoZW1lLWljb25zXCI7XG5pbXBvcnQgeyBUSEVNRVMsIHR5cGUgVGhlbWVDaG9pY2UgfSBmcm9tIFwiQC9saWIvdGhlbWVcIjtcblxuLyoqXG4gKiBUaGUgdGhlbWUsIHN3aXRjaGFibGUgZnJvbSB0aGUgbmF2J3MgYWNjb3VudCBtZW51LlxuICpcbiAqIFRocmVlIGBtZW51aXRlbXJhZGlvYHMgcmF0aGVyIHRoYW4gdGhyZWUgYnV0dG9uczogYSBtZW51IGlzIG5vdCBhIHBsYWNlIGFcbiAqIGJhcmUgYHJvbGU9XCJncm91cFwiYCBvZiBidXR0b25zIG1heSBzaXQsIGFuZCBSYWRpeCdzIHJhZGlvIGl0ZW1zIGdpdmUgZWFjaFxuICogb3B0aW9uIGByb2xlPVwibWVudWl0ZW1yYWRpb1wiYCB3aXRoIGBhcmlhLWNoZWNrZWRgLCBzbyB0aGUgY2hvc2VuIHRoZW1lIGlzXG4gKiAqc2FpZCogcmF0aGVyIHRoYW4gb25seSB0aWNrZWQg4oCUIHRoZSBzYW1lIHBhaXJpbmcgdGhlIHNldHRpbmdzIGNhcmQgZ2V0cyBmcm9tXG4gKiBpdHMgb3duIHJhZGlvIGdyb3VwLiBgYXJpYS1sYWJlbGAgb24gdGhlIGdyb3VwIGlzIHdoYXQga2VlcHMgdGhlIGF1ZGl0J3NcbiAqIFwiYSBncm91cCBvZiBvcHRpb25zIG11c3QgaGF2ZSBhIG5hbWVcIiBydWxlIHNhdGlzZmllZCwgc2luY2UgUmFkaXggcmVuZGVycyB0aGVcbiAqIGdyb3VwIGFzIGEgYmFyZSBgcm9sZT1cImdyb3VwXCJgIHdpdGggbm8gbmFtZSBvZiBpdHMgb3duIOKAlCB0aGUgaXRlbXMnIG93blxuICogYGFyaWEtY2hlY2tlZGAgaXMgd2hhdCBzYXRpc2ZpZXMgdGhlIG90aGVyIGhhbGYuXG4gKlxuICogSXRzIG93biBjb21wb25lbnQsIGFuZCB0aGF0IGlzIGxvYWQtYmVhcmluZyByYXRoZXIgdGhhbiB0aWRpbmVzczogaXQgY2FsbHNcbiAqIGB1c2VUaGVtZWAsIHdoaWNoIHRocm93cyB3aXRob3V0IGEgYFRoZW1lUHJvdmlkZXJgLCBhbmQgaXQgaXMgcmVuZGVyZWQgaW5zaWRlXG4gKiB0aGUgbWVudSdzICpjb250ZW50KiDigJQgd2hpY2ggUmFkaXggbW91bnRzIG9ubHkgd2hpbGUgdGhlIG1lbnUgaXMgb3Blbi4gU28gdGhlXG4gKiBob29rIGlzIG5ldmVyIGNhbGxlZCBpbiBhIHJlbmRlciBvZiBgTWFpbk5hdmAgdGhhdCBoYXMgbm8gbWVudSBvbiBzY3JlZW4uXG4gKiBgbWFpbi1uYXYudGVzdC50c3hgIHJlbmRlcnMgdGhlIG5hdiB0byBzdGF0aWMgbWFya3VwIHdpdGggbm8gcHJvdmlkZXIgYXQgYWxsLFxuICogYW5kIGl0IHN0YXlzIGdyZWVuIGJlY2F1c2Ugb2YgdGhhdDsgY2FsbGluZyBgdXNlVGhlbWVgIGluIGBNYWluTmF2YCBpdHNlbGZcbiAqIHdvdWxkIGhhdmUgYnJva2VuIGl0IChhbmQgd291bGQgaGF2ZSByZS1yZW5kZXJlZCB0aGUgd2hvbGUgbmF2IG9uIGV2ZXJ5IHRoZW1lXG4gKiBjaGFuZ2UgZm9yIG5vdGhpbmcpLlxuICpcbiAqIFJhZGl4IGNsb3NlcyB0aGUgbWVudSB3aGVuIGFuIGl0ZW0gaXMgc2VsZWN0ZWQsIHdoaWNoIGlzIHRoZSBjb252ZW50aW9uYWxcbiAqIHRoaW5nIGZvciBhIG1lbnUgdG8gZG8gYW5kIGdpdmVzIGltbWVkaWF0ZSBmZWVkYmFjazogdGhlIHBhZ2UgYmVoaW5kIGNoYW5nZXNcbiAqIGFzIHRoZSBtZW51IGdvZXMuIFRoZSBhbHRlcm5hdGl2ZSDigJQga2VlcGluZyBpdCBvcGVuIHNvIHRoZSB0aHJlZSBjYW4gYmVcbiAqIGNvbXBhcmVkIOKAlCBjb3N0cyBhIHNlY29uZCBkaXNtaXNzYWwgYXQgdGhlIGVuZCwgd2hpY2ggaXMgdGhlIGNsaWNrIHRoaXNcbiAqIGV4aXN0cyB0byBzYXZlLlxuICovXG5leHBvcnQgZnVuY3Rpb24gVGhlbWVNZW51SXRlbXMoKSB7XG4gIGNvbnN0IHsgdGhlbWUsIHNldFRoZW1lIH0gPSB1c2VUaGVtZSgpO1xuXG4gIHJldHVybiAoXG4gICAgPERyb3Bkb3duTWVudVJhZGlvR3JvdXBcbiAgICAgIGFyaWEtbGFiZWw9XCJUaGVtZVwiXG4gICAgICB2YWx1ZT17dGhlbWV9XG4gICAgICBvblZhbHVlQ2hhbmdlPXsodmFsdWUpID0+IHNldFRoZW1lKHZhbHVlIGFzIFRoZW1lQ2hvaWNlKX1cbiAgICA+XG4gICAgICB7VEhFTUVTLm1hcCgob3B0aW9uKSA9PiB7XG4gICAgICAgIGNvbnN0IEljb24gPSBUSEVNRV9JQ09OU1tvcHRpb24uaWRdO1xuICAgICAgICByZXR1cm4gKFxuICAgICAgICAgIDxEcm9wZG93bk1lbnVSYWRpb0l0ZW0ga2V5PXtvcHRpb24uaWR9IHZhbHVlPXtvcHRpb24uaWR9PlxuICAgICAgICAgICAgPEljb24gY2xhc3NOYW1lPVwibXItMiBoLTQgdy00XCIgYXJpYS1oaWRkZW49XCJ0cnVlXCIgLz5cbiAgICAgICAgICAgIHtvcHRpb24ubGFiZWx9XG4gICAgICAgICAgICB7LyogRHJhd24gYXMgd2VsbCBhcyBhbm5vdW5jZWQuIGBhcmlhLWNoZWNrZWRgIGlzIHdoYXQgc2F5cyB0aGVcbiAgICAgICAgICAgICAgICBjaG9pY2UgKFJhZGl4IHNldHMgaXQgZnJvbSBgdmFsdWVgKSwgYW5kIHRoaXMgaXMgdGhlIHNhbWUgZmFjdFxuICAgICAgICAgICAgICAgIGZvciBhbnlvbmUgbG9va2luZyBhdCB0aGUgc2NyZWVuIHJhdGhlciB0aGFuIGxpc3RlbmluZyDigJQgdGhlXG4gICAgICAgICAgICAgICAgcGFpcmluZyB0aGUgc2V0dGluZ3MgY2FyZCBtYWtlcyB3aXRoIGl0cyBvd24gdGljaywgYW5kIHRoZSBvbmVcbiAgICAgICAgICAgICAgICBhIG1lbnUgaXRlbSB3aXRoIG5laXRoZXIgd291bGQgYmUgbWlzc2luZy4gRGVyaXZlZCBmcm9tIHRoZVxuICAgICAgICAgICAgICAgIHNhbWUgYHRoZW1lYCB0aGF0IGRyaXZlcyBgdmFsdWVgLCBzbyB0aGV5IGNhbm5vdCBkaXNhZ3JlZS4gKi99XG4gICAgICAgICAgICB7dGhlbWUgPT09IG9wdGlvbi5pZCAmJiA8Q2hlY2sgY2xhc3NOYW1lPVwibWwtYXV0byBoLTQgdy00XCIgYXJpYS1oaWRkZW49XCJ0cnVlXCIgLz59XG4gICAgICAgICAgPC9Ecm9wZG93bk1lbnVSYWRpb0l0ZW0+XG4gICAgICAgICk7XG4gICAgICB9KX1cbiAgICA8L0Ryb3Bkb3duTWVudVJhZGlvR3JvdXA+XG4gICk7XG59XG4iXSwiZmlsZSI6Ii9zcmMvY29tcG9uZW50cy9sYXlvdXQvdGhlbWUtbWVudS1pdGVtcy50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9sYXlvdXQvdGhlbWUtbWVudS1pdGVtcy50c3giLCIvc3JjL2NvbXBvbmVudHMvbGF5b3V0L3RoZW1lLW1lbnUtaXRlbXMudHN4IixbXV0=

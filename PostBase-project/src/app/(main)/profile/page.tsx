@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 
 interface ProfilePost {
+  topicId?: string | null;
   id: string;
   content?: string | null;
   createdAt: string;
@@ -620,7 +621,8 @@ function ProfileContent() {
   const handleProfilePost = async (
     content: string,
     file?: File,
-    audience: PostAudience = "public"
+    audience: PostAudience = "public",
+    topicId?: string
   ) => {
     const trimmed = content.trim();
     const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -652,7 +654,7 @@ function ProfileContent() {
     setProfilePosts((previous) => [optimistic, ...previous]);
 
     try {
-      const { post, media } = await publishPost({ content: trimmed, file, audience });
+      const { post, media } = await publishPost({ content: trimmed, file, audience, topicId });
 
       setProfilePosts((previous) =>
         previous.map((item) =>
@@ -899,7 +901,7 @@ function ProfileContent() {
                 <>
                   {profilePosts.map((post) => {
                     const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));
-                    return <PostCard key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
+                    return <PostCard topicId={post.topicId} key={post.id} id={post.id} author={{ name: post.author.name || displayName, username: post.author.username || username, avatar: post.author.avatarUrl || avatarUrl || authAvatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={0} comments={0} shares={0} visibility={post.visibility ?? undefined} edited={Boolean(post.editedAt)} onDelete={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileDelete : undefined} onUpdate={isOwnProfile && !post.id.startsWith("pending-") ? handleProfileUpdate : undefined} />;
                   })}
 
                   {(postsHasMore || postsMoreError) && (

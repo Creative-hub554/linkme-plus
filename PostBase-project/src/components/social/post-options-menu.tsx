@@ -40,6 +40,7 @@ export function PostOptionsMenu({
   postId,
   content,
   visibility,
+  topicId,
   groupName,
   hasMedia,
   onDelete,
@@ -49,6 +50,7 @@ export function PostOptionsMenu({
   /** The post's current text, used to seed the edit form. */
   content: string;
   visibility?: string | null;
+  topicId?: string | null;
   /**
    * The group the post belongs to, when it belongs to one. Passed through to the
    * edit form, which cannot offer a group post an audience: it has one.
@@ -108,6 +110,7 @@ export function PostOptionsMenu({
 
       {onUpdate && (
         <PostEditDialog
+          initialTopicId={topicId}
           postId={postId}
           content={content}
           visibility={visibility}

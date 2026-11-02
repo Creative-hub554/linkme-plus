@@ -1,0 +1,161 @@
+__vite_ssr_exportName__("AppearanceSettings", () => { try { return AppearanceSettings } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Check","Palette"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/ui/card.tsx", {"importedNames":["Card","CardContent","CardDescription","CardHeader","CardTitle"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/components/auth-provider.tsx", {"importedNames":["useAuth"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/src/components/providers/theme-provider.tsx", {"importedNames":["useTheme"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/src/lib/theme-preferences.ts", {"importedNames":["saveAccountAccent"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("/src/components/shared/theme-choice-group.tsx", {"importedNames":["ThemeChoiceGroup"]});
+const __vite_ssr_import_6__ = await __vite_ssr_import__("/src/lib/theme.ts", {"importedNames":["ACCENTS"]});
+const __vite_ssr_import_7__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_8__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+
+
+
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/settings/appearance-settings.tsx";
+
+/**
+* The theme and accent pickers.
+*
+* Two radio groups, spelled as buttons. Each is a single choice among a few, so
+* `radiogroup`/`radio`/`aria-checked` is the shape that says as much — a row of
+* pressed buttons would announce "pressed" and leave the "only one of these"
+* part for the reader to infer. The colour of the chosen chip is the visual
+* duplicate of that same fact, never the only place it is said.
+*
+* The theme's own group is `ThemeChoiceGroup`, not markup written here, because
+* the nav's mobile panel offers the same choice and the two are a phone's tap
+* apart — one component is what keeps them from answering differently. The
+* sentence underneath it is this card's alone, so it stays.
+*
+* Nothing here stores anything: the choice goes to `ThemeProvider`, which owns
+* both the storage and the class on `<html>`.
+*/
+function AppearanceSettings() {
+	const { theme, accent, resolvedTheme, setAccent } = (0,__vite_ssr_import_3__.useTheme)();
+	const { user } = (0,__vite_ssr_import_2__.useAuth)();
+	/**
+	* The accent, applied first and mirrored second.
+	*
+	* Local first because that is the part the reader sees: the class on `<html>`
+	* changes in this commit, and the request to the account is a copy that
+	* travels. It is not awaited and its answer is not shown — an accent that
+	* could not be saved to the account is still saved to this browser, and the
+	* next change tries again. Signed out, there is nowhere to send it, which is
+	* why the copy below changes with the session rather than pretending.
+	*/
+	const chooseAccent = (next) => {
+		setAccent(next);
+		if (user) void (0,__vite_ssr_import_4__.saveAccountAccent)(next);
+	};
+	return /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_1__.Card), { children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_1__.CardHeader), { children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_1__.CardTitle), {
+		className: "flex items-center gap-2",
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_0__.Palette), { className: "h-5 w-5 text-brand-blue" }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 52,
+			columnNumber: 11
+		}, this), " Appearance"]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 51,
+		columnNumber: 9
+	}, this), /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_1__.CardDescription), { children: user ? "Choose how LinkMe+ looks. The accent is saved to your account and follows you to any device you sign in on." : "Choose how LinkMe+ looks. Saved to this browser — sign in to keep your accent across devices." }, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 54,
+		columnNumber: 9
+	}, this)] }, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 50,
+		columnNumber: 7
+	}, this), /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_1__.CardContent), {
+		className: "space-y-6",
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("div", {
+			className: "space-y-2",
+			children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_5__.ThemeChoiceGroup), {}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 62,
+				columnNumber: 11
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("p", {
+				className: "text-xs text-muted-foreground",
+				children: theme === "system" ? `Following your device, which is currently ${resolvedTheme}.` : `Always ${theme} on this device.`
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 63,
+				columnNumber: 11
+			}, this)]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 61,
+			columnNumber: 9
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("div", {
+			className: "space-y-2",
+			children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("p", {
+				id: "accent-label",
+				className: "text-sm font-medium text-navy-800",
+				children: "Accent colour"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 71,
+				columnNumber: 11
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("div", {
+				role: "radiogroup",
+				"aria-labelledby": "accent-label",
+				className: "flex flex-wrap gap-2",
+				children: __vite_ssr_import_6__.ACCENTS.map((option) => {
+					const selected = accent === option.id;
+					return /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("button", {
+						type: "button",
+						role: "radio",
+						"aria-checked": selected,
+						"aria-label": option.label,
+						onClick: () => chooseAccent(option.id),
+						className: (0,__vite_ssr_import_7__.cn)("flex min-h-11 items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue", selected ? "border-brand-blue text-navy-800" : "border-surface-border text-navy-700 hover:bg-navy-50 hover:text-navy-800"),
+						children: [/* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)("span", {
+							"aria-hidden": "true",
+							className: "flex h-7 w-7 items-center justify-center rounded-full text-white",
+							style: { backgroundColor: option.swatch },
+							children: selected && /* @__PURE__ */ (0,__vite_ssr_import_8__.jsxDEV)((0,__vite_ssr_import_0__.Check), { className: "h-4 w-4" }, void 0, false, {
+								fileName: _jsxFileName,
+								lineNumber: 101,
+								columnNumber: 34
+							}, this)
+						}, void 0, false, {
+							fileName: _jsxFileName,
+							lineNumber: 96,
+							columnNumber: 19
+						}, this), option.label]
+					}, option.id, true, {
+						fileName: _jsxFileName,
+						lineNumber: 82,
+						columnNumber: 17
+					}, this);
+				})
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 74,
+				columnNumber: 11
+			}, this)]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 70,
+			columnNumber: 9
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 60,
+		columnNumber: 7
+	}, this)] }, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 49,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7O0FBVEE7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUE0Qk8sU0FBUyxxQkFBcUI7Q0FDbkMsTUFBTSxFQUFFLE9BQU8sUUFBUSxlQUFlLGNBQWMsb0NBQVM7Q0FDN0QsTUFBTSxFQUFFLFNBQVMsbUNBQVE7Ozs7Ozs7Ozs7O0NBWXpCLE1BQU0sZ0JBQWdCLFNBQWlCO0VBQ3JDLFVBQVUsSUFBSTtFQUNkLElBQUksTUFBTSxLQUFLLDRDQUFrQixJQUFJO0NBQ3ZDO0NBRUEsT0FDRSxvREFBQyw2QkFBRCxhQUNFLG9EQUFDLG1DQUFELGFBQ0Usb0RBQUMsa0NBQUQ7RUFBVyxXQUFVO1lBQXJCLENBQ0Usb0RBQUMsZ0NBQUQsRUFBUyxXQUFVLDBCQUEyQjs7OztZQUFDLGFBQ3RDOzs7OztXQUNYLG9EQUFDLHdDQUFELFlBQ0csT0FDRyxnSEFDQSxnR0FDVzs7OztTQUNQOzs7O1dBQ1osb0RBQUMsb0NBQUQ7RUFBYSxXQUFVO1lBQXZCLENBQ0UsaURBQUMsT0FBRDtHQUFLLFdBQVU7YUFBZixDQUNFLG9EQUFDLHlDQUFELENBQW1COzs7O2FBQ25CLGlEQUFDLEtBQUQ7SUFBRyxXQUFVO2NBQ1YsVUFBVSxXQUNQLDZDQUE2QyxjQUFjLEtBQzNELFVBQVUsTUFBTTtHQUNuQjs7OztXQUNBOzs7OztZQUVMLGlEQUFDLE9BQUQ7R0FBSyxXQUFVO2FBQWYsQ0FDRSxpREFBQyxLQUFEO0lBQUcsSUFBRztJQUFlLFdBQVU7Y0FBb0M7R0FFaEU7Ozs7YUFDSCxpREFBQyxPQUFEO0lBQ0UsTUFBSztJQUNMLG1CQUFnQjtJQUNoQixXQUFVO2NBRVQsOEJBQVEsS0FBSyxXQUFXO0tBQ3ZCLE1BQU0sV0FBVyxXQUFXLE9BQU87S0FDbkMsT0FDRSxpREFBQyxVQUFEO01BRUUsTUFBSztNQUNMLE1BQUs7TUFDTCxnQkFBYztNQUNkLGNBQVksT0FBTztNQUNuQixlQUFlLGFBQWEsT0FBTyxFQUFFO01BQ3JDLFdBQVcsNkJBQ1QsK0xBQ0EsV0FDSSxvQ0FDQSwwRUFDTjtnQkFaRixDQWNFLGlEQUFDLFFBQUQ7T0FDRSxlQUFZO09BQ1osV0FBVTtPQUNWLE9BQU8sRUFBRSxpQkFBaUIsT0FBTyxPQUFPO2lCQUV2QyxZQUFZLG9EQUFDLDhCQUFELEVBQU8sV0FBVSxVQUFXOzs7OztNQUNyQzs7OztnQkFDTCxPQUFPLEtBQ0Y7UUFyQkQsT0FBTzs7OztZQXFCTjtJQUVaLENBQUM7R0FDRTs7OztXQUNGOzs7OztVQUNNOzs7OztTQUNUOzs7OztBQUVWIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJhcHBlYXJhbmNlLXNldHRpbmdzLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcblxuaW1wb3J0IHsgQ2hlY2ssIFBhbGV0dGUgfSBmcm9tIFwibHVjaWRlLXJlYWN0XCI7XG5pbXBvcnQgeyBDYXJkLCBDYXJkQ29udGVudCwgQ2FyZERlc2NyaXB0aW9uLCBDYXJkSGVhZGVyLCBDYXJkVGl0bGUgfSBmcm9tIFwiQC9jb21wb25lbnRzL3VpL2NhcmRcIjtcbmltcG9ydCB7IHVzZUF1dGggfSBmcm9tIFwiQC9jb21wb25lbnRzL2F1dGgtcHJvdmlkZXJcIjtcbmltcG9ydCB7IHVzZVRoZW1lIH0gZnJvbSBcIkAvY29tcG9uZW50cy9wcm92aWRlcnMvdGhlbWUtcHJvdmlkZXJcIjtcbmltcG9ydCB7IHNhdmVBY2NvdW50QWNjZW50IH0gZnJvbSBcIkAvbGliL3RoZW1lLXByZWZlcmVuY2VzXCI7XG5pbXBvcnQgeyBUaGVtZUNob2ljZUdyb3VwIH0gZnJvbSBcIkAvY29tcG9uZW50cy9zaGFyZWQvdGhlbWUtY2hvaWNlLWdyb3VwXCI7XG5pbXBvcnQgeyBBQ0NFTlRTLCB0eXBlIEFjY2VudCB9IGZyb20gXCJAL2xpYi90aGVtZVwiO1xuaW1wb3J0IHsgY24gfSBmcm9tIFwiQC9saWIvdXRpbHNcIjtcblxuLyoqXG4gKiBUaGUgdGhlbWUgYW5kIGFjY2VudCBwaWNrZXJzLlxuICpcbiAqIFR3byByYWRpbyBncm91cHMsIHNwZWxsZWQgYXMgYnV0dG9ucy4gRWFjaCBpcyBhIHNpbmdsZSBjaG9pY2UgYW1vbmcgYSBmZXcsIHNvXG4gKiBgcmFkaW9ncm91cGAvYHJhZGlvYC9gYXJpYS1jaGVja2VkYCBpcyB0aGUgc2hhcGUgdGhhdCBzYXlzIGFzIG11Y2gg4oCUIGEgcm93IG9mXG4gKiBwcmVzc2VkIGJ1dHRvbnMgd291bGQgYW5ub3VuY2UgXCJwcmVzc2VkXCIgYW5kIGxlYXZlIHRoZSBcIm9ubHkgb25lIG9mIHRoZXNlXCJcbiAqIHBhcnQgZm9yIHRoZSByZWFkZXIgdG8gaW5mZXIuIFRoZSBjb2xvdXIgb2YgdGhlIGNob3NlbiBjaGlwIGlzIHRoZSB2aXN1YWxcbiAqIGR1cGxpY2F0ZSBvZiB0aGF0IHNhbWUgZmFjdCwgbmV2ZXIgdGhlIG9ubHkgcGxhY2UgaXQgaXMgc2FpZC5cbiAqXG4gKiBUaGUgdGhlbWUncyBvd24gZ3JvdXAgaXMgYFRoZW1lQ2hvaWNlR3JvdXBgLCBub3QgbWFya3VwIHdyaXR0ZW4gaGVyZSwgYmVjYXVzZVxuICogdGhlIG5hdidzIG1vYmlsZSBwYW5lbCBvZmZlcnMgdGhlIHNhbWUgY2hvaWNlIGFuZCB0aGUgdHdvIGFyZSBhIHBob25lJ3MgdGFwXG4gKiBhcGFydCDigJQgb25lIGNvbXBvbmVudCBpcyB3aGF0IGtlZXBzIHRoZW0gZnJvbSBhbnN3ZXJpbmcgZGlmZmVyZW50bHkuIFRoZVxuICogc2VudGVuY2UgdW5kZXJuZWF0aCBpdCBpcyB0aGlzIGNhcmQncyBhbG9uZSwgc28gaXQgc3RheXMuXG4gKlxuICogTm90aGluZyBoZXJlIHN0b3JlcyBhbnl0aGluZzogdGhlIGNob2ljZSBnb2VzIHRvIGBUaGVtZVByb3ZpZGVyYCwgd2hpY2ggb3duc1xuICogYm90aCB0aGUgc3RvcmFnZSBhbmQgdGhlIGNsYXNzIG9uIGA8aHRtbD5gLlxuICovXG5leHBvcnQgZnVuY3Rpb24gQXBwZWFyYW5jZVNldHRpbmdzKCkge1xuICBjb25zdCB7IHRoZW1lLCBhY2NlbnQsIHJlc29sdmVkVGhlbWUsIHNldEFjY2VudCB9ID0gdXNlVGhlbWUoKTtcbiAgY29uc3QgeyB1c2VyIH0gPSB1c2VBdXRoKCk7XG5cbiAgLyoqXG4gICAqIFRoZSBhY2NlbnQsIGFwcGxpZWQgZmlyc3QgYW5kIG1pcnJvcmVkIHNlY29uZC5cbiAgICpcbiAgICogTG9jYWwgZmlyc3QgYmVjYXVzZSB0aGF0IGlzIHRoZSBwYXJ0IHRoZSByZWFkZXIgc2VlczogdGhlIGNsYXNzIG9uIGA8aHRtbD5gXG4gICAqIGNoYW5nZXMgaW4gdGhpcyBjb21taXQsIGFuZCB0aGUgcmVxdWVzdCB0byB0aGUgYWNjb3VudCBpcyBhIGNvcHkgdGhhdFxuICAgKiB0cmF2ZWxzLiBJdCBpcyBub3QgYXdhaXRlZCBhbmQgaXRzIGFuc3dlciBpcyBub3Qgc2hvd24g4oCUIGFuIGFjY2VudCB0aGF0XG4gICAqIGNvdWxkIG5vdCBiZSBzYXZlZCB0byB0aGUgYWNjb3VudCBpcyBzdGlsbCBzYXZlZCB0byB0aGlzIGJyb3dzZXIsIGFuZCB0aGVcbiAgICogbmV4dCBjaGFuZ2UgdHJpZXMgYWdhaW4uIFNpZ25lZCBvdXQsIHRoZXJlIGlzIG5vd2hlcmUgdG8gc2VuZCBpdCwgd2hpY2ggaXNcbiAgICogd2h5IHRoZSBjb3B5IGJlbG93IGNoYW5nZXMgd2l0aCB0aGUgc2Vzc2lvbiByYXRoZXIgdGhhbiBwcmV0ZW5kaW5nLlxuICAgKi9cbiAgY29uc3QgY2hvb3NlQWNjZW50ID0gKG5leHQ6IEFjY2VudCkgPT4ge1xuICAgIHNldEFjY2VudChuZXh0KTtcbiAgICBpZiAodXNlcikgdm9pZCBzYXZlQWNjb3VudEFjY2VudChuZXh0KTtcbiAgfTtcblxuICByZXR1cm4gKFxuICAgIDxDYXJkPlxuICAgICAgPENhcmRIZWFkZXI+XG4gICAgICAgIDxDYXJkVGl0bGUgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTJcIj5cbiAgICAgICAgICA8UGFsZXR0ZSBjbGFzc05hbWU9XCJoLTUgdy01IHRleHQtYnJhbmQtYmx1ZVwiIC8+IEFwcGVhcmFuY2VcbiAgICAgICAgPC9DYXJkVGl0bGU+XG4gICAgICAgIDxDYXJkRGVzY3JpcHRpb24+XG4gICAgICAgICAge3VzZXJcbiAgICAgICAgICAgID8gXCJDaG9vc2UgaG93IExpbmtNZSsgbG9va3MuIFRoZSBhY2NlbnQgaXMgc2F2ZWQgdG8geW91ciBhY2NvdW50IGFuZCBmb2xsb3dzIHlvdSB0byBhbnkgZGV2aWNlIHlvdSBzaWduIGluIG9uLlwiXG4gICAgICAgICAgICA6IFwiQ2hvb3NlIGhvdyBMaW5rTWUrIGxvb2tzLiBTYXZlZCB0byB0aGlzIGJyb3dzZXIg4oCUIHNpZ24gaW4gdG8ga2VlcCB5b3VyIGFjY2VudCBhY3Jvc3MgZGV2aWNlcy5cIn1cbiAgICAgICAgPC9DYXJkRGVzY3JpcHRpb24+XG4gICAgICA8L0NhcmRIZWFkZXI+XG4gICAgICA8Q2FyZENvbnRlbnQgY2xhc3NOYW1lPVwic3BhY2UteS02XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwic3BhY2UteS0yXCI+XG4gICAgICAgICAgPFRoZW1lQ2hvaWNlR3JvdXAgLz5cbiAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXhzIHRleHQtbXV0ZWQtZm9yZWdyb3VuZFwiPlxuICAgICAgICAgICAge3RoZW1lID09PSBcInN5c3RlbVwiXG4gICAgICAgICAgICAgID8gYEZvbGxvd2luZyB5b3VyIGRldmljZSwgd2hpY2ggaXMgY3VycmVudGx5ICR7cmVzb2x2ZWRUaGVtZX0uYFxuICAgICAgICAgICAgICA6IGBBbHdheXMgJHt0aGVtZX0gb24gdGhpcyBkZXZpY2UuYH1cbiAgICAgICAgICA8L3A+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwic3BhY2UteS0yXCI+XG4gICAgICAgICAgPHAgaWQ9XCJhY2NlbnQtbGFiZWxcIiBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtbmF2eS04MDBcIj5cbiAgICAgICAgICAgIEFjY2VudCBjb2xvdXJcbiAgICAgICAgICA8L3A+XG4gICAgICAgICAgPGRpdlxuICAgICAgICAgICAgcm9sZT1cInJhZGlvZ3JvdXBcIlxuICAgICAgICAgICAgYXJpYS1sYWJlbGxlZGJ5PVwiYWNjZW50LWxhYmVsXCJcbiAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXggZmxleC13cmFwIGdhcC0yXCJcbiAgICAgICAgICA+XG4gICAgICAgICAgICB7QUNDRU5UUy5tYXAoKG9wdGlvbikgPT4ge1xuICAgICAgICAgICAgICBjb25zdCBzZWxlY3RlZCA9IGFjY2VudCA9PT0gb3B0aW9uLmlkO1xuICAgICAgICAgICAgICByZXR1cm4gKFxuICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgIGtleT17b3B0aW9uLmlkfVxuICAgICAgICAgICAgICAgICAgdHlwZT1cImJ1dHRvblwiXG4gICAgICAgICAgICAgICAgICByb2xlPVwicmFkaW9cIlxuICAgICAgICAgICAgICAgICAgYXJpYS1jaGVja2VkPXtzZWxlY3RlZH1cbiAgICAgICAgICAgICAgICAgIGFyaWEtbGFiZWw9e29wdGlvbi5sYWJlbH1cbiAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IGNob29zZUFjY2VudChvcHRpb24uaWQpfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPXtjbihcbiAgICAgICAgICAgICAgICAgICAgXCJmbGV4IG1pbi1oLTExIGl0ZW1zLWNlbnRlciBnYXAtMiByb3VuZGVkLWZ1bGwgYm9yZGVyIHB5LTEuNSBwbC0xLjUgcHItMyB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRyYW5zaXRpb24tY29sb3JzIGZvY3VzLXZpc2libGU6b3V0bGluZS1ub25lIGZvY3VzLXZpc2libGU6cmluZy0yIGZvY3VzLXZpc2libGU6cmluZy1icmFuZC1ibHVlXCIsXG4gICAgICAgICAgICAgICAgICAgIHNlbGVjdGVkXG4gICAgICAgICAgICAgICAgICAgICAgPyBcImJvcmRlci1icmFuZC1ibHVlIHRleHQtbmF2eS04MDBcIlxuICAgICAgICAgICAgICAgICAgICAgIDogXCJib3JkZXItc3VyZmFjZS1ib3JkZXIgdGV4dC1uYXZ5LTcwMCBob3ZlcjpiZy1uYXZ5LTUwIGhvdmVyOnRleHQtbmF2eS04MDBcIixcbiAgICAgICAgICAgICAgICAgICl9XG4gICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgPHNwYW5cbiAgICAgICAgICAgICAgICAgICAgYXJpYS1oaWRkZW49XCJ0cnVlXCJcbiAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleCBoLTcgdy03IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWNlbnRlciByb3VuZGVkLWZ1bGwgdGV4dC13aGl0ZVwiXG4gICAgICAgICAgICAgICAgICAgIHN0eWxlPXt7IGJhY2tncm91bmRDb2xvcjogb3B0aW9uLnN3YXRjaCB9fVxuICAgICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgICB7c2VsZWN0ZWQgJiYgPENoZWNrIGNsYXNzTmFtZT1cImgtNCB3LTRcIiAvPn1cbiAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgIHtvcHRpb24ubGFiZWx9XG4gICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgICk7XG4gICAgICAgICAgICB9KX1cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L0NhcmRDb250ZW50PlxuICAgIDwvQ2FyZD5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3NldHRpbmdzL2FwcGVhcmFuY2Utc2V0dGluZ3MudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zZXR0aW5ncy9hcHBlYXJhbmNlLXNldHRpbmdzLnRzeCIsIi9zcmMvY29tcG9uZW50cy9zZXR0aW5ncy9hcHBlYXJhbmNlLXNldHRpbmdzLnRzeCIsW11d

@@ -64,7 +64,7 @@ const PENDING_ID_PREFIX = "pending-";
 /** Ids per reconciliation request; the counts endpoint caps a request at 100. */
 const COUNT_RECONCILE_CHUNK = 100;
 /**
- * Ids per audience re-check. `GET /api/posts?ids=` rejects more than 25 at once
+ * Ids per audience re-check. `GET /api/posts?feed=true&ids=` rejects more than 25 at once
  * (`MAX_LOOKUP_IDS` there), and an unfollow can ask about every card on screen.
  */
 const VISIBILITY_CHECK_CHUNK = 25;
@@ -100,6 +100,7 @@ interface FeedMedia {
 }
 
 interface FeedPost {
+  topicId?: string | null;
   id: string;
   content?: string | null;
   createdAt: string;
@@ -309,7 +310,7 @@ function FeedContent() {
       try {
         const query = new URLSearchParams({ limit: String(PAGE_SIZE) });
         if (cursor) query.set("cursor", cursor);
-        const response = await fetch(`/api/posts?${query.toString()}`, { cache: "no-store" });
+        const response = await fetch(`/api/posts?feed=true&${query.toString()}`, { cache: "no-store" });
         if (!response.ok) throw new Error("Unable to load posts");
         const payload = await response.json();
         const serverPosts: FeedPost[] = Array.isArray(payload.data) ? payload.data : [];
@@ -390,7 +391,7 @@ function FeedContent() {
       // Older than the pages we are willing to walk: fetch it on its own and put
       // it where its timestamp belongs.
       try {
-        const response = await fetch(`/api/posts?ids=${encodeURIComponent(postId)}`, {
+        const response = await fetch(`/api/posts?feed=true&ids=${encodeURIComponent(postId)}`, {
           cache: "no-store",
         });
         const payload = response.ok ? await response.json() : null;
@@ -551,7 +552,7 @@ function FeedContent() {
       const unique = [...new Set(ids)].filter(Boolean).slice(-MAX_HELD_POSTS);
       if (unique.length === 0) return;
       try {
-        const response = await fetch(`/api/posts?ids=${encodeURIComponent(unique.join(","))}`, {
+        const response = await fetch(`/api/posts?feed=true&ids=${encodeURIComponent(unique.join(","))}`, {
           cache: "no-store",
         });
         if (!response.ok) throw new Error("Post lookup failed");
@@ -585,7 +586,7 @@ function FeedContent() {
   /** Reconciles against the API once, after a subscription gap. */
   const catchUpOnMissedPosts = useCallback(async () => {
     try {
-      const response = await fetch(`/api/posts?limit=${REALTIME_CATCHUP_LIMIT}`, {
+      const response = await fetch(`/api/posts?feed=true&limit=${REALTIME_CATCHUP_LIMIT}`, {
         cache: "no-store",
       });
       if (!response.ok) return;
@@ -667,7 +668,7 @@ function FeedContent() {
   const revealAuthorPosts = useCallback(
     (authorId: string) =>
       revealPosts(
-        `/api/posts?authorId=${encodeURIComponent(authorId)}&limit=${REVEALED_POST_LIMIT}`,
+        `/api/posts?feed=true&authorId=${encodeURIComponent(authorId)}&limit=${REVEALED_POST_LIMIT}`,
         (lead, count) =>
           revealNoticeMessage(lead.author?.name || lead.author?.username || "they", count),
       ),
@@ -678,7 +679,7 @@ function FeedContent() {
   const revealGroupPosts = useCallback(
     (groupId: string) =>
       revealPosts(
-        `/api/posts?groupId=${encodeURIComponent(groupId)}&limit=${REVEALED_POST_LIMIT}`,
+        `/api/posts?feed=true&groupId=${encodeURIComponent(groupId)}&limit=${REVEALED_POST_LIMIT}`,
         (lead, count) => groupRevealNoticeMessage(lead.group?.name || "the group", count),
       ),
     [revealPosts],
@@ -705,7 +706,7 @@ function FeedContent() {
       for (let index = 0; index < unique.length; index += VISIBILITY_CHECK_CHUNK) {
         const chunk = unique.slice(index, index + VISIBILITY_CHECK_CHUNK);
         try {
-          const response = await fetch(`/api/posts?ids=${encodeURIComponent(chunk.join(","))}`, {
+          const response = await fetch(`/api/posts?feed=true&ids=${encodeURIComponent(chunk.join(","))}`, {
             cache: "no-store",
           });
           if (!response.ok) continue;
@@ -807,7 +808,7 @@ function FeedContent() {
       setPostError(null);
       removePost(postId);
       try {
-        const response = await fetch(`/api/posts?id=${encodeURIComponent(postId)}`, {
+        const response = await fetch(`/api/posts?feed=true&id=${encodeURIComponent(postId)}`, {
           method: "DELETE",
         });
         if (!response.ok) throw new Error("Delete failed");
@@ -1099,7 +1100,7 @@ function FeedContent() {
     return () => observer.disconnect();
   }, [hasMore, loadMore, posts.length]);
 
-  const handlePost = async (content: string, image?: File, audience: PostAudience = "public") => {
+  const handlePost = async (content: string, image?: File, audience: PostAudience = "public", topicId?: string) => {
     const trimmed = content.trim();
     const blobUrl = image ? URL.createObjectURL(image) : undefined;
     const media = image && blobUrl
@@ -1150,6 +1151,7 @@ function FeedContent() {
       const { post: created, media: stored } = await publishPost({
         content: trimmed,
         file: image ?? null,
+        topicId,
         audience,
       });
 
@@ -1312,7 +1314,7 @@ function FeedContent() {
                 highlightKey={highlightId}
                 renderItem={(post) => {
                   const media = post.media?.find((item) => item.type.toLowerCase().startsWith("image") || item.type.toLowerCase().startsWith("video"));
-                  return <PostCard id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined} />;
+                  return <PostCard topicId={post.topicId} id={post.id} author={post.page?.id ? { name: post.page.name || "Page", username: post.page.username || "page", avatar: post.page.avatarUrl || undefined } : { name: post.author.name || "Member", username: post.author.username || "member", avatar: post.author.avatarUrl || undefined }} content={post.content || ""} image={media?.url} mediaType={media?.type} time={formatPostTime(post.createdAt)} likes={post.reactionCount ?? 0} comments={post.commentCount ?? 0} shares={0} visibility={post.visibility} groupName={post.group?.name ?? undefined} pending={post.pending} activity={activity[post.id]} edited={Boolean(post.editedAt)} onDelete={viewerId && post.author.id === viewerId ? deletePost : undefined} onUpdate={viewerId && post.author.id === viewerId ? updatePost : undefined} />;
                 }}
               />
 

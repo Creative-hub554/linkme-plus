@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface, type MountedSurface } from "@/test/render";
 import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fetch";
@@ -195,6 +196,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "A brand new thought");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("A brand new thought") ?? false, {
       description: "the published post",
@@ -212,6 +214,7 @@ describe("the feed page", () => {
     const fileInput = ui.container.querySelector('input[type=file][accept="image/*"]') as HTMLInputElement;
     await ui.chooseFiles(fileInput, [new File([new Uint8Array(8)], "shot.png", { type: "image/png" })]);
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => requests.calls.some((call) => call.pathname === "/api/posts/media"), {
       description: "the attachment upload",
@@ -227,6 +230,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "This one will not land");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't publish your post") ?? false, {
       description: "the publish failure",
@@ -244,6 +248,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "Fails");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't publish your post") ?? false, {
       description: "the publish error",
@@ -339,6 +344,7 @@ describe("the feed page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited post");
+    await selectPostTopic();
     await ui.click(dialogButton("Save changes"));
     await ui.waitFor(() => ui.container.textContent?.includes("My edited post") ?? false, {
       description: "the edited card",
@@ -356,6 +362,7 @@ describe("the feed page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited post");
+    await selectPostTopic();
     await ui.click(dialogButton("Save changes"));
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't save your changes") ?? false, {
       description: "the update failure",

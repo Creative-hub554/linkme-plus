@@ -1,0 +1,236 @@
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/vitest/dist/index.js", {"importedNames":["afterAll","beforeAll","describe","expect","it"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("node:child_process", {"importedNames":["spawnSync"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("node:fs", {"importedNames":["existsSync","mkdtempSync","readFileSync","rmSync","writeFileSync"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("node:os", {"importedNames":["tmpdir"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("node:path", {"importedNames":["default"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("node:url", {"importedNames":["fileURLToPath"]});
+/// <reference types="vite/client" />
+
+
+
+
+
+
+/**
+* The mutation sweep's baseline ratchet, and the half of it that covers the
+* decisions no limb strike reaches.
+*
+* `.freebuff/mutation-guards.mjs --baseline` reads `.freebuff/mutation-baseline.json` and
+* fails when this run has a gap the recorded one does not: a *survivor* the sweep used to
+* have (a guard whose test stopped noticing) and, since the sweep grew an audit, an
+* *un-struck rule* — a decision in `src/test/convention-guards.ts` that a limb strike used
+* to reach and no longer does. The second is the sharper of the two in one direction: a
+* survivor is a gap someone can read in the report, while an un-struck rule is a gap the
+* *strikes* cannot show at all, because a detector that lost one limb still reports and the
+* meta-test that drives it still passes. The ratchet is what makes the audit's list a
+* floor rather than a snapshot: `43 of 55` may fall and may not rise.
+*
+* What this file drives is the real script, through the seams the other sweep suites use:
+*
+*   - `MUTATION_BASELINE_FILE` moves the baseline file into this test's temp directory, so
+*     the recorded baseline — and the ratchet's own run — are the ones under test and never
+*     the developer's file;
+*   - `MUTATION_LOCK_FILE` keeps the run away from the lock a real sweep may be holding;
+*   - `--file=<a scope that matches nothing>` runs the sweep with **no mutation in scope**.
+*
+* That last one is why this suite can test a tree-editing check at all. The sweep's whole
+* job is to rewrite a file, run a test, and put the file back, and a suite that did that to
+* `src/test/convention-guards.ts` while the rest of the tests were reading it would fail
+* some of them for a reason that has nothing to do with them. A scope that matches nothing
+* runs zero mutations and edits nothing, and the un-struck half is read from the detector
+* file directly — the audit is whole-file by construction and is *not* narrowed by `--file`
+* (that is asserted below), so a scoped run compares exactly the same list. Both the
+* direction this ratchet exists for (a recorded rule that lost its strike → exit 1) and the
+* direction it tolerates (a rule that gained one → reported, exit 0) are exercised this way,
+* with nothing on disk disturbed.
+*
+* The one thing that is *not* covered here is the survivor half's `NEW SURVIVORS` branch,
+* which needs a mutation to actually run and therefore a real tree edit. It is left out on
+* purpose rather than fudged: the survivor comparison is unchanged by the un-struck half —
+* the same keys, the same tally, the same wording — and its recorded-baseline direction is
+* asserted below.
+*/
+const projectRoot = (0,__vite_ssr_import_5__.fileURLToPath)(new URL("../..", __vite_ssr_import_meta__.url));
+const sweep = __vite_ssr_import_4__.default.join(projectRoot, ".freebuff", "mutation-guards.mjs");
+/**
+* A `--file` scope that cannot match a route or a mutation, so the run checks nothing and
+* touches nothing.
+*/
+const NO_MUTATIONS = "--file=__mutation_baseline_no_such_scope__";
+let workdir = "";
+let lockPath = "";
+(0,__vite_ssr_import_0__.beforeAll)(() => {
+	workdir = (0,__vite_ssr_import_2__.mkdtempSync)(__vite_ssr_import_4__.default.join((0,__vite_ssr_import_3__.tmpdir)(), "mutation-baseline-"));
+	lockPath = __vite_ssr_import_4__.default.join(workdir, "lock.json");
+});
+(0,__vite_ssr_import_0__.afterAll)(() => {
+	(0,__vite_ssr_import_2__.rmSync)(workdir, {
+		recursive: true,
+		force: true
+	});
+});
+/** Runs the real sweep with this test's lock and baseline, and no real file at risk. */
+function run(args, baselinePath = __vite_ssr_import_4__.default.join(workdir, "baseline.json")) {
+	return (0,__vite_ssr_import_1__.spawnSync)(process.execPath, [sweep, ...args], {
+		cwd: projectRoot,
+		encoding: "utf8",
+		env: {
+			...process.env,
+			MUTATION_LOCK_FILE: lockPath,
+			MUTATION_BASELINE_FILE: baselinePath
+		}
+	});
+}
+/** The audit's own list — the authoritative set of decisions no limb strike reaches. */
+function auditEntries() {
+	const result = run(["--audit", "--json"]);
+	(0,__vite_ssr_import_0__.expect)(result.status, `the audit failed:\n${result.stderr ?? ""}`).toBe(0);
+	const payload = JSON.parse(result.stdout ?? "{}");
+	return payload.unstruck.map(({ where, code }) => ({
+		where,
+		code
+	}));
+}
+/** Seeds a baseline file from the audit, with one thing changed. */
+function seed(name, change) {
+	const file = __vite_ssr_import_4__.default.join(workdir, name);
+	const baseline = {
+		generatedAt: new Date().toISOString(),
+		note: "seeded by src/test/mutation-baseline.test.ts",
+		survivors: [],
+		unstruck: auditEntries()
+	};
+	change(baseline);
+	(0,__vite_ssr_import_2__.writeFileSync)(file, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+	return file;
+}
+(0,__vite_ssr_import_0__.describe)("the sweep's baseline ratchet", () => {
+	(0,__vite_ssr_import_0__.it)("records the un-struck half as the audit lists it, whole-file, however the sweep was scoped", () => {
+		const file = __vite_ssr_import_4__.default.join(workdir, "written.json");
+		const written = run([NO_MUTATIONS, "--write-baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(written.status, `--write-baseline failed:\n${written.stderr ?? ""}`).toBe(0);
+		(0,__vite_ssr_import_0__.expect)((0,__vite_ssr_import_2__.existsSync)(file)).toBe(true);
+		// The scope matched nothing, so the survivor half is empty — the scoped run records only
+		// the survivors it saw. The un-struck half is not the scope's to narrow: it comes from the
+		// detector file as a whole, which is what keeps a scoped `--write-baseline` from recording
+		// a baseline that would read as a regression the next time the sweep ran in full.
+		const recorded = JSON.parse((0,__vite_ssr_import_2__.readFileSync)(file, "utf8"));
+		(0,__vite_ssr_import_0__.expect)(recorded.survivors).toEqual([]);
+		const audit = auditEntries();
+		(0,__vite_ssr_import_0__.expect)(audit.length).toBeGreaterThan(0);
+		(0,__vite_ssr_import_0__.expect)(recorded.unstruck).toEqual(audit);
+	});
+	(0,__vite_ssr_import_0__.it)("passes when the run matches the baseline, and says what it checked", () => {
+		const file = seed("matching.json", () => {});
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `a matching baseline failed:\n${result.stdout ?? ""}`).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("Baseline OK");
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("un-struck entry(ies) checked");
+	});
+	(0,__vite_ssr_import_0__.it)("fails when a decision the baseline records as un-struck no longer has a limb strike", () => {
+		// The recorded baseline says a strike reaches this decision; this run says nothing does.
+		// That is the failure the ratchet exists for, and it does not need the sweep to run a
+		// single mutation to see it: the list is read from the detector file either way.
+		let lost = {
+			where: "",
+			code: ""
+		};
+		const file = seed("lost-a-strike.json", (baseline) => {
+			lost = baseline.unstruck[baseline.unstruck.length - 1];
+			baseline.unstruck = baseline.unstruck.slice(0, -1);
+		});
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("Checked 0 mutation(s)");
+		(0,__vite_ssr_import_0__.expect)(result.status, `an un-struck rule was not reported:\n${result.stdout ?? ""}`).toBe(1);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("NEW UN-STRUCK RULES (1)");
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain(`${lost.where}  ${lost.code}`);
+	});
+	(0,__vite_ssr_import_0__.it)("reports a rule a strike reaches again without failing, so the gap can only shrink", () => {
+		const file = seed("gained-a-strike.json", (baseline) => {
+			baseline.unstruck.push({
+				where: "mount",
+				code: "return [];"
+			});
+		});
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `a baseline that lost a gap failed:\n${result.stdout ?? ""}`).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("Struck since the baseline (1)");
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("mount  return [];");
+	});
+	(0,__vite_ssr_import_0__.it)("reports a survivor the run no longer has, and does not fail for it", () => {
+		// The survivor half is compared only against the recorded entries it can speak for — the
+		// ones whose path the scope matches — so the seeded survivor carries the scope's own name.
+		const file = seed("survivor-gone.json", (baseline) => {
+			baseline.survivors = [{
+				path: `src/app/${NO_MUTATIONS.slice("--file=".length)}/route.ts`,
+				descriptor: "if (!session) [fail-open]",
+				line: 1,
+				kind: "guard",
+				named: []
+			}];
+		});
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `a resolved survivor failed:\n${result.stdout ?? ""}`).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("Resolved since the baseline (1)");
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("if (!session) [fail-open]");
+	});
+	(0,__vite_ssr_import_0__.it)("says so before failing on a baseline recorded before the un-struck half existed", () => {
+		// A file from the version that ratcheted only survivors: it holds no un-struck list, so
+		// every rule reads as newly un-struck. Failing closed is right — the file cannot say the
+		// gap is the known one — and the message names the one thing that fixes it.
+		const file = seed("legacy.json", (baseline) => {
+			delete baseline.unstruck;
+		});
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `a legacy baseline passed:\n${result.stdout ?? ""}`).toBe(1);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("holds no un-struck list");
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("NEW UN-STRUCK RULES");
+	});
+	(0,__vite_ssr_import_0__.it)("records a baseline when there is none to compare against, and passes", () => {
+		const file = __vite_ssr_import_4__.default.join(workdir, "fresh.json");
+		(0,__vite_ssr_import_2__.rmSync)(file, { force: true });
+		const result = run([NO_MUTATIONS, "--baseline"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `a missing baseline failed:\n${result.stdout ?? ""}`).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("No baseline existed");
+		const recorded = JSON.parse((0,__vite_ssr_import_2__.readFileSync)(file, "utf8"));
+		(0,__vite_ssr_import_0__.expect)(recorded.unstruck).toEqual(auditEntries());
+	});
+	(0,__vite_ssr_import_0__.it)("carries the recorded un-struck count on the report payload, so a run past it can warn", () => {
+		// The report payload's half of the same floor: `--baseline` compares key by key
+		// and fails; a plain `--json` run — the one the nightly gate actually makes —
+		// carries both counts so the runner can warn on the run page when this run's gap
+		// is past the recorded one. Seeded two rules *below* the audit, so the payload
+		// reads the run as `+2` past the floor.
+		const file = seed("carried.json", (baseline) => {
+			baseline.unstruck = baseline.unstruck.slice(0, -2);
+		});
+		const result = run([NO_MUTATIONS, "--json"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `the report run failed:\n${result.stderr ?? ""}`).toBe(0);
+		const payload = JSON.parse(result.stdout ?? "{}");
+		const recorded = JSON.parse((0,__vite_ssr_import_2__.readFileSync)(file, "utf8"));
+		const audit = auditEntries();
+		(0,__vite_ssr_import_0__.expect)(payload.unstruck).toBe(audit.length);
+		(0,__vite_ssr_import_0__.expect)(recorded.unstruck).toHaveLength(audit.length - 2);
+		// The count rides beside the measurement, read from the same file the ratchet
+		// compares against — one floor for both readings.
+		(0,__vite_ssr_import_0__.expect)(payload.unstruckBaseline).toBe(recorded.unstruck.length);
+		(0,__vite_ssr_import_0__.expect)(payload.unstruck - (payload.unstruckBaseline ?? 0)).toBe(2);
+	});
+	(0,__vite_ssr_import_0__.it)("carries no baseline count when nothing records one, rather than a zero", () => {
+		// The warning may only fire against a floor that exists: a missing file (or one
+		// written before the un-struck half joined it) serializes to *no key* on the
+		// payload, so a consumer reads "no comparison" rather than "baseline of 0" —
+		// which would read every tree as grown past a floor nothing ever recorded.
+		const file = __vite_ssr_import_4__.default.join(workdir, "absent-for-report.json");
+		(0,__vite_ssr_import_2__.rmSync)(file, { force: true });
+		const result = run([NO_MUTATIONS, "--json"], file);
+		(0,__vite_ssr_import_0__.expect)(result.status, `the report run failed:\n${result.stderr ?? ""}`).toBe(0);
+		const payload = JSON.parse(result.stdout ?? "{}");
+		(0,__vite_ssr_import_0__.expect)(payload.unstruck).toBeGreaterThan(0);
+		(0,__vite_ssr_import_0__.expect)("unstruckBaseline" in payload).toBe(false);
+	});
+});
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,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QixPQUFPLENBQUMsQ0FBQyxLQUFLLEtBQUs7Q0FDbEQsQ0FBQztBQUNILENBQUMiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbIm11dGF0aW9uLWJhc2VsaW5lLnRlc3QudHMiXSwic291cmNlc0NvbnRlbnQiOlsiLy8vIDxyZWZlcmVuY2UgdHlwZXM9XCJ2aXRlL2NsaWVudFwiIC8+XG5pbXBvcnQgeyBhZnRlckFsbCwgYmVmb3JlQWxsLCBkZXNjcmliZSwgZXhwZWN0LCBpdCB9IGZyb20gXCJ2aXRlc3RcIjtcbmltcG9ydCB7IHNwYXduU3luYyB9IGZyb20gXCJub2RlOmNoaWxkX3Byb2Nlc3NcIjtcbmltcG9ydCB7IGV4aXN0c1N5bmMsIG1rZHRlbXBTeW5jLCByZWFkRmlsZVN5bmMsIHJtU3luYywgd3JpdGVGaWxlU3luYyB9IGZyb20gXCJub2RlOmZzXCI7XG5pbXBvcnQgeyB0bXBkaXIgfSBmcm9tIFwibm9kZTpvc1wiO1xuaW1wb3J0IHBhdGggZnJvbSBcIm5vZGU6cGF0aFwiO1xuaW1wb3J0IHsgZmlsZVVSTFRvUGF0aCB9IGZyb20gXCJub2RlOnVybFwiO1xuXG4vKipcbiAqIFRoZSBtdXRhdGlvbiBzd2VlcCdzIGJhc2VsaW5lIHJhdGNoZXQsIGFuZCB0aGUgaGFsZiBvZiBpdCB0aGF0IGNvdmVycyB0aGVcbiAqIGRlY2lzaW9ucyBubyBsaW1iIHN0cmlrZSByZWFjaGVzLlxuICpcbiAqIGAuZnJlZWJ1ZmYvbXV0YXRpb24tZ3VhcmRzLm1qcyAtLWJhc2VsaW5lYCByZWFkcyBgLmZyZWVidWZmL211dGF0aW9uLWJhc2VsaW5lLmpzb25gIGFuZFxuICogZmFpbHMgd2hlbiB0aGlzIHJ1biBoYXMgYSBnYXAgdGhlIHJlY29yZGVkIG9uZSBkb2VzIG5vdDogYSAqc3Vydml2b3IqIHRoZSBzd2VlcCB1c2VkIHRvXG4gKiBoYXZlIChhIGd1YXJkIHdob3NlIHRlc3Qgc3RvcHBlZCBub3RpY2luZykgYW5kLCBzaW5jZSB0aGUgc3dlZXAgZ3JldyBhbiBhdWRpdCwgYW5cbiAqICp1bi1zdHJ1Y2sgcnVsZSog4oCUIGEgZGVjaXNpb24gaW4gYHNyYy90ZXN0L2NvbnZlbnRpb24tZ3VhcmRzLnRzYCB0aGF0IGEgbGltYiBzdHJpa2UgdXNlZFxuICogdG8gcmVhY2ggYW5kIG5vIGxvbmdlciBkb2VzLiBUaGUgc2Vjb25kIGlzIHRoZSBzaGFycGVyIG9mIHRoZSB0d28gaW4gb25lIGRpcmVjdGlvbjogYVxuICogc3Vydml2b3IgaXMgYSBnYXAgc29tZW9uZSBjYW4gcmVhZCBpbiB0aGUgcmVwb3J0LCB3aGlsZSBhbiB1bi1zdHJ1Y2sgcnVsZSBpcyBhIGdhcCB0aGVcbiAqICpzdHJpa2VzKiBjYW5ub3Qgc2hvdyBhdCBhbGwsIGJlY2F1c2UgYSBkZXRlY3RvciB0aGF0IGxvc3Qgb25lIGxpbWIgc3RpbGwgcmVwb3J0cyBhbmQgdGhlXG4gKiBtZXRhLXRlc3QgdGhhdCBkcml2ZXMgaXQgc3RpbGwgcGFzc2VzLiBUaGUgcmF0Y2hldCBpcyB3aGF0IG1ha2VzIHRoZSBhdWRpdCdzIGxpc3QgYVxuICogZmxvb3IgcmF0aGVyIHRoYW4gYSBzbmFwc2hvdDogYDQzIG9mIDU1YCBtYXkgZmFsbCBhbmQgbWF5IG5vdCByaXNlLlxuICpcbiAqIFdoYXQgdGhpcyBmaWxlIGRyaXZlcyBpcyB0aGUgcmVhbCBzY3JpcHQsIHRocm91Z2ggdGhlIHNlYW1zIHRoZSBvdGhlciBzd2VlcCBzdWl0ZXMgdXNlOlxuICpcbiAqICAgLSBgTVVUQVRJT05fQkFTRUxJTkVfRklMRWAgbW92ZXMgdGhlIGJhc2VsaW5lIGZpbGUgaW50byB0aGlzIHRlc3QncyB0ZW1wIGRpcmVjdG9yeSwgc29cbiAqICAgICB0aGUgcmVjb3JkZWQgYmFzZWxpbmUg4oCUIGFuZCB0aGUgcmF0Y2hldCdzIG93biBydW4g4oCUIGFyZSB0aGUgb25lcyB1bmRlciB0ZXN0IGFuZCBuZXZlclxuICogICAgIHRoZSBkZXZlbG9wZXIncyBmaWxlO1xuICogICAtIGBNVVRBVElPTl9MT0NLX0ZJTEVgIGtlZXBzIHRoZSBydW4gYXdheSBmcm9tIHRoZSBsb2NrIGEgcmVhbCBzd2VlcCBtYXkgYmUgaG9sZGluZztcbiAqICAgLSBgLS1maWxlPTxhIHNjb3BlIHRoYXQgbWF0Y2hlcyBub3RoaW5nPmAgcnVucyB0aGUgc3dlZXAgd2l0aCAqKm5vIG11dGF0aW9uIGluIHNjb3BlKiouXG4gKlxuICogVGhhdCBsYXN0IG9uZSBpcyB3aHkgdGhpcyBzdWl0ZSBjYW4gdGVzdCBhIHRyZWUtZWRpdGluZyBjaGVjayBhdCBhbGwuIFRoZSBzd2VlcCdzIHdob2xlXG4gKiBqb2IgaXMgdG8gcmV3cml0ZSBhIGZpbGUsIHJ1biBhIHRlc3QsIGFuZCBwdXQgdGhlIGZpbGUgYmFjaywgYW5kIGEgc3VpdGUgdGhhdCBkaWQgdGhhdCB0b1xuICogYHNyYy90ZXN0L2NvbnZlbnRpb24tZ3VhcmRzLnRzYCB3aGlsZSB0aGUgcmVzdCBvZiB0aGUgdGVzdHMgd2VyZSByZWFkaW5nIGl0IHdvdWxkIGZhaWxcbiAqIHNvbWUgb2YgdGhlbSBmb3IgYSByZWFzb24gdGhhdCBoYXMgbm90aGluZyB0byBkbyB3aXRoIHRoZW0uIEEgc2NvcGUgdGhhdCBtYXRjaGVzIG5vdGhpbmdcbiAqIHJ1bnMgemVybyBtdXRhdGlvbnMgYW5kIGVkaXRzIG5vdGhpbmcsIGFuZCB0aGUgdW4tc3RydWNrIGhhbGYgaXMgcmVhZCBmcm9tIHRoZSBkZXRlY3RvclxuICogZmlsZSBkaXJlY3RseSDigJQgdGhlIGF1ZGl0IGlzIHdob2xlLWZpbGUgYnkgY29uc3RydWN0aW9uIGFuZCBpcyAqbm90KiBuYXJyb3dlZCBieSBgLS1maWxlYFxuICogKHRoYXQgaXMgYXNzZXJ0ZWQgYmVsb3cpLCBzbyBhIHNjb3BlZCBydW4gY29tcGFyZXMgZXhhY3RseSB0aGUgc2FtZSBsaXN0LiBCb3RoIHRoZVxuICogZGlyZWN0aW9uIHRoaXMgcmF0Y2hldCBleGlzdHMgZm9yIChhIHJlY29yZGVkIHJ1bGUgdGhhdCBsb3N0IGl0cyBzdHJpa2Ug4oaSIGV4aXQgMSkgYW5kIHRoZVxuICogZGlyZWN0aW9uIGl0IHRvbGVyYXRlcyAoYSBydWxlIHRoYXQgZ2FpbmVkIG9uZSDihpIgcmVwb3J0ZWQsIGV4aXQgMCkgYXJlIGV4ZXJjaXNlZCB0aGlzIHdheSxcbiAqIHdpdGggbm90aGluZyBvbiBkaXNrIGRpc3R1cmJlZC5cbiAqXG4gKiBUaGUgb25lIHRoaW5nIHRoYXQgaXMgKm5vdCogY292ZXJlZCBoZXJlIGlzIHRoZSBzdXJ2aXZvciBoYWxmJ3MgYE5FVyBTVVJWSVZPUlNgIGJyYW5jaCxcbiAqIHdoaWNoIG5lZWRzIGEgbXV0YXRpb24gdG8gYWN0dWFsbHkgcnVuIGFuZCB0aGVyZWZvcmUgYSByZWFsIHRyZWUgZWRpdC4gSXQgaXMgbGVmdCBvdXQgb25cbiAqIHB1cnBvc2UgcmF0aGVyIHRoYW4gZnVkZ2VkOiB0aGUgc3Vydml2b3IgY29tcGFyaXNvbiBpcyB1bmNoYW5nZWQgYnkgdGhlIHVuLXN0cnVjayBoYWxmIOKAlFxuICogdGhlIHNhbWUga2V5cywgdGhlIHNhbWUgdGFsbHksIHRoZSBzYW1lIHdvcmRpbmcg4oCUIGFuZCBpdHMgcmVjb3JkZWQtYmFzZWxpbmUgZGlyZWN0aW9uIGlzXG4gKiBhc3NlcnRlZCBiZWxvdy5cbiAqL1xuXG5jb25zdCBwcm9qZWN0Um9vdCA9IGZpbGVVUkxUb1BhdGgobmV3IFVSTChcIi4uLy4uXCIsIGltcG9ydC5tZXRhLnVybCkpO1xuY29uc3Qgc3dlZXAgPSBwYXRoLmpvaW4ocHJvamVjdFJvb3QsIFwiLmZyZWVidWZmXCIsIFwibXV0YXRpb24tZ3VhcmRzLm1qc1wiKTtcblxuLyoqXG4gKiBBIGAtLWZpbGVgIHNjb3BlIHRoYXQgY2Fubm90IG1hdGNoIGEgcm91dGUgb3IgYSBtdXRhdGlvbiwgc28gdGhlIHJ1biBjaGVja3Mgbm90aGluZyBhbmRcbiAqIHRvdWNoZXMgbm90aGluZy5cbiAqL1xuY29uc3QgTk9fTVVUQVRJT05TID0gXCItLWZpbGU9X19tdXRhdGlvbl9iYXNlbGluZV9ub19zdWNoX3Njb3BlX19cIjtcblxuLyoqIFdoYXQgdGhlIGJhc2VsaW5lIGZpbGUgaG9sZHM6IHRoZSBzdXJ2aXZvcnMgaXQgbWF5IG5vdCBleGNlZWQgYW5kIHRoZSBydWxlcyBpdCBtYXkgbm90IGxvc2UuICovXG5pbnRlcmZhY2UgUmVjb3JkZWRCYXNlbGluZSB7XG4gIGdlbmVyYXRlZEF0OiBzdHJpbmc7XG4gIG5vdGU6IHN0cmluZztcbiAgc3Vydml2b3JzOiB7XG4gICAgcGF0aDogc3RyaW5nO1xuICAgIGRlc2NyaXB0b3I6IHN0cmluZztcbiAgICBsaW5lOiBudW1iZXIgfCBudWxsO1xuICAgIGtpbmQ6IHN0cmluZztcbiAgICBuYW1lZDogc3RyaW5nW107XG4gIH1bXTtcbiAgdW5zdHJ1Y2s6IHsgd2hlcmU6IHN0cmluZzsgY29kZTogc3RyaW5nIH1bXTtcbn1cblxubGV0IHdvcmtkaXIgPSBcIlwiO1xubGV0IGxvY2tQYXRoID0gXCJcIjtcblxuYmVmb3JlQWxsKCgpID0+IHtcbiAgd29ya2RpciA9IG1rZHRlbXBTeW5jKHBhdGguam9pbih0bXBkaXIoKSwgXCJtdXRhdGlvbi1iYXNlbGluZS1cIikpO1xuICBsb2NrUGF0aCA9IHBhdGguam9pbih3b3JrZGlyLCBcImxvY2suanNvblwiKTtcbn0pO1xuXG5hZnRlckFsbCgoKSA9PiB7XG4gIHJtU3luYyh3b3JrZGlyLCB7IHJlY3Vyc2l2ZTogdHJ1ZSwgZm9yY2U6IHRydWUgfSk7XG59KTtcblxuLyoqIFJ1bnMgdGhlIHJlYWwgc3dlZXAgd2l0aCB0aGlzIHRlc3QncyBsb2NrIGFuZCBiYXNlbGluZSwgYW5kIG5vIHJlYWwgZmlsZSBhdCByaXNrLiAqL1xuZnVuY3Rpb24gcnVuKGFyZ3M6IHN0cmluZ1tdLCBiYXNlbGluZVBhdGggPSBwYXRoLmpvaW4od29ya2RpciwgXCJiYXNlbGluZS5qc29uXCIpKSB7XG4gIHJldHVybiBzcGF3blN5bmMocHJvY2Vzcy5leGVjUGF0aCwgW3N3ZWVwLCAuLi5hcmdzXSwge1xuICAgIGN3ZDogcHJvamVjdFJvb3QsXG4gICAgZW5jb2Rpbmc6IFwidXRmOFwiLFxuICAgIGVudjoge1xuICAgICAgLi4ucHJvY2Vzcy5lbnYsXG4gICAgICBNVVRBVElPTl9MT0NLX0ZJTEU6IGxvY2tQYXRoLFxuICAgICAgTVVUQVRJT05fQkFTRUxJTkVfRklMRTogYmFzZWxpbmVQYXRoLFxuICAgIH0sXG4gIH0pO1xufVxuXG4vKiogVGhlIGF1ZGl0J3Mgb3duIGxpc3Qg4oCUIHRoZSBhdXRob3JpdGF0aXZlIHNldCBvZiBkZWNpc2lvbnMgbm8gbGltYiBzdHJpa2UgcmVhY2hlcy4gKi9cbmZ1bmN0aW9uIGF1ZGl0RW50cmllcygpOiB7IHdoZXJlOiBzdHJpbmc7IGNvZGU6IHN0cmluZyB9W10ge1xuICBjb25zdCByZXN1bHQgPSBydW4oW1wiLS1hdWRpdFwiLCBcIi0tanNvblwiXSk7XG4gIGV4cGVjdChyZXN1bHQuc3RhdHVzLCBgdGhlIGF1ZGl0IGZhaWxlZDpcXG4ke3Jlc3VsdC5zdGRlcnIgPz8gXCJcIn1gKS50b0JlKDApO1xuICBjb25zdCBwYXlsb2FkID0gSlNPTi5wYXJzZShyZXN1bHQuc3Rkb3V0ID8/IFwie31cIik7XG4gIHJldHVybiAocGF5bG9hZC51bnN0cnVjayBhcyB7IHdoZXJlOiBzdHJpbmc7IGNvZGU6IHN0cmluZyB9W10pLm1hcCgoeyB3aGVyZSwgY29kZSB9KSA9PiAoe1xuICAgIHdoZXJlLFxuICAgIGNvZGUsXG4gIH0pKTtcbn1cblxuLyoqIFNlZWRzIGEgYmFzZWxpbmUgZmlsZSBmcm9tIHRoZSBhdWRpdCwgd2l0aCBvbmUgdGhpbmcgY2hhbmdlZC4gKi9cbmZ1bmN0aW9uIHNlZWQobmFtZTogc3RyaW5nLCBjaGFuZ2U6IChiYXNlbGluZTogUmVjb3JkZWRCYXNlbGluZSkgPT4gdm9pZCk6IHN0cmluZyB7XG4gIGNvbnN0IGZpbGUgPSBwYXRoLmpvaW4od29ya2RpciwgbmFtZSk7XG4gIGNvbnN0IGJhc2VsaW5lOiBSZWNvcmRlZEJhc2VsaW5lID0ge1xuICAgIGdlbmVyYXRlZEF0OiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCksXG4gICAgbm90ZTogXCJzZWVkZWQgYnkgc3JjL3Rlc3QvbXV0YXRpb24tYmFzZWxpbmUudGVzdC50c1wiLFxuICAgIHN1cnZpdm9yczogW10sXG4gICAgdW5zdHJ1Y2s6IGF1ZGl0RW50cmllcygpLFxuICB9O1xuICBjaGFuZ2UoYmFzZWxpbmUpO1xuICB3cml0ZUZpbGVTeW5jKGZpbGUsIGAke0pTT04uc3RyaW5naWZ5KGJhc2VsaW5lLCBudWxsLCAyKX1cXG5gLCBcInV0ZjhcIik7XG4gIHJldHVybiBmaWxlO1xufVxuXG5kZXNjcmliZShcInRoZSBzd2VlcCdzIGJhc2VsaW5lIHJhdGNoZXRcIiwgKCkgPT4ge1xuICBpdChcInJlY29yZHMgdGhlIHVuLXN0cnVjayBoYWxmIGFzIHRoZSBhdWRpdCBsaXN0cyBpdCwgd2hvbGUtZmlsZSwgaG93ZXZlciB0aGUgc3dlZXAgd2FzIHNjb3BlZFwiLCAoKSA9PiB7XG4gICAgY29uc3QgZmlsZSA9IHBhdGguam9pbih3b3JrZGlyLCBcIndyaXR0ZW4uanNvblwiKTtcbiAgICBjb25zdCB3cml0dGVuID0gcnVuKFtOT19NVVRBVElPTlMsIFwiLS13cml0ZS1iYXNlbGluZVwiXSwgZmlsZSk7XG5cbiAgICBleHBlY3Qod3JpdHRlbi5zdGF0dXMsIGAtLXdyaXRlLWJhc2VsaW5lIGZhaWxlZDpcXG4ke3dyaXR0ZW4uc3RkZXJyID8/IFwiXCJ9YCkudG9CZSgwKTtcbiAgICBleHBlY3QoZXhpc3RzU3luYyhmaWxlKSkudG9CZSh0cnVlKTtcbiAgICAvLyBUaGUgc2NvcGUgbWF0Y2hlZCBub3RoaW5nLCBzbyB0aGUgc3Vydml2b3IgaGFsZiBpcyBlbXB0eSDigJQgdGhlIHNjb3BlZCBydW4gcmVjb3JkcyBvbmx5XG4gICAgLy8gdGhlIHN1cnZpdm9ycyBpdCBzYXcuIFRoZSB1bi1zdHJ1Y2sgaGFsZiBpcyBub3QgdGhlIHNjb3BlJ3MgdG8gbmFycm93OiBpdCBjb21lcyBmcm9tIHRoZVxuICAgIC8vIGRldGVjdG9yIGZpbGUgYXMgYSB3aG9sZSwgd2hpY2ggaXMgd2hhdCBrZWVwcyBhIHNjb3BlZCBgLS13cml0ZS1iYXNlbGluZWAgZnJvbSByZWNvcmRpbmdcbiAgICAvLyBhIGJhc2VsaW5lIHRoYXQgd291bGQgcmVhZCBhcyBhIHJlZ3Jlc3Npb24gdGhlIG5leHQgdGltZSB0aGUgc3dlZXAgcmFuIGluIGZ1bGwuXG4gICAgY29uc3QgcmVjb3JkZWQgPSBKU09OLnBhcnNlKHJlYWRGaWxlU3luYyhmaWxlLCBcInV0ZjhcIikpIGFzIFJlY29yZGVkQmFzZWxpbmU7XG4gICAgZXhwZWN0KHJlY29yZGVkLnN1cnZpdm9ycykudG9FcXVhbChbXSk7XG5cbiAgICBjb25zdCBhdWRpdCA9IGF1ZGl0RW50cmllcygpO1xuICAgIGV4cGVjdChhdWRpdC5sZW5ndGgpLnRvQmVHcmVhdGVyVGhhbigwKTtcbiAgICBleHBlY3QocmVjb3JkZWQudW5zdHJ1Y2spLnRvRXF1YWwoYXVkaXQpO1xuICB9KTtcblxuICBpdChcInBhc3NlcyB3aGVuIHRoZSBydW4gbWF0Y2hlcyB0aGUgYmFzZWxpbmUsIGFuZCBzYXlzIHdoYXQgaXQgY2hlY2tlZFwiLCAoKSA9PiB7XG4gICAgY29uc3QgZmlsZSA9IHNlZWQoXCJtYXRjaGluZy5qc29uXCIsICgpID0+IHt9KTtcbiAgICBjb25zdCByZXN1bHQgPSBydW4oW05PX01VVEFUSU9OUywgXCItLWJhc2VsaW5lXCJdLCBmaWxlKTtcblxuICAgIGV4cGVjdChyZXN1bHQuc3RhdHVzLCBgYSBtYXRjaGluZyBiYXNlbGluZSBmYWlsZWQ6XFxuJHtyZXN1bHQuc3Rkb3V0ID8/IFwiXCJ9YCkudG9CZSgwKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZG91dCkudG9Db250YWluKFwiQmFzZWxpbmUgT0tcIik7XG4gICAgZXhwZWN0KHJlc3VsdC5zdGRvdXQpLnRvQ29udGFpbihcInVuLXN0cnVjayBlbnRyeShpZXMpIGNoZWNrZWRcIik7XG4gIH0pO1xuXG4gIGl0KFwiZmFpbHMgd2hlbiBhIGRlY2lzaW9uIHRoZSBiYXNlbGluZSByZWNvcmRzIGFzIHVuLXN0cnVjayBubyBsb25nZXIgaGFzIGEgbGltYiBzdHJpa2VcIiwgKCkgPT4ge1xuICAgIC8vIFRoZSByZWNvcmRlZCBiYXNlbGluZSBzYXlzIGEgc3RyaWtlIHJlYWNoZXMgdGhpcyBkZWNpc2lvbjsgdGhpcyBydW4gc2F5cyBub3RoaW5nIGRvZXMuXG4gICAgLy8gVGhhdCBpcyB0aGUgZmFpbHVyZSB0aGUgcmF0Y2hldCBleGlzdHMgZm9yLCBhbmQgaXQgZG9lcyBub3QgbmVlZCB0aGUgc3dlZXAgdG8gcnVuIGFcbiAgICAvLyBzaW5nbGUgbXV0YXRpb24gdG8gc2VlIGl0OiB0aGUgbGlzdCBpcyByZWFkIGZyb20gdGhlIGRldGVjdG9yIGZpbGUgZWl0aGVyIHdheS5cbiAgICBsZXQgbG9zdCA9IHsgd2hlcmU6IFwiXCIsIGNvZGU6IFwiXCIgfTtcbiAgICBjb25zdCBmaWxlID0gc2VlZChcImxvc3QtYS1zdHJpa2UuanNvblwiLCAoYmFzZWxpbmUpID0+IHtcbiAgICAgIGxvc3QgPSBiYXNlbGluZS51bnN0cnVja1tiYXNlbGluZS51bnN0cnVjay5sZW5ndGggLSAxXTtcbiAgICAgIGJhc2VsaW5lLnVuc3RydWNrID0gYmFzZWxpbmUudW5zdHJ1Y2suc2xpY2UoMCwgLTEpO1xuICAgIH0pO1xuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbTk9fTVVUQVRJT05TLCBcIi0tYmFzZWxpbmVcIl0sIGZpbGUpO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGRvdXQpLnRvQ29udGFpbihcIkNoZWNrZWQgMCBtdXRhdGlvbihzKVwiKTtcbiAgICBleHBlY3QocmVzdWx0LnN0YXR1cywgYGFuIHVuLXN0cnVjayBydWxlIHdhcyBub3QgcmVwb3J0ZWQ6XFxuJHtyZXN1bHQuc3Rkb3V0ID8/IFwiXCJ9YCkudG9CZSgxKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZG91dCkudG9Db250YWluKFwiTkVXIFVOLVNUUlVDSyBSVUxFUyAoMSlcIik7XG4gICAgZXhwZWN0KHJlc3VsdC5zdGRvdXQpLnRvQ29udGFpbihgJHtsb3N0LndoZXJlfSAgJHtsb3N0LmNvZGV9YCk7XG4gIH0pO1xuXG4gIGl0KFwicmVwb3J0cyBhIHJ1bGUgYSBzdHJpa2UgcmVhY2hlcyBhZ2FpbiB3aXRob3V0IGZhaWxpbmcsIHNvIHRoZSBnYXAgY2FuIG9ubHkgc2hyaW5rXCIsICgpID0+IHtcbiAgICBjb25zdCBmaWxlID0gc2VlZChcImdhaW5lZC1hLXN0cmlrZS5qc29uXCIsIChiYXNlbGluZSkgPT4ge1xuICAgICAgYmFzZWxpbmUudW5zdHJ1Y2sucHVzaCh7IHdoZXJlOiBcIm1vdW50XCIsIGNvZGU6IFwicmV0dXJuIFtdO1wiIH0pO1xuICAgIH0pO1xuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbTk9fTVVUQVRJT05TLCBcIi0tYmFzZWxpbmVcIl0sIGZpbGUpO1xuXG4gICAgZXhwZWN0KFxuICAgICAgcmVzdWx0LnN0YXR1cyxcbiAgICAgIGBhIGJhc2VsaW5lIHRoYXQgbG9zdCBhIGdhcCBmYWlsZWQ6XFxuJHtyZXN1bHQuc3Rkb3V0ID8/IFwiXCJ9YCxcbiAgICApLnRvQmUoMCk7XG4gICAgZXhwZWN0KHJlc3VsdC5zdGRvdXQpLnRvQ29udGFpbihcIlN0cnVjayBzaW5jZSB0aGUgYmFzZWxpbmUgKDEpXCIpO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCJtb3VudCAgcmV0dXJuIFtdO1wiKTtcbiAgfSk7XG5cbiAgaXQoXCJyZXBvcnRzIGEgc3Vydml2b3IgdGhlIHJ1biBubyBsb25nZXIgaGFzLCBhbmQgZG9lcyBub3QgZmFpbCBmb3IgaXRcIiwgKCkgPT4ge1xuICAgIC8vIFRoZSBzdXJ2aXZvciBoYWxmIGlzIGNvbXBhcmVkIG9ubHkgYWdhaW5zdCB0aGUgcmVjb3JkZWQgZW50cmllcyBpdCBjYW4gc3BlYWsgZm9yIOKAlCB0aGVcbiAgICAvLyBvbmVzIHdob3NlIHBhdGggdGhlIHNjb3BlIG1hdGNoZXMg4oCUIHNvIHRoZSBzZWVkZWQgc3Vydml2b3IgY2FycmllcyB0aGUgc2NvcGUncyBvd24gbmFtZS5cbiAgICBjb25zdCBmaWxlID0gc2VlZChcInN1cnZpdm9yLWdvbmUuanNvblwiLCAoYmFzZWxpbmUpID0+IHtcbiAgICAgIGJhc2VsaW5lLnN1cnZpdm9ycyA9IFtcbiAgICAgICAge1xuICAgICAgICAgIHBhdGg6IGBzcmMvYXBwLyR7Tk9fTVVUQVRJT05TLnNsaWNlKFwiLS1maWxlPVwiLmxlbmd0aCl9L3JvdXRlLnRzYCxcbiAgICAgICAgICBkZXNjcmlwdG9yOiBcImlmICghc2Vzc2lvbikgW2ZhaWwtb3Blbl1cIixcbiAgICAgICAgICBsaW5lOiAxLFxuICAgICAgICAgIGtpbmQ6IFwiZ3VhcmRcIixcbiAgICAgICAgICBuYW1lZDogW10sXG4gICAgICAgIH0sXG4gICAgICBdO1xuICAgIH0pO1xuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbTk9fTVVUQVRJT05TLCBcIi0tYmFzZWxpbmVcIl0sIGZpbGUpO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGF0dXMsIGBhIHJlc29sdmVkIHN1cnZpdm9yIGZhaWxlZDpcXG4ke3Jlc3VsdC5zdGRvdXQgPz8gXCJcIn1gKS50b0JlKDApO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCJSZXNvbHZlZCBzaW5jZSB0aGUgYmFzZWxpbmUgKDEpXCIpO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCJpZiAoIXNlc3Npb24pIFtmYWlsLW9wZW5dXCIpO1xuICB9KTtcblxuICBpdChcInNheXMgc28gYmVmb3JlIGZhaWxpbmcgb24gYSBiYXNlbGluZSByZWNvcmRlZCBiZWZvcmUgdGhlIHVuLXN0cnVjayBoYWxmIGV4aXN0ZWRcIiwgKCkgPT4ge1xuICAgIC8vIEEgZmlsZSBmcm9tIHRoZSB2ZXJzaW9uIHRoYXQgcmF0Y2hldGVkIG9ubHkgc3Vydml2b3JzOiBpdCBob2xkcyBubyB1bi1zdHJ1Y2sgbGlzdCwgc29cbiAgICAvLyBldmVyeSBydWxlIHJlYWRzIGFzIG5ld2x5IHVuLXN0cnVjay4gRmFpbGluZyBjbG9zZWQgaXMgcmlnaHQg4oCUIHRoZSBmaWxlIGNhbm5vdCBzYXkgdGhlXG4gICAgLy8gZ2FwIGlzIHRoZSBrbm93biBvbmUg4oCUIGFuZCB0aGUgbWVzc2FnZSBuYW1lcyB0aGUgb25lIHRoaW5nIHRoYXQgZml4ZXMgaXQuXG4gICAgY29uc3QgZmlsZSA9IHNlZWQoXCJsZWdhY3kuanNvblwiLCAoYmFzZWxpbmUpID0+IHtcbiAgICAgIGRlbGV0ZSAoYmFzZWxpbmUgYXMgUGFydGlhbDxSZWNvcmRlZEJhc2VsaW5lPikudW5zdHJ1Y2s7XG4gICAgfSk7XG4gICAgY29uc3QgcmVzdWx0ID0gcnVuKFtOT19NVVRBVElPTlMsIFwiLS1iYXNlbGluZVwiXSwgZmlsZSk7XG5cbiAgICBleHBlY3QocmVzdWx0LnN0YXR1cywgYGEgbGVnYWN5IGJhc2VsaW5lIHBhc3NlZDpcXG4ke3Jlc3VsdC5zdGRvdXQgPz8gXCJcIn1gKS50b0JlKDEpO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCJob2xkcyBubyB1bi1zdHJ1Y2sgbGlzdFwiKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZG91dCkudG9Db250YWluKFwiTkVXIFVOLVNUUlVDSyBSVUxFU1wiKTtcbiAgfSk7XG5cbiAgaXQoXCJyZWNvcmRzIGEgYmFzZWxpbmUgd2hlbiB0aGVyZSBpcyBub25lIHRvIGNvbXBhcmUgYWdhaW5zdCwgYW5kIHBhc3Nlc1wiLCAoKSA9PiB7XG4gICAgY29uc3QgZmlsZSA9IHBhdGguam9pbih3b3JrZGlyLCBcImZyZXNoLmpzb25cIik7XG4gICAgcm1TeW5jKGZpbGUsIHsgZm9yY2U6IHRydWUgfSk7XG4gICAgY29uc3QgcmVzdWx0ID0gcnVuKFtOT19NVVRBVElPTlMsIFwiLS1iYXNlbGluZVwiXSwgZmlsZSk7XG5cbiAgICBleHBlY3QocmVzdWx0LnN0YXR1cywgYGEgbWlzc2luZyBiYXNlbGluZSBmYWlsZWQ6XFxuJHtyZXN1bHQuc3Rkb3V0ID8/IFwiXCJ9YCkudG9CZSgwKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZG91dCkudG9Db250YWluKFwiTm8gYmFzZWxpbmUgZXhpc3RlZFwiKTtcbiAgICBjb25zdCByZWNvcmRlZCA9IEpTT04ucGFyc2UocmVhZEZpbGVTeW5jKGZpbGUsIFwidXRmOFwiKSkgYXMgUmVjb3JkZWRCYXNlbGluZTtcbiAgICBleHBlY3QocmVjb3JkZWQudW5zdHJ1Y2spLnRvRXF1YWwoYXVkaXRFbnRyaWVzKCkpO1xuICB9KTtcblxuICBpdChcImNhcnJpZXMgdGhlIHJlY29yZGVkIHVuLXN0cnVjayBjb3VudCBvbiB0aGUgcmVwb3J0IHBheWxvYWQsIHNvIGEgcnVuIHBhc3QgaXQgY2FuIHdhcm5cIiwgKCkgPT4ge1xuICAgIC8vIFRoZSByZXBvcnQgcGF5bG9hZCdzIGhhbGYgb2YgdGhlIHNhbWUgZmxvb3I6IGAtLWJhc2VsaW5lYCBjb21wYXJlcyBrZXkgYnkga2V5XG4gICAgLy8gYW5kIGZhaWxzOyBhIHBsYWluIGAtLWpzb25gIHJ1biDigJQgdGhlIG9uZSB0aGUgbmlnaHRseSBnYXRlIGFjdHVhbGx5IG1ha2VzIOKAlFxuICAgIC8vIGNhcnJpZXMgYm90aCBjb3VudHMgc28gdGhlIHJ1bm5lciBjYW4gd2FybiBvbiB0aGUgcnVuIHBhZ2Ugd2hlbiB0aGlzIHJ1bidzIGdhcFxuICAgIC8vIGlzIHBhc3QgdGhlIHJlY29yZGVkIG9uZS4gU2VlZGVkIHR3byBydWxlcyAqYmVsb3cqIHRoZSBhdWRpdCwgc28gdGhlIHBheWxvYWRcbiAgICAvLyByZWFkcyB0aGUgcnVuIGFzIGArMmAgcGFzdCB0aGUgZmxvb3IuXG4gICAgY29uc3QgZmlsZSA9IHNlZWQoXCJjYXJyaWVkLmpzb25cIiwgKGJhc2VsaW5lKSA9PiB7XG4gICAgICBiYXNlbGluZS51bnN0cnVjayA9IGJhc2VsaW5lLnVuc3RydWNrLnNsaWNlKDAsIC0yKTtcbiAgICB9KTtcbiAgICBjb25zdCByZXN1bHQgPSBydW4oW05PX01VVEFUSU9OUywgXCItLWpzb25cIl0sIGZpbGUpO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGF0dXMsIGB0aGUgcmVwb3J0IHJ1biBmYWlsZWQ6XFxuJHtyZXN1bHQuc3RkZXJyID8/IFwiXCJ9YCkudG9CZSgwKTtcbiAgICBjb25zdCBwYXlsb2FkID0gSlNPTi5wYXJzZShyZXN1bHQuc3Rkb3V0ID8/IFwie31cIikgYXMge1xuICAgICAgdW5zdHJ1Y2s6IG51bWJlcjtcbiAgICAgIHVuc3RydWNrQmFzZWxpbmU/OiBudW1iZXI7XG4gICAgfTtcbiAgICBjb25zdCByZWNvcmRlZCA9IEpTT04ucGFyc2UocmVhZEZpbGVTeW5jKGZpbGUsIFwidXRmOFwiKSkgYXMgUmVjb3JkZWRCYXNlbGluZTtcbiAgICBjb25zdCBhdWRpdCA9IGF1ZGl0RW50cmllcygpO1xuICAgIGV4cGVjdChwYXlsb2FkLnVuc3RydWNrKS50b0JlKGF1ZGl0Lmxlbmd0aCk7XG4gICAgZXhwZWN0KHJlY29yZGVkLnVuc3RydWNrKS50b0hhdmVMZW5ndGgoYXVkaXQubGVuZ3RoIC0gMik7XG4gICAgLy8gVGhlIGNvdW50IHJpZGVzIGJlc2lkZSB0aGUgbWVhc3VyZW1lbnQsIHJlYWQgZnJvbSB0aGUgc2FtZSBmaWxlIHRoZSByYXRjaGV0XG4gICAgLy8gY29tcGFyZXMgYWdhaW5zdCDigJQgb25lIGZsb29yIGZvciBib3RoIHJlYWRpbmdzLlxuICAgIGV4cGVjdChwYXlsb2FkLnVuc3RydWNrQmFzZWxpbmUpLnRvQmUocmVjb3JkZWQudW5zdHJ1Y2subGVuZ3RoKTtcbiAgICBleHBlY3QocGF5bG9hZC51bnN0cnVjayAtIChwYXlsb2FkLnVuc3RydWNrQmFzZWxpbmUgPz8gMCkpLnRvQmUoMik7XG4gIH0pO1xuXG4gIGl0KFwiY2FycmllcyBubyBiYXNlbGluZSBjb3VudCB3aGVuIG5vdGhpbmcgcmVjb3JkcyBvbmUsIHJhdGhlciB0aGFuIGEgemVyb1wiLCAoKSA9PiB7XG4gICAgLy8gVGhlIHdhcm5pbmcgbWF5IG9ubHkgZmlyZSBhZ2FpbnN0IGEgZmxvb3IgdGhhdCBleGlzdHM6IGEgbWlzc2luZyBmaWxlIChvciBvbmVcbiAgICAvLyB3cml0dGVuIGJlZm9yZSB0aGUgdW4tc3RydWNrIGhhbGYgam9pbmVkIGl0KSBzZXJpYWxpemVzIHRvICpubyBrZXkqIG9uIHRoZVxuICAgIC8vIHBheWxvYWQsIHNvIGEgY29uc3VtZXIgcmVhZHMgXCJubyBjb21wYXJpc29uXCIgcmF0aGVyIHRoYW4gXCJiYXNlbGluZSBvZiAwXCIg4oCUXG4gICAgLy8gd2hpY2ggd291bGQgcmVhZCBldmVyeSB0cmVlIGFzIGdyb3duIHBhc3QgYSBmbG9vciBub3RoaW5nIGV2ZXIgcmVjb3JkZWQuXG4gICAgY29uc3QgZmlsZSA9IHBhdGguam9pbih3b3JrZGlyLCBcImFic2VudC1mb3ItcmVwb3J0Lmpzb25cIik7XG4gICAgcm1TeW5jKGZpbGUsIHsgZm9yY2U6IHRydWUgfSk7XG4gICAgY29uc3QgcmVzdWx0ID0gcnVuKFtOT19NVVRBVElPTlMsIFwiLS1qc29uXCJdLCBmaWxlKTtcblxuICAgIGV4cGVjdChyZXN1bHQuc3RhdHVzLCBgdGhlIHJlcG9ydCBydW4gZmFpbGVkOlxcbiR7cmVzdWx0LnN0ZGVyciA/PyBcIlwifWApLnRvQmUoMCk7XG4gICAgY29uc3QgcGF5bG9hZCA9IEpTT04ucGFyc2UocmVzdWx0LnN0ZG91dCA/PyBcInt9XCIpIGFzIHtcbiAgICAgIHVuc3RydWNrOiBudW1iZXI7XG4gICAgICB1bnN0cnVja0Jhc2VsaW5lPzogbnVtYmVyO1xuICAgIH07XG4gICAgZXhwZWN0KHBheWxvYWQudW5zdHJ1Y2spLnRvQmVHcmVhdGVyVGhhbigwKTtcbiAgICBleHBlY3QoXCJ1bnN0cnVja0Jhc2VsaW5lXCIgaW4gcGF5bG9hZCkudG9CZShmYWxzZSk7XG4gIH0pO1xufSk7XG4iXSwiZmlsZSI6Ii9zcmMvdGVzdC9tdXRhdGlvbi1iYXNlbGluZS50ZXN0LnRzIn0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvdGVzdC9tdXRhdGlvbi1iYXNlbGluZS50ZXN0LnRzIiwiL3NyYy90ZXN0L211dGF0aW9uLWJhc2VsaW5lLnRlc3QudHMiLFtdXQ==

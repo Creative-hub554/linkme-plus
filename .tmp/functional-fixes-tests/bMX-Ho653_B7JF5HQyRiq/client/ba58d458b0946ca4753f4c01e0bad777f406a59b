@@ -1,0 +1,98 @@
+__vite_ssr_exportName__("FollowButton", () => { try { return FollowButton } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useEffect","useState"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/ui/toggle-button.tsx", {"importedNames":["ToggleButton"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Loader2","UserCheck","UserPlus"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV","Fragment"]});
+"use client";
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/social/follow-button.tsx";
+
+/**
+* Follow / Following, backed by the API.
+*
+* The click is optimistic so the button responds immediately, and it is rolled
+* back if the request fails — the state flipping back is the feedback. It sends
+* the *intended* state rather than relying on the server to toggle, so a stale
+* view can never unfollow somebody by accident.
+*/
+function FollowButton({ userId, initialFollowing = false, onChange, size = "sm", subjectName }) {
+	const [following, setFollowing] = (0,__vite_ssr_import_0__.useState)(initialFollowing);
+	const [pending, setPending] = (0,__vite_ssr_import_0__.useState)(false);
+	const [error, setError] = (0,__vite_ssr_import_0__.useState)(null);
+	// A list of results reuses this button for different people.
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		setFollowing(initialFollowing);
+	}, [initialFollowing, userId]);
+	const handleClick = async () => {
+		if (pending) return;
+		const next = !following;
+		setFollowing(next);
+		setError(null);
+		setPending(true);
+		try {
+			const response = await fetch("/api/users/follow", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					userId,
+					following: next
+				})
+			});
+			const payload = response.ok ? await response.json().catch(() => null) : null;
+			if (!response.ok || !payload) throw new Error("Follow request failed");
+			const settled = Boolean(payload.following);
+			setFollowing(settled);
+			onChange?.(settled, typeof payload.followers === "number" ? payload.followers : undefined);
+		} catch {
+			setFollowing(!next);
+			setError("We couldn't update that follow. Please try again.");
+		} finally {
+			setPending(false);
+		}
+	};
+	return /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)((0,__vite_ssr_import_3__.Fragment), { children: [/* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)((0,__vite_ssr_import_1__.ToggleButton), {
+		pressed: following,
+		size,
+		onClick: handleClick,
+		disabled: pending,
+		"aria-busy": pending,
+		"aria-label": subjectName ? `${following ? "Unfollow" : "Follow"} ${subjectName}` : undefined,
+		title: error ?? undefined,
+		children: [pending ? /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)((0,__vite_ssr_import_2__.Loader2), { className: "mr-1 h-4 w-4 animate-spin" }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 96,
+			columnNumber: 11
+		}, this) : following ? /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)((0,__vite_ssr_import_2__.UserCheck), { className: "mr-1 h-4 w-4" }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 98,
+			columnNumber: 11
+		}, this) : /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)((0,__vite_ssr_import_2__.UserPlus), { className: "mr-1 h-4 w-4" }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 100,
+			columnNumber: 11
+		}, this), following ? "Following" : "Follow"]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 82,
+		columnNumber: 7
+	}, this), /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)("span", {
+		role: "status",
+		"aria-live": "polite",
+		className: "sr-only",
+		children: error ?? ""
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 104,
+		columnNumber: 7
+	}, this)] }, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 77,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTs7QUFKQTs7Ozs7Ozs7Ozs7Ozs7QUE0Qk8sU0FBUyxhQUFhLEVBQzNCLFFBQ0EsbUJBQW1CLE9BQ25CLFVBQ0EsT0FBTyxNQUNQLGVBQ29CO0NBQ3BCLE1BQU0sQ0FBQyxXQUFXLGdCQUFnQixtQ0FBUyxnQkFBZ0I7Q0FDM0QsTUFBTSxDQUFDLFNBQVMsY0FBYyxtQ0FBUyxLQUFLO0NBQzVDLE1BQU0sQ0FBQyxPQUFPLFlBQVksbUNBQXdCLElBQUk7O0NBR3RELDBDQUFnQjtFQUNkLGFBQWEsZ0JBQWdCO0NBQy9CLEdBQUcsQ0FBQyxrQkFBa0IsTUFBTSxDQUFDO0NBRTdCLE1BQU0sY0FBYyxZQUFZO0VBQzlCLElBQUksU0FBUztFQUViLE1BQU0sT0FBTyxDQUFDO0VBQ2QsYUFBYSxJQUFJO0VBQ2pCLFNBQVMsSUFBSTtFQUNiLFdBQVcsSUFBSTtFQUVmLElBQUk7R0FDRixNQUFNLFdBQVcsTUFBTSxNQUFNLHFCQUFxQjtJQUNoRCxRQUFRO0lBQ1IsU0FBUyxFQUFFLGdCQUFnQixtQkFBbUI7SUFDOUMsTUFBTSxLQUFLLFVBQVU7S0FBRTtLQUFRLFdBQVc7SUFBSyxDQUFDO0dBQ2xELENBQUM7R0FDRCxNQUFNLFVBQVUsU0FBUyxLQUFLLE1BQU0sU0FBUyxLQUFLLENBQUMsQ0FBQyxZQUFZLElBQUksSUFBSTtHQUN4RSxJQUFJLENBQUMsU0FBUyxNQUFNLENBQUMsU0FBUyxNQUFNLElBQUksTUFBTSx1QkFBdUI7R0FFckUsTUFBTSxVQUFVLFFBQVEsUUFBUSxTQUFTO0dBQ3pDLGFBQWEsT0FBTztHQUNwQixXQUNFLFNBQ0EsT0FBTyxRQUFRLGNBQWMsV0FBVyxRQUFRLFlBQVksU0FDOUQ7RUFDRixRQUFRO0dBQ04sYUFBYSxDQUFDLElBQUk7R0FDbEIsU0FBUyxtREFBbUQ7RUFDOUQsVUFBVTtHQUNSLFdBQVcsS0FBSztFQUNsQjtDQUNGO0NBRUEsT0FDRSxrR0FLRSxvREFBQyxxQ0FBRDtFQUNFLFNBQVM7RUFDSDtFQUNOLFNBQVM7RUFDVCxVQUFVO0VBQ1YsYUFBVztFQUNYLGNBQ0UsY0FDSSxHQUFHLFlBQVksYUFBYSxTQUFTLEdBQUcsZ0JBQ3hDO0VBRU4sT0FBTyxTQUFTO1lBWGxCLENBYUcsVUFDQyxvREFBQyxnQ0FBRCxFQUFTLFdBQVUsNEJBQTZCOzs7O2FBQzlDLFlBQ0Ysb0RBQUMsa0NBQUQsRUFBVyxXQUFVLGVBQWdCOzs7O2FBRXJDLG9EQUFDLGlDQUFELEVBQVUsV0FBVSxlQUFnQjs7OztZQUVyQyxZQUFZLGNBQWMsUUFDZjs7Ozs7V0FDZCxpREFBQyxRQUFEO0VBQU0sTUFBSztFQUFTLGFBQVU7RUFBUyxXQUFVO1lBQzlDLFNBQVM7Q0FDTjs7OztTQUNOOzs7OztBQUVOIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJmb2xsb3ctYnV0dG9uLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcblxuaW1wb3J0IHsgdXNlRWZmZWN0LCB1c2VTdGF0ZSB9IGZyb20gXCJyZWFjdFwiO1xuaW1wb3J0IHsgVG9nZ2xlQnV0dG9uIH0gZnJvbSBcIkAvY29tcG9uZW50cy91aS90b2dnbGUtYnV0dG9uXCI7XG5pbXBvcnQgeyBMb2FkZXIyLCBVc2VyQ2hlY2ssIFVzZXJQbHVzIH0gZnJvbSBcImx1Y2lkZS1yZWFjdFwiO1xuXG5pbnRlcmZhY2UgRm9sbG93QnV0dG9uUHJvcHMge1xuICAvKiogTWVtYmVyIHRvIGZvbGxvdy4gUmVxdWlyZWQ6IHRoZSBidXR0b24gd3JpdGVzIHRvIHRoZSBBUEkuICovXG4gIHVzZXJJZDogc3RyaW5nO1xuICBpbml0aWFsRm9sbG93aW5nPzogYm9vbGVhbjtcbiAgLyoqIE5ldyBzdGF0ZSwgcGx1cyB0aGUgdGFyZ2V0J3MgZm9sbG93ZXIgdG90YWwgd2hlbiB0aGUgc2VydmVyIHJlcG9ydGVkIG9uZS4gKi9cbiAgb25DaGFuZ2U/OiAoZm9sbG93aW5nOiBib29sZWFuLCBmb2xsb3dlcnM/OiBudW1iZXIpID0+IHZvaWQ7XG4gIHNpemU/OiBcImRlZmF1bHRcIiB8IFwic21cIiB8IFwibGdcIjtcbiAgLyoqXG4gICAqIFdob3NlIGZvbGxvdyBidXR0b24gdGhpcyBpcywgZm9yIHRoZSBhY2Nlc3NpYmxlIG5hbWUuIEEgcm93IGluIGEgbGlzdCBvZlxuICAgKiBtZW1iZXJzIG90aGVyd2lzZSBhbm5vdW5jZXMgYSBiYXJlIFwiRm9sbG93XCIgd2l0aCBubyBpZGVhIHdobyBpdCBhcHBsaWVzIHRvLlxuICAgKi9cbiAgc3ViamVjdE5hbWU/OiBzdHJpbmcgfCBudWxsO1xufVxuXG4vKipcbiAqIEZvbGxvdyAvIEZvbGxvd2luZywgYmFja2VkIGJ5IHRoZSBBUEkuXG4gKlxuICogVGhlIGNsaWNrIGlzIG9wdGltaXN0aWMgc28gdGhlIGJ1dHRvbiByZXNwb25kcyBpbW1lZGlhdGVseSwgYW5kIGl0IGlzIHJvbGxlZFxuICogYmFjayBpZiB0aGUgcmVxdWVzdCBmYWlscyDigJQgdGhlIHN0YXRlIGZsaXBwaW5nIGJhY2sgaXMgdGhlIGZlZWRiYWNrLiBJdCBzZW5kc1xuICogdGhlICppbnRlbmRlZCogc3RhdGUgcmF0aGVyIHRoYW4gcmVseWluZyBvbiB0aGUgc2VydmVyIHRvIHRvZ2dsZSwgc28gYSBzdGFsZVxuICogdmlldyBjYW4gbmV2ZXIgdW5mb2xsb3cgc29tZWJvZHkgYnkgYWNjaWRlbnQuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBGb2xsb3dCdXR0b24oe1xuICB1c2VySWQsXG4gIGluaXRpYWxGb2xsb3dpbmcgPSBmYWxzZSxcbiAgb25DaGFuZ2UsXG4gIHNpemUgPSBcInNtXCIsXG4gIHN1YmplY3ROYW1lLFxufTogRm9sbG93QnV0dG9uUHJvcHMpIHtcbiAgY29uc3QgW2ZvbGxvd2luZywgc2V0Rm9sbG93aW5nXSA9IHVzZVN0YXRlKGluaXRpYWxGb2xsb3dpbmcpO1xuICBjb25zdCBbcGVuZGluZywgc2V0UGVuZGluZ10gPSB1c2VTdGF0ZShmYWxzZSk7XG4gIGNvbnN0IFtlcnJvciwgc2V0RXJyb3JdID0gdXNlU3RhdGU8c3RyaW5nIHwgbnVsbD4obnVsbCk7XG5cbiAgLy8gQSBsaXN0IG9mIHJlc3VsdHMgcmV1c2VzIHRoaXMgYnV0dG9uIGZvciBkaWZmZXJlbnQgcGVvcGxlLlxuICB1c2VFZmZlY3QoKCkgPT4ge1xuICAgIHNldEZvbGxvd2luZyhpbml0aWFsRm9sbG93aW5nKTtcbiAgfSwgW2luaXRpYWxGb2xsb3dpbmcsIHVzZXJJZF0pO1xuXG4gIGNvbnN0IGhhbmRsZUNsaWNrID0gYXN5bmMgKCkgPT4ge1xuICAgIGlmIChwZW5kaW5nKSByZXR1cm47XG5cbiAgICBjb25zdCBuZXh0ID0gIWZvbGxvd2luZztcbiAgICBzZXRGb2xsb3dpbmcobmV4dCk7XG4gICAgc2V0RXJyb3IobnVsbCk7XG4gICAgc2V0UGVuZGluZyh0cnVlKTtcblxuICAgIHRyeSB7XG4gICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKFwiL2FwaS91c2Vycy9mb2xsb3dcIiwge1xuICAgICAgICBtZXRob2Q6IFwiUE9TVFwiLFxuICAgICAgICBoZWFkZXJzOiB7IFwiQ29udGVudC1UeXBlXCI6IFwiYXBwbGljYXRpb24vanNvblwiIH0sXG4gICAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsgdXNlcklkLCBmb2xsb3dpbmc6IG5leHQgfSksXG4gICAgICB9KTtcbiAgICAgIGNvbnN0IHBheWxvYWQgPSByZXNwb25zZS5vayA/IGF3YWl0IHJlc3BvbnNlLmpzb24oKS5jYXRjaCgoKSA9PiBudWxsKSA6IG51bGw7XG4gICAgICBpZiAoIXJlc3BvbnNlLm9rIHx8ICFwYXlsb2FkKSB0aHJvdyBuZXcgRXJyb3IoXCJGb2xsb3cgcmVxdWVzdCBmYWlsZWRcIik7XG5cbiAgICAgIGNvbnN0IHNldHRsZWQgPSBCb29sZWFuKHBheWxvYWQuZm9sbG93aW5nKTtcbiAgICAgIHNldEZvbGxvd2luZyhzZXR0bGVkKTtcbiAgICAgIG9uQ2hhbmdlPy4oXG4gICAgICAgIHNldHRsZWQsXG4gICAgICAgIHR5cGVvZiBwYXlsb2FkLmZvbGxvd2VycyA9PT0gXCJudW1iZXJcIiA/IHBheWxvYWQuZm9sbG93ZXJzIDogdW5kZWZpbmVkLFxuICAgICAgKTtcbiAgICB9IGNhdGNoIHtcbiAgICAgIHNldEZvbGxvd2luZyghbmV4dCk7XG4gICAgICBzZXRFcnJvcihcIldlIGNvdWxkbid0IHVwZGF0ZSB0aGF0IGZvbGxvdy4gUGxlYXNlIHRyeSBhZ2Fpbi5cIik7XG4gICAgfSBmaW5hbGx5IHtcbiAgICAgIHNldFBlbmRpbmcoZmFsc2UpO1xuICAgIH1cbiAgfTtcblxuICByZXR1cm4gKFxuICAgIDw+XG4gICAgICB7LyogVGhlIGZpbGwgYW5kIGBhcmlhLXByZXNzZWRgIGNvbWUgZnJvbSBgZm9sbG93aW5nYCB0b2dldGhlciDigJQgdGhlIHN0YXRlXG4gICAgICAgICAgaXMgb25lIGJvb2xlYW4sIHNvIHRoZSBidXR0b24gY2Fubm90IGxvb2sgZm9sbG93ZWQgd2hpbGUgc2F5aW5nIGl0IGlzXG4gICAgICAgICAgbm90LiBUaGUgd29yZHMgY2hhbmdlIHdpdGggaXQgdG9vLCB3aGljaCBpcyB0aGUgb3RoZXIgaGFsZiBvZiB0aGVcbiAgICAgICAgICBhbm5vdW5jZW1lbnQuICovfVxuICAgICAgPFRvZ2dsZUJ1dHRvblxuICAgICAgICBwcmVzc2VkPXtmb2xsb3dpbmd9XG4gICAgICAgIHNpemU9e3NpemV9XG4gICAgICAgIG9uQ2xpY2s9e2hhbmRsZUNsaWNrfVxuICAgICAgICBkaXNhYmxlZD17cGVuZGluZ31cbiAgICAgICAgYXJpYS1idXN5PXtwZW5kaW5nfVxuICAgICAgICBhcmlhLWxhYmVsPXtcbiAgICAgICAgICBzdWJqZWN0TmFtZVxuICAgICAgICAgICAgPyBgJHtmb2xsb3dpbmcgPyBcIlVuZm9sbG93XCIgOiBcIkZvbGxvd1wifSAke3N1YmplY3ROYW1lfWBcbiAgICAgICAgICAgIDogdW5kZWZpbmVkXG4gICAgICAgIH1cbiAgICAgICAgdGl0bGU9e2Vycm9yID8/IHVuZGVmaW5lZH1cbiAgICAgID5cbiAgICAgICAge3BlbmRpbmcgPyAoXG4gICAgICAgICAgPExvYWRlcjIgY2xhc3NOYW1lPVwibXItMSBoLTQgdy00IGFuaW1hdGUtc3BpblwiIC8+XG4gICAgICAgICkgOiBmb2xsb3dpbmcgPyAoXG4gICAgICAgICAgPFVzZXJDaGVjayBjbGFzc05hbWU9XCJtci0xIGgtNCB3LTRcIiAvPlxuICAgICAgICApIDogKFxuICAgICAgICAgIDxVc2VyUGx1cyBjbGFzc05hbWU9XCJtci0xIGgtNCB3LTRcIiAvPlxuICAgICAgICApfVxuICAgICAgICB7Zm9sbG93aW5nID8gXCJGb2xsb3dpbmdcIiA6IFwiRm9sbG93XCJ9XG4gICAgICA8L1RvZ2dsZUJ1dHRvbj5cbiAgICAgIDxzcGFuIHJvbGU9XCJzdGF0dXNcIiBhcmlhLWxpdmU9XCJwb2xpdGVcIiBjbGFzc05hbWU9XCJzci1vbmx5XCI+XG4gICAgICAgIHtlcnJvciA/PyBcIlwifVxuICAgICAgPC9zcGFuPlxuICAgIDwvPlxuICApO1xufVxuIl0sImZpbGUiOiIvc3JjL2NvbXBvbmVudHMvc29jaWFsL2ZvbGxvdy1idXR0b24udHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zb2NpYWwvZm9sbG93LWJ1dHRvbi50c3giLCIvc3JjL2NvbXBvbmVudHMvc29jaWFsL2ZvbGxvdy1idXR0b24udHN4IixbXV0=

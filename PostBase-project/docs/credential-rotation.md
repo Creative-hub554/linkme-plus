@@ -93,6 +93,10 @@ the steps in one sitting; the expected outage is minutes, not hours.
 
 *(add one line per rotation — date, credential, status)*
 
+- 2026-10-31: removed the ignored derived artifact `dist/server/.dev.vars`
+  and verified it is absent. Its contents were not read, displayed, or logged
+  during cleanup.
+
 - 2026-10-27: owner reported changing the database password. A fresh local
   connection using `.env.local` completed `SELECT 1` successfully without
   printing credentials. Public production `/`, `/jobs`, and `/marketplace`

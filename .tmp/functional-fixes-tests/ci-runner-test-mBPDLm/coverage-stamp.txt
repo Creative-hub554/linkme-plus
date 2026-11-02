@@ -1,0 +1,1 @@
+rendered-links coverage: chrome — the stub 2 (2 unique destinations)

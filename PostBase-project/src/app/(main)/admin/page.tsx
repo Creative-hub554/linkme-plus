@@ -1,4 +1,5 @@
 "use client";
+import { EmploymentReviews } from "@/components/admin/employment-reviews";
 
 import Link from "next/link";
 import { AdminMemberDirectory } from "@/components/admin/member-directory";
@@ -103,6 +104,7 @@ export default function AdminPage() {
       <div className="flex justify-between">
         <div>
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+      <EmploymentReviews />
           <p className="text-muted-foreground">Manage your LinkMe+ platform</p>
         </div>
         <Button variant="outline" asChild>

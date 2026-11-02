@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { JobAllowanceUsage } from "@/components/jobs/job-allowance-usage";
 import { useCallback, useEffect, useState } from "react";
 import { clientRequest, jsonBody } from "@/lib/client-request";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ type Job = {
   id: string;
   title: string;
   status: string;
+  reviewStatus?: string;
+  reviewNote?: string | null;
   company?: { name: string };
 };
 type Application = {
@@ -141,6 +144,7 @@ export default function ManageJobsPage() {
         ← Jobs
       </Link>
       <h1 className="text-2xl font-bold">Manage jobs and applicants</h1>
+      <JobAllowanceUsage />
       {error && (
         <p role="alert" className="text-red-600">
           {error}
@@ -171,7 +175,7 @@ export default function ManageJobsPage() {
           >
             {jobs.map((job) => (
               <option key={job.id} value={job.id}>
-                {job.title} · {job.company?.name} · {job.status}
+                {job.title} · {job.reviewStatus ?? "Review pending"} · {job.company?.name} · {job.status}
               </option>
             ))}
           </select>

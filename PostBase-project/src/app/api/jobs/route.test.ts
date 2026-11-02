@@ -38,13 +38,14 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { DELETE, GET, POST, PUT } from "./route";
-import { companies, jobApplications, jobs, pageRoles } from "@/lib/db/schema";
+import { companies, jobApplications, jobs, pageRoles, privateEvidence, users } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
 const JOB_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_JOB_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const COMPANY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OFFICE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const PAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function jsonRequest(method: string, path: string, body?: unknown) {
@@ -52,7 +53,7 @@ function jsonRequest(method: string, path: string, body?: unknown) {
     method,
     ...(body === undefined
       ? {}
-      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(method === "POST" && body && typeof body === "object" ? { officeEvidenceIds: [OFFICE_ID], deadline: new Date(Date.now() + 86400000).toISOString(), description: "An opportunity for an experienced team member", location: "Phnom Penh", ...body } : body) }),
   });
 }
 
@@ -60,6 +61,8 @@ beforeEach(() => {
   resetFakeDb();
   vi.clearAllMocks();
   session.userId = "member-1";
+  fakeDb.selectReturns(users, [{ id: "member-1" }]);
+  fakeDb.selectReturns(privateEvidence, [{ id: OFFICE_ID, width: 800, height: 600 }]);
 });
 
 describe("GET /api/jobs", () => {
@@ -335,11 +338,11 @@ describe("POST /api/jobs", () => {
     expect(fakeDb.reads).not.toContain("page_roles");
   });
 
-  it("writes the job as active when the caller administers the company's Page", async () => {
+  it("queues an unverified employer job for review after office evidence checks", async () => {
     fakeDb
       .selectReturns(companies, [{ id: COMPANY_ID, pageId: PAGE_ID }])
       .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }])
-      .insertReturns(jobs, [{ id: JOB_ID, status: "active" }]);
+      .insertReturns(jobs, [{ id: JOB_ID, status: "draft", reviewStatus: "pending_review" }]);
 
     const response = await POST(
       jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
@@ -349,7 +352,7 @@ describe("POST /api/jobs", () => {
     expectGatedSequence("writes", [
       {
         table: "jobs",
-        values: expect.objectContaining({ companyId: COMPANY_ID, title: "Designer", status: "active" }),
+        values: expect.objectContaining({ companyId: COMPANY_ID, title: "Designer", status: "draft", reviewStatus: "pending_review" }),
       },
     ]);
   });
@@ -416,25 +419,20 @@ describe("PUT /api/jobs", () => {
     expectGatedNone("writes");
   });
 
-  it("writes only the fields the request carried", async () => {
-    fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID, companyId: COMPANY_ID }])
-      .selectReturns(companies, [{ pageId: PAGE_ID }])
-      .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }])
-      .updateReturns(jobs, [{ id: JOB_ID, title: "Renamed" }]);
-
+  it("queues material edits while retaining the approved public version", async () => {
+    const current = { id: JOB_ID, companyId: COMPANY_ID, publisherId: "member-1", title: "Original", status: "active", reviewStatus: "approved", firstPublishedAt: new Date(), officeEvidenceIds: [OFFICE_ID] };
+    fakeDb.selectReturns(jobs, [current]).selectReturns(jobs, [current]).selectReturns(companies, [{ pageId: PAGE_ID }]).selectReturns(pageRoles, [{ id: "role-1", role: "admin" }]);
     const response = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
-
     expect(response.status).toBe(200);
-    // The unmentioned columns are absent from the write (`undefined`), so a
-    // partial update cannot blank a field it was not asked about.
-    expectGatedSequence("writes", [{ table: "jobs", values: { title: "Renamed" } }]);
+    expect((await response.json()).reviewRequired).toBe(true);
+    expectGatedSequence("writes", [{ table: "jobs", values: { pendingRevision: { title: "Renamed" }, reviewNote: "Material changes await administrator review" } }]);
   });
 
   it("answers 500 and writes nothing when the update fails", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
       .selectReturns(jobs, [{ id: JOB_ID, companyId: COMPANY_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, companyId: COMPANY_ID, publisherId: "member-1", officeEvidenceIds: [OFFICE_ID] }])
       .selectReturns(companies, [{ pageId: PAGE_ID }])
       .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }])
       .failNextUpdate(jobs, new Error("database unavailable"));

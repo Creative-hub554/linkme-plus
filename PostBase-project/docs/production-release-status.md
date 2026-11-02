@@ -2,6 +2,36 @@
 
 ## Released
 
+Google/email-only release: `32b4dfc6-007c-4ee4-8aa9-d9d9d403eb8c` removes
+Telegram UI wiring and the feature flag from the app/template. Login and
+registration expose only Google plus email/password. Email registrations
+without an immediate session now show confirmation instructions instead of
+redirecting into a protected page before email verification. The confirmation
+message also links to sign-in and password recovery. Thirty-four targeted
+tests, TypeScript, ESLint, build, and deployment passed. Real confirmation-mail
+delivery still needs a new email/password signup exercise; no email was sent
+automatically during these tests.
+
+Sign-in options release: `e11985df-e707-4ee4-89e1-cbf7e536395f` removes the
+unconfigured Facebook button and prepares `custom:telegram` OAuth behind
+`NEXT_PUBLIC_TELEGRAM_AUTH_ENABLED`. The flag remains off; no Telegram bot or
+provider credentials have been configured, and Telegram login is not active.
+Google and email/password remain available. Thirty-one targeted tests,
+TypeScript, ESLint, and the production build passed. See `telegram-login.md`
+for the remaining owner setup. Account linking/recovery for Telegram-only
+members has not been implemented or verified as part of this release.
+
+Authentication configuration repair: version
+`07727ebf-086c-402e-b85a-32b1706bde67` corrects the browser's Supabase project.
+The local database pointed to production, but `.env.local` public Auth URL/key
+referenced `selorshhkdpydjtypgfq`. Updated the local public URL/key and the two
+corresponding Worker secrets to `yimclwfiyxngszejoikz`, then rebuilt and deployed.
+No database password or privileged Supabase key was changed. Verified the new
+client bundle contains only the production Auth host; production Auth settings
+enable email and Google, and Google authorization returns the production
+Supabase callback. A real member login must still be retried to verify the
+complete session flow. Public HTTP smoke checks alone had missed this mismatch.
+
 Browser walkthrough follow-up: version `56968403-1143-4ad9-be0b-eafecc61314d`
 adds a direct sign-in link when a signed-out visitor clicks Apply on a job.
 Four JobCard tests, ESLint, build, and deployment passed. The live browser

@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { PostAudienceSelect } from "@/components/social/post-audience-select";
 import { toPostAudience, type PostAudience } from "@/lib/post-audiences";
+import { PostTopicSelect } from "@/components/social/post-topic-select";
 
 /** The two things an edit can change today. */
 export interface PostEdit {
+  topicId?: string;
   content: string;
   visibility: PostAudience;
 }
@@ -36,6 +38,7 @@ export function PostEditDialog({
   postId,
   content,
   visibility,
+  initialTopicId,
   groupName,
   hasMedia = false,
   open,
@@ -46,6 +49,7 @@ export function PostEditDialog({
   /** The post as it currently reads; the form starts from this every time. */
   content: string;
   visibility?: string | null;
+  initialTopicId?: string | null;
   /**
    * The group the post was published into, if any. A group post's audience is
    * not the author's to move: it is what publishing in the group means. So this
@@ -61,6 +65,7 @@ export function PostEditDialog({
   onSave: (postId: string, changes: PostEdit) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(content);
+  const [topicId, setTopicId] = useState(initialTopicId ?? "");
   const [audience, setAudience] = useState<PostAudience>(toPostAudience(visibility));
   const [saving, setSaving] = useState(false);
 
@@ -70,13 +75,14 @@ export function PostEditDialog({
   useEffect(() => {
     if (!open) return;
     setDraft(content);
+    setTopicId(initialTopicId ?? "");
     setAudience(toPostAudience(visibility));
-  }, [open, content, visibility]);
+  }, [open, content, visibility, initialTopicId]);
 
   const trimmed = draft.trim();
   // A post that is only words must keep some words: saving nothing would leave
   // an empty card that the author could no longer reach to fix.
-  const canSave = (trimmed.length > 0 || hasMedia) && !saving;
+  const canSave = (trimmed.length > 0 || hasMedia) && !saving && !!topicId;
 
   const save = async () => {
     if (!canSave) return;
@@ -87,6 +93,7 @@ export function PostEditDialog({
       // that no other value can reach this line from here.
       await onSave(postId, {
         content: trimmed,
+        topicId,
         visibility: groupName ? "group" : audience,
       });
     } finally {
@@ -113,6 +120,7 @@ export function PostEditDialog({
         </DialogHeader>
 
         <div className="space-y-3">
+          <PostTopicSelect value={topicId} onChange={setTopicId} />
           <label className="sr-only" htmlFor={`edit-post-content-${postId}`}>
             Post text
           </label>

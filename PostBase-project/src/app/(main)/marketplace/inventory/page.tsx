@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SellerPlanUsage } from "@/components/marketplace/seller-plan-usage";
 import { useEffect, useState, type FormEvent } from "react";
 import { clientRequest, jsonBody } from "@/lib/client-request";
 import { Button } from "@/components/ui/button";
@@ -151,6 +152,7 @@ export default function InventoryPage() {
       <Link href="/marketplace" className="text-brand-blue">
         ← Marketplace
       </Link>
+      <SellerPlanUsage />
       <h1 className="text-2xl font-bold">Inventory manager</h1>
       {error && (
         <p role="alert" className="text-red-600">

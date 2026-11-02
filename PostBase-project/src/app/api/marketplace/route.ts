@@ -1,3 +1,5 @@
+import { lockSeller, sellerUsage, sellerPublicVisibility } from "@/lib/seller-entitlements";
+import { sellerLimitReached } from "@/lib/plan-entitlements";
 import { offsetPagination } from "@/lib/offset-pagination";
 import { db } from "@/lib/db";
 import { categories, marketplaceListings, listingMedia, inventoryItems, productVariants, savedListings } from "@/lib/db/schema";
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
   const location = url.searchParams.get("location")?.trim();
   const conditions = and(
     mine && session ? eq(marketplaceListings.sellerId, session.user.id) : eq(marketplaceListings.status, "active"), isNull(marketplaceListings.deletedAt),
+    mine ? undefined : sellerPublicVisibility(),
     categoryFilter ?? sql`1 = 1`,
     sellerId ? eq(marketplaceListings.sellerId, sellerId) : sql`1 = 1`,
     search ? or(ilike(marketplaceListings.title, `%${search}%`), ilike(marketplaceListings.description, `%${search}%`)) : undefined,
@@ -76,7 +79,7 @@ export async function GET(request: Request) {
         .select()
         .from(marketplaceListings)
         .where(and(eq(marketplaceListings.id, listingId), isNull(marketplaceListings.deletedAt), or(
-          notInArray(marketplaceListings.status, ["draft", "removed"]),
+          and(notInArray(marketplaceListings.status, ["draft", "removed"]), sellerPublicVisibility()),
           session ? eq(marketplaceListings.sellerId, session.user.id) : undefined,
         )));
 
@@ -232,8 +235,12 @@ export async function POST(request: Request) {
       return errorResponse("Invalid category id", 400);
     }
 
+    return await db.transaction(async tx => {
+      await lockSeller(tx, session.user.id);
+      const usage = await sellerUsage(tx, session.user.id);
+      if (sellerLimitReached(usage.plan, "storedProducts", usage.storedProducts)) return errorResponse("Your inventory product limit has been reached. Upgrade your seller plan to add more products.", 409);
     // Create listing
-    const [newListing] = await db
+    const [newListing] = await tx
       .insert(marketplaceListings)
       .values({
         sellerId: session.user.id,
@@ -250,7 +257,7 @@ export async function POST(request: Request) {
 
     // Add media
     if (media && media.length > 0) {
-      await db.insert(listingMedia).values(
+      await tx.insert(listingMedia).values(
         media.map((m: ListingMediaInput, index: number) => ({
           listingId: newListing.id,
           url: m.url,
@@ -262,7 +269,7 @@ export async function POST(request: Request) {
 
     // Add variants
     if (variants && variants.length > 0) {
-      await db.insert(productVariants).values(
+      await tx.insert(productVariants).values(
         variants.map((v: ProductVariantInput) => ({
           listingId: newListing.id,
           name: v.name,
@@ -276,7 +283,7 @@ export async function POST(request: Request) {
 
     // Add inventory
     if (inventory) {
-      await db.insert(inventoryItems).values({
+      await tx.insert(inventoryItems).values({
         listingId: newListing.id,
         quantity: inventory.quantity || 0,
         sku: inventory.sku,
@@ -286,6 +293,7 @@ export async function POST(request: Request) {
     }
 
     return successResponse({ listing: newListing }, 201);
+    });
   } catch (err) {
     console.error("Create listing error:", err);
     return errorResponse("Failed to create listing", 500);
@@ -310,8 +318,10 @@ export async function PUT(request: Request) {
       return errorResponse("Invalid category id", 400);
     }
 
+    return await db.transaction(async tx => {
+      await lockSeller(tx, session.user.id);
     // Check ownership
-    const [existing] = await db
+    const [existing] = await tx
       .select()
       .from(marketplaceListings)
       .where(and(eq(marketplaceListings.id, id), eq(marketplaceListings.sellerId, session.user.id)));
@@ -320,7 +330,12 @@ export async function PUT(request: Request) {
       return errorResponse("Listing not found or unauthorized", 404);
     }
 
-    const [updated] = await db
+    const entersPublic = (status === "active" || status === "reserved") && existing.status !== "active" && existing.status !== "reserved";
+    if (entersPublic) {
+      const usage = await sellerUsage(tx, session.user.id);
+      if (sellerLimitReached(usage.plan, "publicProducts", usage.publicProducts)) return errorResponse("Your public product limit has been reached. Unpublish another product or upgrade your plan.", 409);
+    }
+    const [updated] = await tx
       .update(marketplaceListings)
       .set({
         title: title ?? undefined,
@@ -336,6 +351,7 @@ export async function PUT(request: Request) {
       .returning();
 
     return successResponse({ listing: updated });
+    });
   } catch (err) {
     console.error("Update listing error:", err);
     return errorResponse("Failed to update listing", 500);

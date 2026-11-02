@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
 import {
@@ -103,6 +104,7 @@ describe("a group a member belongs to", () => {
       (button.textContent ?? "").trim() === "Post",
     );
     expect(publish, "the composer renders a Post control").not.toBeUndefined();
+    await selectPostTopic();
     await ui.click(publish as HTMLElement);
 
     await ui.waitFor(
@@ -118,7 +120,7 @@ describe("a group a member belongs to", () => {
     );
     // The group, and nothing else: the audience belongs to the group rather
     // than to whatever the form was set to, and the server sets it.
-    expect(published?.body).toEqual({ content: "Built something today", groupId: "group-1" });
+    expect(published?.body).toEqual({ topicId: "community", content: "Built something today", groupId: "group-1" });
   });
 
   test("shows the group's posts, credited to the members who wrote them", async () => {

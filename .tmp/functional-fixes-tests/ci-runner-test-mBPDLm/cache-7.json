@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "stages": {
+    "mutation": {
+      "hash": "07d308653695f4709497f761a123eeee6c53df4a380c2008baf12c86f44d1c36",
+      "startedHash": "07d308653695f4709497f761a123eeee6c53df4a380c2008baf12c86f44d1c36",
+      "pass": true,
+      "summary": "590 mutation(s) checked, no survivors — 0 thin-margin limb(s) — 63 of 114 decision(s) un-struck",
+      "at": "2026-10-27T04:48:57.721Z"
+    }
+  }
+}

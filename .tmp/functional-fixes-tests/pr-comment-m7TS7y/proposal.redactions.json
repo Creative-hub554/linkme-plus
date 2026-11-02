@@ -1,0 +1,12 @@
+{
+  "body": "proposal.md",
+  "posted": "PATCH repos/o/r/issues/comments/42",
+  "redactions": 1,
+  "substitutions": [
+    {
+      "rule": "secret-name",
+      "matched": ".env.production",
+      "replacement": "<redacted>"
+    }
+  ]
+}

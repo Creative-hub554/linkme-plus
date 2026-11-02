@@ -101,6 +101,7 @@ function buttonByText(ui: MountedSurface, text: string): HTMLElement {
 }
 
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_TELEGRAM_AUTH_ENABLED", "false");
   vi.clearAllMocks();
   mocks.getAssurance.mockResolvedValue({ data: { nextLevel: "aal1", currentLevel: "aal1" } });
   mocks.listFactors.mockResolvedValue({ data: { totp: [] } });
@@ -109,6 +110,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   cleanupSurfaces();
   vi.useRealTimers();
 });
@@ -214,8 +216,8 @@ describe("LoginPage", () => {
   test("shows the server's sentence when OAuth is refused", async () => {
     mocks.signInSocial.mockResolvedValueOnce({ error: { message: "OAuth is off" } });
     const ui = mountSurface(<LoginPage />, { providers: "none" });
-    await ui.click(buttonByText(ui, "Facebook"));
-    expect(mocks.signInSocial).toHaveBeenCalledWith("facebook");
+    await ui.click(buttonByText(ui, "Google"));
+    expect(mocks.signInSocial).toHaveBeenCalledWith("google");
     await ui.waitFor(() => ui.container.textContent?.includes("OAuth is off") ?? false, {
       description: "the OAuth refusal",
     });
@@ -228,5 +230,17 @@ describe("LoginPage", () => {
     await ui.waitFor(() => ui.container.textContent?.includes("Something went wrong") ?? false, {
       description: "the generic OAuth failure",
     });
+  });
+
+  test("does not offer Facebook or unconfigured Telegram", () => {
+    const ui = mountSurface(<LoginPage />, { providers: "none" });
+    expect(ui.container.textContent).not.toContain("Facebook");
+    expect(ui.container.textContent).not.toContain("Telegram");
+  });
+
+  test("Telegram stays unavailable even when an old feature flag is present", () => {
+    vi.stubEnv("NEXT_PUBLIC_TELEGRAM_AUTH_ENABLED", "true");
+    const ui = mountSurface(<LoginPage />, { providers: "none" });
+    expect(ui.container.textContent).not.toContain("Telegram");
   });
 });

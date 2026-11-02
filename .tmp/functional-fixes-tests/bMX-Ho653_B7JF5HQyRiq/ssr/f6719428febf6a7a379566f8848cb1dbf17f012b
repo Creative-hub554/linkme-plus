@@ -1,0 +1,207 @@
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/vitest/dist/index.js", {"importedNames":["describe","expect","it"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("node:child_process", {"importedNames":["spawnSync"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("node:fs", {"importedNames":["existsSync","mkdtempSync","readFileSync"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("node:os", {"importedNames":["tmpdir"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("node:path", {"importedNames":["join"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("node:url", {"importedNames":["fileURLToPath"]});
+const __vite_ssr_import_6__ = await __vite_ssr_import__("/.freebuff/comment-gate.mjs", {"importedNames":["gateAnnouncement","parseEntries","unposted","UsageError"]});
+/**
+* `.freebuff/comment-gate.mjs` — the step that turns a failed comment step into a red job.
+*
+* Every comment step in `ci.yml` is `continue-on-error: true`, which is deliberate: a comment
+* that could not be posted must not stop the drift check, the coverage-mutation check or the
+* artifact uploads that follow it. The price is that the job stayed green, and the run page's
+* note was then the only sign anything was wrong — on a page a green check sends nobody to
+* read. So the poster's exit status answers *is the comment on the pull request*, this reads
+* that answer back per step from `steps.<id>.outcome`, and the job is failed when a step that
+* ran did not post.
+*
+* Followed the way `pr-comment.test.ts` follows the poster: the real script, spawned, with
+* `GITHUB_STEP_SUMMARY` pointed at a file this test reads back. *Which* outcomes a job passes
+* is the workflow's business and is pinned in `src/test/collect-budget.test.ts`; what the gate
+* makes of them is here.
+*
+* The pair of outcomes this turns on is `success`/`skipped` against `failure`/`cancelled`, and
+* the tests below keep them apart on both sides, because the gate's one fatal failure mode is
+* a verdict that reads as a pass: an outcome word it does not recognize is a refused
+* invocation rather than a step it assumes was fine.
+*/
+
+
+
+
+
+
+
+const projectRoot = (0,__vite_ssr_import_5__.fileURLToPath)(new URL("../..", __vite_ssr_import_meta__.url));
+const script = (0,__vite_ssr_import_4__.join)(projectRoot, ".freebuff", "comment-gate.mjs");
+/** The heading the run page carries when the job fails for an unposted comment. */
+const HEADING = "## Comments — ❌ a comment this run owed was not posted";
+/** A directory, a run page, and a runner that spawns the real gate in it. */
+function harness() {
+	const dir = (0,__vite_ssr_import_2__.mkdtempSync)((0,__vite_ssr_import_4__.join)((0,__vite_ssr_import_3__.tmpdir)(), "comment-gate-"));
+	const summary = (0,__vite_ssr_import_4__.join)(dir, "run-page.md");
+	return {
+		dir,
+		summary,
+		run: (args, env = {}) => (0,__vite_ssr_import_1__.spawnSync)(process.execPath, [script, ...args], {
+			cwd: dir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				GITHUB_STEP_SUMMARY: summary,
+				...env
+			}
+		}),
+		summaryText: () => (0,__vite_ssr_import_2__.existsSync)(summary) ? (0,__vite_ssr_import_2__.readFileSync)(summary, "utf8") : ""
+	};
+}
+(0,__vite_ssr_import_0__.describe)("the verdict it passes", () => {
+	(0,__vite_ssr_import_0__.it)("passes when every step posted, and says how many were owed", () => {
+		const { run, summaryText } = harness();
+		const result = run(["Probe comment=success", "Probe reply=success"]);
+		(0,__vite_ssr_import_0__.expect)(result.status, result.stderr).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("every step that owed a comment posted one (2 of 2; 0 not owed)");
+		// Nothing to report is nothing to write: the run page is for the loss, and this is not one.
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toBe("");
+	});
+	(0,__vite_ssr_import_0__.it)("passes a step that ran and posted nothing, and one that was never owed a comment", () => {
+		// The distinction the gate exists to make, and the reason it takes a list rather than a
+		// count: `skipped` is a fact about the run — a fork's pull request, whose token cannot
+		// comment, or a proposal the proposer did not earn — while `failure` is a comment this run
+		// did owe. Reading one as the other would either fail every fork or pass every loss.
+		const { run, summaryText } = harness();
+		const result = run(["Probe comment=success", "Probe reply=skipped"]);
+		(0,__vite_ssr_import_0__.expect)(result.status, result.stderr).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("(1 of 2; 1 not owed)");
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toBe("");
+	});
+	(0,__vite_ssr_import_0__.it)("passes a job where no comment was owed at all", () => {
+		const { run, summaryText } = harness();
+		const result = run(["Probe reply=skipped"]);
+		(0,__vite_ssr_import_0__.expect)(result.status, result.stderr).toBe(0);
+		(0,__vite_ssr_import_0__.expect)(result.stdout).toContain("(0 of 1; 1 not owed)");
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toBe("");
+	});
+});
+(0,__vite_ssr_import_0__.describe)("the verdict it fails", () => {
+	(0,__vite_ssr_import_0__.it)("fails the job when a step ran and posted nothing", () => {
+		const { run, summaryText } = harness();
+		const result = run(["Probe comment=success", "Probe reply=failure"]);
+		// 1, which is what makes the job red: the step itself was `continue-on-error`, so this is
+		// the only thing standing between a missing comment and a green check mark.
+		(0,__vite_ssr_import_0__.expect)(result.status).toBe(1);
+		// The annotation is what the checks list shows beside the red step; the line under it is
+		// for the log, which is where a reader ends up when the annotation is all they saw.
+		(0,__vite_ssr_import_0__.expect)(result.stderr).toContain("::error title=Probe reply::");
+		(0,__vite_ssr_import_0__.expect)(result.stderr).toContain("comment-gate: Probe reply — the step ran and no comment");
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toContain(HEADING);
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toContain("- **Probe reply** — the step ran and no comment was posted");
+		// The step that posted is not named: the note is a list of what is missing.
+		(0,__vite_ssr_import_0__.expect)(summaryText()).not.toContain("- **Probe comment**");
+	});
+	(0,__vite_ssr_import_0__.it)("names every step that owed a comment, in the order it was given them", () => {
+		const { run, summaryText } = harness();
+		const result = run([
+			"Probe comment=failure",
+			"Probe reply=success",
+			"Probe third=failure"
+		]);
+		(0,__vite_ssr_import_0__.expect)(result.status).toBe(1);
+		const page = summaryText();
+		(0,__vite_ssr_import_0__.expect)(page).toContain("- **Probe comment**");
+		(0,__vite_ssr_import_0__.expect)(page).toContain("- **Probe third**");
+		(0,__vite_ssr_import_0__.expect)(page.indexOf("- **Probe comment**")).toBeLessThan(page.indexOf("- **Probe third**"));
+	});
+	(0,__vite_ssr_import_0__.it)("treats a cancelled step as a comment that did not arrive", () => {
+		// The one outcome that is neither a posted comment nor a step that was never owed one, so
+		// it cannot be read as either: it failed to post, and the wording says the step never got
+		// there rather than that it tried and was refused.
+		const { run, summaryText } = harness();
+		const result = run(["Probe reply=cancelled"]);
+		(0,__vite_ssr_import_0__.expect)(result.status).toBe(1);
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toContain("- **Probe reply** — the step was cancelled before it could post");
+	});
+});
+(0,__vite_ssr_import_0__.describe)("the invocation it refuses", () => {
+	__vite_ssr_import_0__.it.each([
+		[
+			"no entries at all",
+			[],
+			"at least one <label>=<outcome> is required"
+		],
+		[
+			"an entry with no outcome",
+			["Probe comment"],
+			"needs a label"
+		],
+		[
+			"an entry with no label",
+			["=success"],
+			"needs a label"
+		],
+		[
+			"an outcome Actions does not produce",
+			["Probe comment=nope"],
+			"does not produce"
+		],
+		[
+			"an outcome in the wrong case",
+			["Probe comment=Success"],
+			"does not produce"
+		]
+	])("refuses %s rather than reading it as a pass", (_case, args, message) => {
+		const { run, summaryText } = harness();
+		const result = run(args);
+		(0,__vite_ssr_import_0__.expect)(result.status).toBe(2);
+		(0,__vite_ssr_import_0__.expect)(result.stderr).toContain(message);
+		(0,__vite_ssr_import_0__.expect)(result.stderr).toContain("usage: comment-gate.mjs");
+		// And nothing was published: a refused invocation is not a verdict about a run.
+		(0,__vite_ssr_import_0__.expect)(summaryText()).toBe("");
+	});
+});
+(0,__vite_ssr_import_0__.describe)("the pieces it is read through", () => {
+	(0,__vite_ssr_import_0__.it)("splits an entry at its last `=`, so a label may contain one", () => {
+		(0,__vite_ssr_import_0__.expect)((0,__vite_ssr_import_6__.parseEntries)(["Probe comment=success"])).toEqual([{
+			label: "Probe comment",
+			outcome: "success"
+		}]);
+		(0,__vite_ssr_import_0__.expect)((0,__vite_ssr_import_6__.parseEntries)(["a=b=failure"])).toEqual([{
+			label: "a=b",
+			outcome: "failure"
+		}]);
+		(0,__vite_ssr_import_0__.expect)(() => (0,__vite_ssr_import_6__.parseEntries)([])).toThrow((0,__vite_ssr_import_6__.UsageError));
+		(0,__vite_ssr_import_0__.expect)(() => (0,__vite_ssr_import_6__.parseEntries)(["Probe comment="])).toThrow((0,__vite_ssr_import_6__.UsageError));
+		(0,__vite_ssr_import_0__.expect)(() => (0,__vite_ssr_import_6__.parseEntries)(["Probe comment=passed"])).toThrow((0,__vite_ssr_import_6__.UsageError));
+	});
+	(0,__vite_ssr_import_0__.it)("keeps only the entries that mean a comment did not arrive", () => {
+		const entries = (0,__vite_ssr_import_6__.parseEntries)([
+			"a=success",
+			"b=skipped",
+			"c=failure",
+			"d=cancelled"
+		]);
+		(0,__vite_ssr_import_0__.expect)((0,__vite_ssr_import_6__.unposted)(entries).map((entry) => entry.label)).toEqual(["c", "d"]);
+		(0,__vite_ssr_import_0__.expect)((0,__vite_ssr_import_6__.unposted)([])).toEqual([]);
+	});
+	(0,__vite_ssr_import_0__.it)("writes the run-page note around the labels and their outcomes", () => {
+		// The consequence rather than the diagnosis: each comment step's own note above says what
+		// went wrong with it, and this says what the job did about it — which is why the two notes
+		// are matched by label in `collect-budget.test.ts`.
+		const note = (0,__vite_ssr_import_6__.gateAnnouncement)([{
+			label: "Probe comment",
+			outcome: "failure"
+		}, {
+			label: "Probe reply",
+			outcome: "cancelled"
+		}]);
+		(0,__vite_ssr_import_0__.expect)(note).toContain(HEADING);
+		(0,__vite_ssr_import_0__.expect)(note).toContain("- **Probe comment** — the step ran and no comment was posted");
+		(0,__vite_ssr_import_0__.expect)(note).toContain("- **Probe reply** — the step was cancelled before it could post");
+		(0,__vite_ssr_import_0__.expect)(note).toContain("this is the step that turns that into a red job");
+	});
+});
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBcUJBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQU9BLE1BQU0sY0FBYyx3Q0FBYyxJQUFJLElBQUksU0FBUyx5QkFBWSxHQUFHLENBQUM7QUFDbkUsTUFBTSxTQUFTLCtCQUFLLGFBQWEsYUFBYSxrQkFBa0I7O0FBR2hFLE1BQU0sVUFBVTs7QUFHaEIsU0FBUyxVQUFVO0NBQ2pCLE1BQU0sTUFBTSxzQ0FBWSwrQkFBSyxrQ0FBTyxFQUFHLGVBQWUsQ0FBQztDQUN2RCxNQUFNLFVBQVUsK0JBQUssS0FBSyxhQUFhO0NBQ3ZDLE9BQU87RUFDTDtFQUNBO0VBQ0EsTUFBTSxNQUFnQixNQUE4QixDQUFDLE1BQ25ELG9DQUFVLFFBQVEsVUFBVSxDQUFDLFFBQVEsR0FBRyxJQUFJLEdBQUc7R0FDN0MsS0FBSztHQUNMLFVBQVU7R0FDVixLQUFLO0lBQUUsR0FBRyxRQUFRO0lBQUsscUJBQXFCO0lBQVMsR0FBRztHQUFJO0VBQzlELENBQUM7RUFDSCxtQkFBb0IscUNBQVcsT0FBTyxJQUFJLHVDQUFhLFNBQVMsTUFBTSxJQUFJO0NBQzVFO0FBQ0Y7QUFFQSxtQ0FBUywrQkFBK0I7Q0FDdEMsNkJBQUcsb0VBQW9FO0VBQ3JFLE1BQU0sRUFBRSxLQUFLLGdCQUFnQixRQUFRO0VBRXJDLE1BQU0sU0FBUyxJQUFJLENBQUMseUJBQXlCLHFCQUFxQixDQUFDO0VBRW5FLGlDQUFPLE9BQU8sUUFBUSxPQUFPLE1BQU0sQ0FBQyxDQUFDLEtBQUssQ0FBQztFQUMzQyxpQ0FBTyxPQUFPLE1BQU0sQ0FBQyxDQUFDLFVBQVUsZ0VBQWdFOztFQUVoRyxpQ0FBTyxZQUFZLENBQUMsQ0FBQyxDQUFDLEtBQUssRUFBRTtDQUMvQixDQUFDO0NBRUQsNkJBQUcsMEZBQTBGOzs7OztFQUszRixNQUFNLEVBQUUsS0FBSyxnQkFBZ0IsUUFBUTtFQUVyQyxNQUFNLFNBQVMsSUFBSSxDQUFDLHlCQUF5QixxQkFBcUIsQ0FBQztFQUVuRSxpQ0FBTyxPQUFPLFFBQVEsT0FBTyxNQUFNLENBQUMsQ0FBQyxLQUFLLENBQUM7RUFDM0MsaUNBQU8sT0FBTyxNQUFNLENBQUMsQ0FBQyxVQUFVLHNCQUFzQjtFQUN0RCxpQ0FBTyxZQUFZLENBQUMsQ0FBQyxDQUFDLEtBQUssRUFBRTtDQUMvQixDQUFDO0NBRUQsNkJBQUcsdURBQXVEO0VBQ3hELE1BQU0sRUFBRSxLQUFLLGdCQUFnQixRQUFRO0VBRXJDLE1BQU0sU0FBUyxJQUFJLENBQUMscUJBQXFCLENBQUM7RUFFMUMsaUNBQU8sT0FBTyxRQUFRLE9BQU8sTUFBTSxDQUFDLENBQUMsS0FBSyxDQUFDO0VBQzNDLGlDQUFPLE9BQU8sTUFBTSxDQUFDLENBQUMsVUFBVSxzQkFBc0I7RUFDdEQsaUNBQU8sWUFBWSxDQUFDLENBQUMsQ0FBQyxLQUFLLEVBQUU7Q0FDL0IsQ0FBQztBQUNILENBQUM7QUFFRCxtQ0FBUyw4QkFBOEI7Q0FDckMsNkJBQUcsMERBQTBEO0VBQzNELE1BQU0sRUFBRSxLQUFLLGdCQUFnQixRQUFRO0VBRXJDLE1BQU0sU0FBUyxJQUFJLENBQUMseUJBQXlCLHFCQUFxQixDQUFDOzs7RUFJbkUsaUNBQU8sT0FBTyxNQUFNLENBQUMsQ0FBQyxLQUFLLENBQUM7OztFQUc1QixpQ0FBTyxPQUFPLE1BQU0sQ0FBQyxDQUFDLFVBQVUsNkJBQTZCO0VBQzdELGlDQUFPLE9BQU8sTUFBTSxDQUFDLENBQUMsVUFBVSx5REFBeUQ7RUFDekYsaUNBQU8sWUFBWSxDQUFDLENBQUMsQ0FBQyxVQUFVLE9BQU87RUFDdkMsaUNBQU8sWUFBWSxDQUFDLENBQUMsQ0FBQyxVQUFVLDREQUE0RDs7RUFFNUYsaUNBQU8sWUFBWSxDQUFDLENBQUMsQ0FBQyxJQUFJLFVBQVUscUJBQXFCO0NBQzNELENBQUM7Q0FFRCw2QkFBRyw4RUFBOEU7RUFDL0UsTUFBTSxFQUFFLEtBQUssZ0JBQWdCLFFBQVE7RUFFckMsTUFBTSxTQUFTLElBQUk7R0FBQztHQUF5QjtHQUF1QjtFQUFxQixDQUFDO0VBRTFGLGlDQUFPLE9BQU8sTUFBTSxDQUFDLENBQUMsS0FBSyxDQUFDO0VBQzVCLE1BQU0sT0FBTyxZQUFZO0VBQ3pCLGlDQUFPLElBQUksQ0FBQyxDQUFDLFVBQVUscUJBQXFCO0VBQzVDLGlDQUFPLElBQUksQ0FBQyxDQUFDLFVBQVUsbUJBQW1CO0VBQzFDLGlDQUFPLEtBQUssUUFBUSxxQkFBcUIsQ0FBQyxDQUFDLENBQUMsYUFBYSxLQUFLLFFBQVEsbUJBQW1CLENBQUM7Q0FDNUYsQ0FBQztDQUVELDZCQUFHLGtFQUFrRTs7OztFQUluRSxNQUFNLEVBQUUsS0FBSyxnQkFBZ0IsUUFBUTtFQUVyQyxNQUFNLFNBQVMsSUFBSSxDQUFDLHVCQUF1QixDQUFDO0VBRTVDLGlDQUFPLE9BQU8sTUFBTSxDQUFDLENBQUMsS0FBSyxDQUFDO0VBQzVCLGlDQUFPLFlBQVksQ0FBQyxDQUFDLENBQUMsVUFBVSxpRUFBaUU7Q0FDbkcsQ0FBQztBQUNILENBQUM7QUFFRCxtQ0FBUyxtQ0FBbUM7Q0FDMUMseUJBQUcsS0FBSztFQUNOO0dBQUM7R0FBcUIsQ0FBQztHQUFHO0VBQTRDO0VBQ3RFO0dBQUM7R0FBNEIsQ0FBQyxlQUFlO0dBQUc7RUFBZTtFQUMvRDtHQUFDO0dBQTBCLENBQUMsVUFBVTtHQUFHO0VBQWU7RUFDeEQ7R0FBQztHQUF1QyxDQUFDLG9CQUFvQjtHQUFHO0VBQWtCO0VBQ2xGO0dBQUM7R0FBZ0MsQ0FBQyx1QkFBdUI7R0FBRztFQUFrQjtDQUNoRixDQUFDLENBQUMsQ0FBQyxnREFBZ0QsT0FBTyxNQUFNLFlBQVk7RUFDMUUsTUFBTSxFQUFFLEtBQUssZ0JBQWdCLFFBQVE7RUFFckMsTUFBTSxTQUFTLElBQUksSUFBSTtFQUV2QixpQ0FBTyxPQUFPLE1BQU0sQ0FBQyxDQUFDLEtBQUssQ0FBQztFQUM1QixpQ0FBTyxPQUFPLE1BQU0sQ0FBQyxDQUFDLFVBQVUsT0FBTztFQUN2QyxpQ0FBTyxPQUFPLE1BQU0sQ0FBQyxDQUFDLFVBQVUseUJBQXlCOztFQUV6RCxpQ0FBTyxZQUFZLENBQUMsQ0FBQyxDQUFDLEtBQUssRUFBRTtDQUMvQixDQUFDO0FBQ0gsQ0FBQztBQUVELG1DQUFTLHVDQUF1QztDQUM5Qyw2QkFBRyxxRUFBcUU7RUFDdEUsaUNBQU8sdUNBQWEsQ0FBQyx1QkFBdUIsQ0FBQyxDQUFDLENBQUMsQ0FBQyxRQUFRLENBQ3REO0dBQUUsT0FBTztHQUFpQixTQUFTO0VBQVUsQ0FDL0MsQ0FBQztFQUNELGlDQUFPLHVDQUFhLENBQUMsYUFBYSxDQUFDLENBQUMsQ0FBQyxDQUFDLFFBQVEsQ0FBQztHQUFFLE9BQU87R0FBTyxTQUFTO0VBQVUsQ0FBQyxDQUFDO0VBQ3BGLHVDQUFhLHVDQUFhLENBQUMsQ0FBQyxDQUFDLENBQUMsQ0FBQyxXQUFRLGlDQUFVO0VBQ2pELHVDQUFhLHVDQUFhLENBQUMsZ0JBQWdCLENBQUMsQ0FBQyxDQUFDLENBQUMsV0FBUSxpQ0FBVTtFQUNqRSx1Q0FBYSx1Q0FBYSxDQUFDLHNCQUFzQixDQUFDLENBQUMsQ0FBQyxDQUFDLFdBQVEsaUNBQVU7Q0FDekUsQ0FBQztDQUVELDZCQUFHLG1FQUFtRTtFQUNwRSxNQUFNLFVBQVUsdUNBQWE7R0FDM0I7R0FDQTtHQUNBO0dBQ0E7RUFDRixDQUFDO0VBRUQsaUNBQU8sbUNBQVMsT0FBTyxDQUFDLENBQUMsS0FBSyxVQUFVLE1BQU0sS0FBSyxDQUFDLENBQUMsQ0FBQyxRQUFRLENBQUMsS0FBSyxHQUFHLENBQUM7RUFDeEUsaUNBQU8sbUNBQVMsQ0FBQyxDQUFDLENBQUMsQ0FBQyxDQUFDLFFBQVEsQ0FBQyxDQUFDO0NBQ2pDLENBQUM7Q0FFRCw2QkFBRyx1RUFBdUU7Ozs7RUFJeEUsTUFBTSxPQUFPLDJDQUFpQixDQUM1QjtHQUFFLE9BQU87R0FBaUIsU0FBUztFQUFVLEdBQzdDO0dBQUUsT0FBTztHQUFlLFNBQVM7RUFBWSxDQUMvQyxDQUFDO0VBRUQsaUNBQU8sSUFBSSxDQUFDLENBQUMsVUFBVSxPQUFPO0VBQzlCLGlDQUFPLElBQUksQ0FBQyxDQUFDLFVBQVUsOERBQThEO0VBQ3JGLGlDQUFPLElBQUksQ0FBQyxDQUFDLFVBQVUsaUVBQWlFO0VBQ3hGLGlDQUFPLElBQUksQ0FBQyxDQUFDLFVBQVUsaURBQWlEO0NBQzFFLENBQUM7QUFDSCxDQUFDIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJjb21tZW50LWdhdGUudGVzdC50cyJdLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIGAuZnJlZWJ1ZmYvY29tbWVudC1nYXRlLm1qc2Ag4oCUIHRoZSBzdGVwIHRoYXQgdHVybnMgYSBmYWlsZWQgY29tbWVudCBzdGVwIGludG8gYSByZWQgam9iLlxuICpcbiAqIEV2ZXJ5IGNvbW1lbnQgc3RlcCBpbiBgY2kueW1sYCBpcyBgY29udGludWUtb24tZXJyb3I6IHRydWVgLCB3aGljaCBpcyBkZWxpYmVyYXRlOiBhIGNvbW1lbnRcbiAqIHRoYXQgY291bGQgbm90IGJlIHBvc3RlZCBtdXN0IG5vdCBzdG9wIHRoZSBkcmlmdCBjaGVjaywgdGhlIGNvdmVyYWdlLW11dGF0aW9uIGNoZWNrIG9yIHRoZVxuICogYXJ0aWZhY3QgdXBsb2FkcyB0aGF0IGZvbGxvdyBpdC4gVGhlIHByaWNlIGlzIHRoYXQgdGhlIGpvYiBzdGF5ZWQgZ3JlZW4sIGFuZCB0aGUgcnVuIHBhZ2Unc1xuICogbm90ZSB3YXMgdGhlbiB0aGUgb25seSBzaWduIGFueXRoaW5nIHdhcyB3cm9uZyDigJQgb24gYSBwYWdlIGEgZ3JlZW4gY2hlY2sgc2VuZHMgbm9ib2R5IHRvXG4gKiByZWFkLiBTbyB0aGUgcG9zdGVyJ3MgZXhpdCBzdGF0dXMgYW5zd2VycyAqaXMgdGhlIGNvbW1lbnQgb24gdGhlIHB1bGwgcmVxdWVzdCosIHRoaXMgcmVhZHNcbiAqIHRoYXQgYW5zd2VyIGJhY2sgcGVyIHN0ZXAgZnJvbSBgc3RlcHMuPGlkPi5vdXRjb21lYCwgYW5kIHRoZSBqb2IgaXMgZmFpbGVkIHdoZW4gYSBzdGVwIHRoYXRcbiAqIHJhbiBkaWQgbm90IHBvc3QuXG4gKlxuICogRm9sbG93ZWQgdGhlIHdheSBgcHItY29tbWVudC50ZXN0LnRzYCBmb2xsb3dzIHRoZSBwb3N0ZXI6IHRoZSByZWFsIHNjcmlwdCwgc3Bhd25lZCwgd2l0aFxuICogYEdJVEhVQl9TVEVQX1NVTU1BUllgIHBvaW50ZWQgYXQgYSBmaWxlIHRoaXMgdGVzdCByZWFkcyBiYWNrLiAqV2hpY2gqIG91dGNvbWVzIGEgam9iIHBhc3Nlc1xuICogaXMgdGhlIHdvcmtmbG93J3MgYnVzaW5lc3MgYW5kIGlzIHBpbm5lZCBpbiBgc3JjL3Rlc3QvY29sbGVjdC1idWRnZXQudGVzdC50c2A7IHdoYXQgdGhlIGdhdGVcbiAqIG1ha2VzIG9mIHRoZW0gaXMgaGVyZS5cbiAqXG4gKiBUaGUgcGFpciBvZiBvdXRjb21lcyB0aGlzIHR1cm5zIG9uIGlzIGBzdWNjZXNzYC9gc2tpcHBlZGAgYWdhaW5zdCBgZmFpbHVyZWAvYGNhbmNlbGxlZGAsIGFuZFxuICogdGhlIHRlc3RzIGJlbG93IGtlZXAgdGhlbSBhcGFydCBvbiBib3RoIHNpZGVzLCBiZWNhdXNlIHRoZSBnYXRlJ3Mgb25lIGZhdGFsIGZhaWx1cmUgbW9kZSBpc1xuICogYSB2ZXJkaWN0IHRoYXQgcmVhZHMgYXMgYSBwYXNzOiBhbiBvdXRjb21lIHdvcmQgaXQgZG9lcyBub3QgcmVjb2duaXplIGlzIGEgcmVmdXNlZFxuICogaW52b2NhdGlvbiByYXRoZXIgdGhhbiBhIHN0ZXAgaXQgYXNzdW1lcyB3YXMgZmluZS5cbiAqL1xuaW1wb3J0IHsgZGVzY3JpYmUsIGV4cGVjdCwgaXQgfSBmcm9tIFwidml0ZXN0XCI7XG5pbXBvcnQgeyBzcGF3blN5bmMgfSBmcm9tIFwibm9kZTpjaGlsZF9wcm9jZXNzXCI7XG5pbXBvcnQgeyBleGlzdHNTeW5jLCBta2R0ZW1wU3luYywgcmVhZEZpbGVTeW5jIH0gZnJvbSBcIm5vZGU6ZnNcIjtcbmltcG9ydCB7IHRtcGRpciB9IGZyb20gXCJub2RlOm9zXCI7XG5pbXBvcnQgeyBqb2luIH0gZnJvbSBcIm5vZGU6cGF0aFwiO1xuaW1wb3J0IHsgZmlsZVVSTFRvUGF0aCB9IGZyb20gXCJub2RlOnVybFwiO1xuaW1wb3J0IHtcbiAgZ2F0ZUFubm91bmNlbWVudCxcbiAgcGFyc2VFbnRyaWVzLFxuICB1bnBvc3RlZCxcbiAgVXNhZ2VFcnJvcixcbn0gZnJvbSBcIi4uLy4uLy5mcmVlYnVmZi9jb21tZW50LWdhdGUubWpzXCI7XG5cbmNvbnN0IHByb2plY3RSb290ID0gZmlsZVVSTFRvUGF0aChuZXcgVVJMKFwiLi4vLi5cIiwgaW1wb3J0Lm1ldGEudXJsKSk7XG5jb25zdCBzY3JpcHQgPSBqb2luKHByb2plY3RSb290LCBcIi5mcmVlYnVmZlwiLCBcImNvbW1lbnQtZ2F0ZS5tanNcIik7XG5cbi8qKiBUaGUgaGVhZGluZyB0aGUgcnVuIHBhZ2UgY2FycmllcyB3aGVuIHRoZSBqb2IgZmFpbHMgZm9yIGFuIHVucG9zdGVkIGNvbW1lbnQuICovXG5jb25zdCBIRUFESU5HID0gXCIjIyBDb21tZW50cyDigJQg4p2MIGEgY29tbWVudCB0aGlzIHJ1biBvd2VkIHdhcyBub3QgcG9zdGVkXCI7XG5cbi8qKiBBIGRpcmVjdG9yeSwgYSBydW4gcGFnZSwgYW5kIGEgcnVubmVyIHRoYXQgc3Bhd25zIHRoZSByZWFsIGdhdGUgaW4gaXQuICovXG5mdW5jdGlvbiBoYXJuZXNzKCkge1xuICBjb25zdCBkaXIgPSBta2R0ZW1wU3luYyhqb2luKHRtcGRpcigpLCBcImNvbW1lbnQtZ2F0ZS1cIikpO1xuICBjb25zdCBzdW1tYXJ5ID0gam9pbihkaXIsIFwicnVuLXBhZ2UubWRcIik7XG4gIHJldHVybiB7XG4gICAgZGlyLFxuICAgIHN1bW1hcnksXG4gICAgcnVuOiAoYXJnczogc3RyaW5nW10sIGVudjogUmVjb3JkPHN0cmluZywgc3RyaW5nPiA9IHt9KSA9PlxuICAgICAgc3Bhd25TeW5jKHByb2Nlc3MuZXhlY1BhdGgsIFtzY3JpcHQsIC4uLmFyZ3NdLCB7XG4gICAgICAgIGN3ZDogZGlyLFxuICAgICAgICBlbmNvZGluZzogXCJ1dGY4XCIsXG4gICAgICAgIGVudjogeyAuLi5wcm9jZXNzLmVudiwgR0lUSFVCX1NURVBfU1VNTUFSWTogc3VtbWFyeSwgLi4uZW52IH0sXG4gICAgICB9KSxcbiAgICBzdW1tYXJ5VGV4dDogKCkgPT4gKGV4aXN0c1N5bmMoc3VtbWFyeSkgPyByZWFkRmlsZVN5bmMoc3VtbWFyeSwgXCJ1dGY4XCIpIDogXCJcIiksXG4gIH07XG59XG5cbmRlc2NyaWJlKFwidGhlIHZlcmRpY3QgaXQgcGFzc2VzXCIsICgpID0+IHtcbiAgaXQoXCJwYXNzZXMgd2hlbiBldmVyeSBzdGVwIHBvc3RlZCwgYW5kIHNheXMgaG93IG1hbnkgd2VyZSBvd2VkXCIsICgpID0+IHtcbiAgICBjb25zdCB7IHJ1biwgc3VtbWFyeVRleHQgfSA9IGhhcm5lc3MoKTtcblxuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbXCJQcm9iZSBjb21tZW50PXN1Y2Nlc3NcIiwgXCJQcm9iZSByZXBseT1zdWNjZXNzXCJdKTtcblxuICAgIGV4cGVjdChyZXN1bHQuc3RhdHVzLCByZXN1bHQuc3RkZXJyKS50b0JlKDApO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCJldmVyeSBzdGVwIHRoYXQgb3dlZCBhIGNvbW1lbnQgcG9zdGVkIG9uZSAoMiBvZiAyOyAwIG5vdCBvd2VkKVwiKTtcbiAgICAvLyBOb3RoaW5nIHRvIHJlcG9ydCBpcyBub3RoaW5nIHRvIHdyaXRlOiB0aGUgcnVuIHBhZ2UgaXMgZm9yIHRoZSBsb3NzLCBhbmQgdGhpcyBpcyBub3Qgb25lLlxuICAgIGV4cGVjdChzdW1tYXJ5VGV4dCgpKS50b0JlKFwiXCIpO1xuICB9KTtcblxuICBpdChcInBhc3NlcyBhIHN0ZXAgdGhhdCByYW4gYW5kIHBvc3RlZCBub3RoaW5nLCBhbmQgb25lIHRoYXQgd2FzIG5ldmVyIG93ZWQgYSBjb21tZW50XCIsICgpID0+IHtcbiAgICAvLyBUaGUgZGlzdGluY3Rpb24gdGhlIGdhdGUgZXhpc3RzIHRvIG1ha2UsIGFuZCB0aGUgcmVhc29uIGl0IHRha2VzIGEgbGlzdCByYXRoZXIgdGhhbiBhXG4gICAgLy8gY291bnQ6IGBza2lwcGVkYCBpcyBhIGZhY3QgYWJvdXQgdGhlIHJ1biDigJQgYSBmb3JrJ3MgcHVsbCByZXF1ZXN0LCB3aG9zZSB0b2tlbiBjYW5ub3RcbiAgICAvLyBjb21tZW50LCBvciBhIHByb3Bvc2FsIHRoZSBwcm9wb3NlciBkaWQgbm90IGVhcm4g4oCUIHdoaWxlIGBmYWlsdXJlYCBpcyBhIGNvbW1lbnQgdGhpcyBydW5cbiAgICAvLyBkaWQgb3dlLiBSZWFkaW5nIG9uZSBhcyB0aGUgb3RoZXIgd291bGQgZWl0aGVyIGZhaWwgZXZlcnkgZm9yayBvciBwYXNzIGV2ZXJ5IGxvc3MuXG4gICAgY29uc3QgeyBydW4sIHN1bW1hcnlUZXh0IH0gPSBoYXJuZXNzKCk7XG5cbiAgICBjb25zdCByZXN1bHQgPSBydW4oW1wiUHJvYmUgY29tbWVudD1zdWNjZXNzXCIsIFwiUHJvYmUgcmVwbHk9c2tpcHBlZFwiXSk7XG5cbiAgICBleHBlY3QocmVzdWx0LnN0YXR1cywgcmVzdWx0LnN0ZGVycikudG9CZSgwKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZG91dCkudG9Db250YWluKFwiKDEgb2YgMjsgMSBub3Qgb3dlZClcIik7XG4gICAgZXhwZWN0KHN1bW1hcnlUZXh0KCkpLnRvQmUoXCJcIik7XG4gIH0pO1xuXG4gIGl0KFwicGFzc2VzIGEgam9iIHdoZXJlIG5vIGNvbW1lbnQgd2FzIG93ZWQgYXQgYWxsXCIsICgpID0+IHtcbiAgICBjb25zdCB7IHJ1biwgc3VtbWFyeVRleHQgfSA9IGhhcm5lc3MoKTtcblxuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbXCJQcm9iZSByZXBseT1za2lwcGVkXCJdKTtcblxuICAgIGV4cGVjdChyZXN1bHQuc3RhdHVzLCByZXN1bHQuc3RkZXJyKS50b0JlKDApO1xuICAgIGV4cGVjdChyZXN1bHQuc3Rkb3V0KS50b0NvbnRhaW4oXCIoMCBvZiAxOyAxIG5vdCBvd2VkKVwiKTtcbiAgICBleHBlY3Qoc3VtbWFyeVRleHQoKSkudG9CZShcIlwiKTtcbiAgfSk7XG59KTtcblxuZGVzY3JpYmUoXCJ0aGUgdmVyZGljdCBpdCBmYWlsc1wiLCAoKSA9PiB7XG4gIGl0KFwiZmFpbHMgdGhlIGpvYiB3aGVuIGEgc3RlcCByYW4gYW5kIHBvc3RlZCBub3RoaW5nXCIsICgpID0+IHtcbiAgICBjb25zdCB7IHJ1biwgc3VtbWFyeVRleHQgfSA9IGhhcm5lc3MoKTtcblxuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbXCJQcm9iZSBjb21tZW50PXN1Y2Nlc3NcIiwgXCJQcm9iZSByZXBseT1mYWlsdXJlXCJdKTtcblxuICAgIC8vIDEsIHdoaWNoIGlzIHdoYXQgbWFrZXMgdGhlIGpvYiByZWQ6IHRoZSBzdGVwIGl0c2VsZiB3YXMgYGNvbnRpbnVlLW9uLWVycm9yYCwgc28gdGhpcyBpc1xuICAgIC8vIHRoZSBvbmx5IHRoaW5nIHN0YW5kaW5nIGJldHdlZW4gYSBtaXNzaW5nIGNvbW1lbnQgYW5kIGEgZ3JlZW4gY2hlY2sgbWFyay5cbiAgICBleHBlY3QocmVzdWx0LnN0YXR1cykudG9CZSgxKTtcbiAgICAvLyBUaGUgYW5ub3RhdGlvbiBpcyB3aGF0IHRoZSBjaGVja3MgbGlzdCBzaG93cyBiZXNpZGUgdGhlIHJlZCBzdGVwOyB0aGUgbGluZSB1bmRlciBpdCBpc1xuICAgIC8vIGZvciB0aGUgbG9nLCB3aGljaCBpcyB3aGVyZSBhIHJlYWRlciBlbmRzIHVwIHdoZW4gdGhlIGFubm90YXRpb24gaXMgYWxsIHRoZXkgc2F3LlxuICAgIGV4cGVjdChyZXN1bHQuc3RkZXJyKS50b0NvbnRhaW4oXCI6OmVycm9yIHRpdGxlPVByb2JlIHJlcGx5OjpcIik7XG4gICAgZXhwZWN0KHJlc3VsdC5zdGRlcnIpLnRvQ29udGFpbihcImNvbW1lbnQtZ2F0ZTogUHJvYmUgcmVwbHkg4oCUIHRoZSBzdGVwIHJhbiBhbmQgbm8gY29tbWVudFwiKTtcbiAgICBleHBlY3Qoc3VtbWFyeVRleHQoKSkudG9Db250YWluKEhFQURJTkcpO1xuICAgIGV4cGVjdChzdW1tYXJ5VGV4dCgpKS50b0NvbnRhaW4oXCItICoqUHJvYmUgcmVwbHkqKiDigJQgdGhlIHN0ZXAgcmFuIGFuZCBubyBjb21tZW50IHdhcyBwb3N0ZWRcIik7XG4gICAgLy8gVGhlIHN0ZXAgdGhhdCBwb3N0ZWQgaXMgbm90IG5hbWVkOiB0aGUgbm90ZSBpcyBhIGxpc3Qgb2Ygd2hhdCBpcyBtaXNzaW5nLlxuICAgIGV4cGVjdChzdW1tYXJ5VGV4dCgpKS5ub3QudG9Db250YWluKFwiLSAqKlByb2JlIGNvbW1lbnQqKlwiKTtcbiAgfSk7XG5cbiAgaXQoXCJuYW1lcyBldmVyeSBzdGVwIHRoYXQgb3dlZCBhIGNvbW1lbnQsIGluIHRoZSBvcmRlciBpdCB3YXMgZ2l2ZW4gdGhlbVwiLCAoKSA9PiB7XG4gICAgY29uc3QgeyBydW4sIHN1bW1hcnlUZXh0IH0gPSBoYXJuZXNzKCk7XG5cbiAgICBjb25zdCByZXN1bHQgPSBydW4oW1wiUHJvYmUgY29tbWVudD1mYWlsdXJlXCIsIFwiUHJvYmUgcmVwbHk9c3VjY2Vzc1wiLCBcIlByb2JlIHRoaXJkPWZhaWx1cmVcIl0pO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGF0dXMpLnRvQmUoMSk7XG4gICAgY29uc3QgcGFnZSA9IHN1bW1hcnlUZXh0KCk7XG4gICAgZXhwZWN0KHBhZ2UpLnRvQ29udGFpbihcIi0gKipQcm9iZSBjb21tZW50KipcIik7XG4gICAgZXhwZWN0KHBhZ2UpLnRvQ29udGFpbihcIi0gKipQcm9iZSB0aGlyZCoqXCIpO1xuICAgIGV4cGVjdChwYWdlLmluZGV4T2YoXCItICoqUHJvYmUgY29tbWVudCoqXCIpKS50b0JlTGVzc1RoYW4ocGFnZS5pbmRleE9mKFwiLSAqKlByb2JlIHRoaXJkKipcIikpO1xuICB9KTtcblxuICBpdChcInRyZWF0cyBhIGNhbmNlbGxlZCBzdGVwIGFzIGEgY29tbWVudCB0aGF0IGRpZCBub3QgYXJyaXZlXCIsICgpID0+IHtcbiAgICAvLyBUaGUgb25lIG91dGNvbWUgdGhhdCBpcyBuZWl0aGVyIGEgcG9zdGVkIGNvbW1lbnQgbm9yIGEgc3RlcCB0aGF0IHdhcyBuZXZlciBvd2VkIG9uZSwgc29cbiAgICAvLyBpdCBjYW5ub3QgYmUgcmVhZCBhcyBlaXRoZXI6IGl0IGZhaWxlZCB0byBwb3N0LCBhbmQgdGhlIHdvcmRpbmcgc2F5cyB0aGUgc3RlcCBuZXZlciBnb3RcbiAgICAvLyB0aGVyZSByYXRoZXIgdGhhbiB0aGF0IGl0IHRyaWVkIGFuZCB3YXMgcmVmdXNlZC5cbiAgICBjb25zdCB7IHJ1biwgc3VtbWFyeVRleHQgfSA9IGhhcm5lc3MoKTtcblxuICAgIGNvbnN0IHJlc3VsdCA9IHJ1bihbXCJQcm9iZSByZXBseT1jYW5jZWxsZWRcIl0pO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGF0dXMpLnRvQmUoMSk7XG4gICAgZXhwZWN0KHN1bW1hcnlUZXh0KCkpLnRvQ29udGFpbihcIi0gKipQcm9iZSByZXBseSoqIOKAlCB0aGUgc3RlcCB3YXMgY2FuY2VsbGVkIGJlZm9yZSBpdCBjb3VsZCBwb3N0XCIpO1xuICB9KTtcbn0pO1xuXG5kZXNjcmliZShcInRoZSBpbnZvY2F0aW9uIGl0IHJlZnVzZXNcIiwgKCkgPT4ge1xuICBpdC5lYWNoKFtcbiAgICBbXCJubyBlbnRyaWVzIGF0IGFsbFwiLCBbXSwgXCJhdCBsZWFzdCBvbmUgPGxhYmVsPj08b3V0Y29tZT4gaXMgcmVxdWlyZWRcIl0sXG4gICAgW1wiYW4gZW50cnkgd2l0aCBubyBvdXRjb21lXCIsIFtcIlByb2JlIGNvbW1lbnRcIl0sIFwibmVlZHMgYSBsYWJlbFwiXSxcbiAgICBbXCJhbiBlbnRyeSB3aXRoIG5vIGxhYmVsXCIsIFtcIj1zdWNjZXNzXCJdLCBcIm5lZWRzIGEgbGFiZWxcIl0sXG4gICAgW1wiYW4gb3V0Y29tZSBBY3Rpb25zIGRvZXMgbm90IHByb2R1Y2VcIiwgW1wiUHJvYmUgY29tbWVudD1ub3BlXCJdLCBcImRvZXMgbm90IHByb2R1Y2VcIl0sXG4gICAgW1wiYW4gb3V0Y29tZSBpbiB0aGUgd3JvbmcgY2FzZVwiLCBbXCJQcm9iZSBjb21tZW50PVN1Y2Nlc3NcIl0sIFwiZG9lcyBub3QgcHJvZHVjZVwiXSxcbiAgXSkoXCJyZWZ1c2VzICVzIHJhdGhlciB0aGFuIHJlYWRpbmcgaXQgYXMgYSBwYXNzXCIsIChfY2FzZSwgYXJncywgbWVzc2FnZSkgPT4ge1xuICAgIGNvbnN0IHsgcnVuLCBzdW1tYXJ5VGV4dCB9ID0gaGFybmVzcygpO1xuXG4gICAgY29uc3QgcmVzdWx0ID0gcnVuKGFyZ3MpO1xuXG4gICAgZXhwZWN0KHJlc3VsdC5zdGF0dXMpLnRvQmUoMik7XG4gICAgZXhwZWN0KHJlc3VsdC5zdGRlcnIpLnRvQ29udGFpbihtZXNzYWdlKTtcbiAgICBleHBlY3QocmVzdWx0LnN0ZGVycikudG9Db250YWluKFwidXNhZ2U6IGNvbW1lbnQtZ2F0ZS5tanNcIik7XG4gICAgLy8gQW5kIG5vdGhpbmcgd2FzIHB1Ymxpc2hlZDogYSByZWZ1c2VkIGludm9jYXRpb24gaXMgbm90IGEgdmVyZGljdCBhYm91dCBhIHJ1bi5cbiAgICBleHBlY3Qoc3VtbWFyeVRleHQoKSkudG9CZShcIlwiKTtcbiAgfSk7XG59KTtcblxuZGVzY3JpYmUoXCJ0aGUgcGllY2VzIGl0IGlzIHJlYWQgdGhyb3VnaFwiLCAoKSA9PiB7XG4gIGl0KFwic3BsaXRzIGFuIGVudHJ5IGF0IGl0cyBsYXN0IGA9YCwgc28gYSBsYWJlbCBtYXkgY29udGFpbiBvbmVcIiwgKCkgPT4ge1xuICAgIGV4cGVjdChwYXJzZUVudHJpZXMoW1wiUHJvYmUgY29tbWVudD1zdWNjZXNzXCJdKSkudG9FcXVhbChbXG4gICAgICB7IGxhYmVsOiBcIlByb2JlIGNvbW1lbnRcIiwgb3V0Y29tZTogXCJzdWNjZXNzXCIgfSxcbiAgICBdKTtcbiAgICBleHBlY3QocGFyc2VFbnRyaWVzKFtcImE9Yj1mYWlsdXJlXCJdKSkudG9FcXVhbChbeyBsYWJlbDogXCJhPWJcIiwgb3V0Y29tZTogXCJmYWlsdXJlXCIgfV0pO1xuICAgIGV4cGVjdCgoKSA9PiBwYXJzZUVudHJpZXMoW10pKS50b1Rocm93KFVzYWdlRXJyb3IpO1xuICAgIGV4cGVjdCgoKSA9PiBwYXJzZUVudHJpZXMoW1wiUHJvYmUgY29tbWVudD1cIl0pKS50b1Rocm93KFVzYWdlRXJyb3IpO1xuICAgIGV4cGVjdCgoKSA9PiBwYXJzZUVudHJpZXMoW1wiUHJvYmUgY29tbWVudD1wYXNzZWRcIl0pKS50b1Rocm93KFVzYWdlRXJyb3IpO1xuICB9KTtcblxuICBpdChcImtlZXBzIG9ubHkgdGhlIGVudHJpZXMgdGhhdCBtZWFuIGEgY29tbWVudCBkaWQgbm90IGFycml2ZVwiLCAoKSA9PiB7XG4gICAgY29uc3QgZW50cmllcyA9IHBhcnNlRW50cmllcyhbXG4gICAgICBcImE9c3VjY2Vzc1wiLFxuICAgICAgXCJiPXNraXBwZWRcIixcbiAgICAgIFwiYz1mYWlsdXJlXCIsXG4gICAgICBcImQ9Y2FuY2VsbGVkXCIsXG4gICAgXSk7XG5cbiAgICBleHBlY3QodW5wb3N0ZWQoZW50cmllcykubWFwKChlbnRyeSkgPT4gZW50cnkubGFiZWwpKS50b0VxdWFsKFtcImNcIiwgXCJkXCJdKTtcbiAgICBleHBlY3QodW5wb3N0ZWQoW10pKS50b0VxdWFsKFtdKTtcbiAgfSk7XG5cbiAgaXQoXCJ3cml0ZXMgdGhlIHJ1bi1wYWdlIG5vdGUgYXJvdW5kIHRoZSBsYWJlbHMgYW5kIHRoZWlyIG91dGNvbWVzXCIsICgpID0+IHtcbiAgICAvLyBUaGUgY29uc2VxdWVuY2UgcmF0aGVyIHRoYW4gdGhlIGRpYWdub3NpczogZWFjaCBjb21tZW50IHN0ZXAncyBvd24gbm90ZSBhYm92ZSBzYXlzIHdoYXRcbiAgICAvLyB3ZW50IHdyb25nIHdpdGggaXQsIGFuZCB0aGlzIHNheXMgd2hhdCB0aGUgam9iIGRpZCBhYm91dCBpdCDigJQgd2hpY2ggaXMgd2h5IHRoZSB0d28gbm90ZXNcbiAgICAvLyBhcmUgbWF0Y2hlZCBieSBsYWJlbCBpbiBgY29sbGVjdC1idWRnZXQudGVzdC50c2AuXG4gICAgY29uc3Qgbm90ZSA9IGdhdGVBbm5vdW5jZW1lbnQoW1xuICAgICAgeyBsYWJlbDogXCJQcm9iZSBjb21tZW50XCIsIG91dGNvbWU6IFwiZmFpbHVyZVwiIH0sXG4gICAgICB7IGxhYmVsOiBcIlByb2JlIHJlcGx5XCIsIG91dGNvbWU6IFwiY2FuY2VsbGVkXCIgfSxcbiAgICBdKTtcblxuICAgIGV4cGVjdChub3RlKS50b0NvbnRhaW4oSEVBRElORyk7XG4gICAgZXhwZWN0KG5vdGUpLnRvQ29udGFpbihcIi0gKipQcm9iZSBjb21tZW50Kiog4oCUIHRoZSBzdGVwIHJhbiBhbmQgbm8gY29tbWVudCB3YXMgcG9zdGVkXCIpO1xuICAgIGV4cGVjdChub3RlKS50b0NvbnRhaW4oXCItICoqUHJvYmUgcmVwbHkqKiDigJQgdGhlIHN0ZXAgd2FzIGNhbmNlbGxlZCBiZWZvcmUgaXQgY291bGQgcG9zdFwiKTtcbiAgICBleHBlY3Qobm90ZSkudG9Db250YWluKFwidGhpcyBpcyB0aGUgc3RlcCB0aGF0IHR1cm5zIHRoYXQgaW50byBhIHJlZCBqb2JcIik7XG4gIH0pO1xufSk7XG4iXSwiZmlsZSI6Ii9zcmMvdGVzdC9jb21tZW50LWdhdGUudGVzdC50cyJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvdGVzdC9jb21tZW50LWdhdGUudGVzdC50cyIsIi9zcmMvdGVzdC9jb21tZW50LWdhdGUudGVzdC50cyIsW11d

@@ -1,0 +1,133 @@
+__vite_ssr_exportName__("default", () => { try { return PrivacyPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/components/ui/card.tsx", {"importedNames":["Card","CardContent"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/app/(static)/privacy/page.tsx";
+
+function PrivacyPage() {
+	return /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+		className: "max-w-3xl mx-auto space-y-8 py-8",
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+			className: "text-center",
+			children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h1", {
+				className: "text-3xl font-bold text-navy-800",
+				children: "Privacy Policy"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 7,
+				columnNumber: 9
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+				className: "text-muted-foreground mt-2",
+				children: "Last updated: January 2026"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 8,
+				columnNumber: 9
+			}, this)]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 6,
+			columnNumber: 7
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.Card), { children: /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardContent), {
+			className: "p-6 space-y-4 text-sm text-muted-foreground",
+			children: [
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "Information We Collect"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 14,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "We collect information you provide directly, such as your name, email, profile information, and content you post. We also collect usage data automatically, including device information, IP address, and browsing activity on the platform." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 15,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 13,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "How We Use Your Information"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 18,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "We use your information to provide, maintain, and improve LinkMe+, to communicate with you, to detect and prevent fraud, and to comply with legal obligations." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 19,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 17,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "Information Sharing"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 22,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "We do not sell your personal information. We may share information with service providers who help us operate the platform, as required by law, or with your consent." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 23,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 21,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "Data Security"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 26,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "We implement industry-standard security measures to protect your data. However, no method of transmission over the Internet is 100% secure." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 27,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 25,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "Your Rights"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 30,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "You can access, update, or delete your account information at any time through Settings. You may also request a copy of all data we hold about you." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 31,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 29,
+					columnNumber: 11
+				}, this)
+			]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 12,
+			columnNumber: 9
+		}, this) }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 11,
+			columnNumber: 7
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 5,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7OztBQUVlLFNBQVMsY0FBYztDQUNwQyxPQUNFLGlEQUFDLE9BQUQ7RUFBSyxXQUFVO1lBQWYsQ0FDRSxpREFBQyxPQUFEO0dBQUssV0FBVTthQUFmLENBQ0UsaURBQUMsTUFBRDtJQUFJLFdBQVU7Y0FBbUM7R0FBa0I7Ozs7YUFDbkUsaURBQUMsS0FBRDtJQUFHLFdBQVU7Y0FBNkI7R0FBNkI7Ozs7V0FDcEU7Ozs7O1lBRUwsb0RBQUMsNkJBQUQsWUFDRSxvREFBQyxvQ0FBRDtHQUFhLFdBQVU7YUFBdkI7SUFDRSxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBMEI7Ozs7Y0FDN0UsaURBQUMsS0FBRCxZQUFHLCtPQUErTzs7OztZQUMzTzs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBK0I7Ozs7Y0FDbEYsaURBQUMsS0FBRCxZQUFHLGlLQUFpSzs7OztZQUM3Sjs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBdUI7Ozs7Y0FDMUUsaURBQUMsS0FBRCxZQUFHLHdLQUF3Szs7OztZQUNwSzs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBaUI7Ozs7Y0FDcEUsaURBQUMsS0FBRCxZQUFHLDhJQUE4STs7OztZQUMxSTs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBZTs7OztjQUNsRSxpREFBQyxLQUFELFlBQUcsc0pBQXNKOzs7O1lBQ2xKOzs7OztHQUNFOzs7OztXQUNUOzs7O1VBQ0g7Ozs7OztBQUVUIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJwYWdlLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBDYXJkLCBDYXJkQ29udGVudCB9IGZyb20gXCJAL2NvbXBvbmVudHMvdWkvY2FyZFwiO1xuXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBQcml2YWN5UGFnZSgpIHtcbiAgcmV0dXJuIChcbiAgICA8ZGl2IGNsYXNzTmFtZT1cIm1heC13LTN4bCBteC1hdXRvIHNwYWNlLXktOCBweS04XCI+XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtY2VudGVyXCI+XG4gICAgICAgIDxoMSBjbGFzc05hbWU9XCJ0ZXh0LTN4bCBmb250LWJvbGQgdGV4dC1uYXZ5LTgwMFwiPlByaXZhY3kgUG9saWN5PC9oMT5cbiAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1tdXRlZC1mb3JlZ3JvdW5kIG10LTJcIj5MYXN0IHVwZGF0ZWQ6IEphbnVhcnkgMjAyNjwvcD5cbiAgICAgIDwvZGl2PlxuXG4gICAgICA8Q2FyZD5cbiAgICAgICAgPENhcmRDb250ZW50IGNsYXNzTmFtZT1cInAtNiBzcGFjZS15LTQgdGV4dC1zbSB0ZXh0LW11dGVkLWZvcmVncm91bmRcIj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+SW5mb3JtYXRpb24gV2UgQ29sbGVjdDwvaDI+XG4gICAgICAgICAgICA8cD5XZSBjb2xsZWN0IGluZm9ybWF0aW9uIHlvdSBwcm92aWRlIGRpcmVjdGx5LCBzdWNoIGFzIHlvdXIgbmFtZSwgZW1haWwsIHByb2ZpbGUgaW5mb3JtYXRpb24sIGFuZCBjb250ZW50IHlvdSBwb3N0LiBXZSBhbHNvIGNvbGxlY3QgdXNhZ2UgZGF0YSBhdXRvbWF0aWNhbGx5LCBpbmNsdWRpbmcgZGV2aWNlIGluZm9ybWF0aW9uLCBJUCBhZGRyZXNzLCBhbmQgYnJvd3NpbmcgYWN0aXZpdHkgb24gdGhlIHBsYXRmb3JtLjwvcD5cbiAgICAgICAgICA8L3NlY3Rpb24+XG4gICAgICAgICAgPHNlY3Rpb24+XG4gICAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCB0ZXh0LWZvcmVncm91bmQgbWItMlwiPkhvdyBXZSBVc2UgWW91ciBJbmZvcm1hdGlvbjwvaDI+XG4gICAgICAgICAgICA8cD5XZSB1c2UgeW91ciBpbmZvcm1hdGlvbiB0byBwcm92aWRlLCBtYWludGFpbiwgYW5kIGltcHJvdmUgTGlua01lKywgdG8gY29tbXVuaWNhdGUgd2l0aCB5b3UsIHRvIGRldGVjdCBhbmQgcHJldmVudCBmcmF1ZCwgYW5kIHRvIGNvbXBseSB3aXRoIGxlZ2FsIG9ibGlnYXRpb25zLjwvcD5cbiAgICAgICAgICA8L3NlY3Rpb24+XG4gICAgICAgICAgPHNlY3Rpb24+XG4gICAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCB0ZXh0LWZvcmVncm91bmQgbWItMlwiPkluZm9ybWF0aW9uIFNoYXJpbmc8L2gyPlxuICAgICAgICAgICAgPHA+V2UgZG8gbm90IHNlbGwgeW91ciBwZXJzb25hbCBpbmZvcm1hdGlvbi4gV2UgbWF5IHNoYXJlIGluZm9ybWF0aW9uIHdpdGggc2VydmljZSBwcm92aWRlcnMgd2hvIGhlbHAgdXMgb3BlcmF0ZSB0aGUgcGxhdGZvcm0sIGFzIHJlcXVpcmVkIGJ5IGxhdywgb3Igd2l0aCB5b3VyIGNvbnNlbnQuPC9wPlxuICAgICAgICAgIDwvc2VjdGlvbj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+RGF0YSBTZWN1cml0eTwvaDI+XG4gICAgICAgICAgICA8cD5XZSBpbXBsZW1lbnQgaW5kdXN0cnktc3RhbmRhcmQgc2VjdXJpdHkgbWVhc3VyZXMgdG8gcHJvdGVjdCB5b3VyIGRhdGEuIEhvd2V2ZXIsIG5vIG1ldGhvZCBvZiB0cmFuc21pc3Npb24gb3ZlciB0aGUgSW50ZXJuZXQgaXMgMTAwJSBzZWN1cmUuPC9wPlxuICAgICAgICAgIDwvc2VjdGlvbj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+WW91ciBSaWdodHM8L2gyPlxuICAgICAgICAgICAgPHA+WW91IGNhbiBhY2Nlc3MsIHVwZGF0ZSwgb3IgZGVsZXRlIHlvdXIgYWNjb3VudCBpbmZvcm1hdGlvbiBhdCBhbnkgdGltZSB0aHJvdWdoIFNldHRpbmdzLiBZb3UgbWF5IGFsc28gcmVxdWVzdCBhIGNvcHkgb2YgYWxsIGRhdGEgd2UgaG9sZCBhYm91dCB5b3UuPC9wPlxuICAgICAgICAgIDwvc2VjdGlvbj5cbiAgICAgICAgPC9DYXJkQ29udGVudD5cbiAgICAgIDwvQ2FyZD5cbiAgICA8L2Rpdj5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKHN0YXRpYylcXHByaXZhY3lcXHBhZ2UudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhzdGF0aWMpL3ByaXZhY3kvcGFnZS50c3giLCJDOlxcV29ya3NwYWNlXFxXZWJzaXRlYnVpbGRlcnRvb2xzYWlcXFBvc3RCYXNlLXByb2plY3RcXHNyY1xcYXBwXFwoc3RhdGljKVxccHJpdmFjeVxccGFnZS50c3giLFtdXQ==

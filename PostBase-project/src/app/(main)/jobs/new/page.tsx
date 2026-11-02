@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { JobAllowanceUsage } from "@/components/jobs/job-allowance-usage";
+import { PrivateEvidenceUpload } from "@/components/shared/private-evidence-upload";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { clientRequest, jsonBody } from "@/lib/client-request";
@@ -18,6 +20,7 @@ export default function NewJobPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [officeEvidenceIds, setOfficeEvidenceIds] = useState<string[]>([]);
   useEffect(() => {
     const controller = new AbortController();
     clientRequest<{ companies: Option[]; pages: Option[] }>("/api/companies", {
@@ -44,10 +47,11 @@ export default function NewJobPage() {
             jsonBody({ pageId }),
           )
         ).company;
-      const result = await clientRequest<{ job: { id: string } }>(
+      await clientRequest<{ job: { id: string } }>(
         "/api/jobs",
         jsonBody({
           companyId: company.id,
+          officeEvidenceIds,
           title: form.get("title"),
           location: form.get("location"),
           remoteStatus: form.get("remoteStatus"),
@@ -57,7 +61,7 @@ export default function NewJobPage() {
           deadline: form.get("deadline") || undefined,
         }),
       );
-      router.push(`/jobs/${result.job.id}`);
+      router.push("/jobs/manage");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to post job.");
     } finally {
@@ -70,6 +74,7 @@ export default function NewJobPage() {
         ← Jobs
       </Link>
       <h1 className="text-2xl font-bold">Post a job</h1>
+      <JobAllowanceUsage />
       {error && (
         <p role="alert" className="text-red-600">
           {error}
@@ -143,10 +148,12 @@ export default function NewJobPage() {
           />
           <Label htmlFor="requirements">Requirements</Label>
           <Textarea id="requirements" name="requirements" maxLength={20000} />
-          <Label htmlFor="deadline">Application deadline (optional)</Label>
-          <Input id="deadline" name="deadline" type="date" />
-          <Button type="submit" disabled={busy}>
-            {busy ? "Publishing…" : "Publish job"}
+          <Label htmlFor="deadline">Application deadline</Label>
+          <Input id="deadline" name="deadline" required type="date" />
+          <PrivateEvidenceUpload purpose="office" value={officeEvidenceIds} onChange={setOfficeEvidenceIds} />
+          <p className="text-sm text-muted-foreground">Jobs require approval before publication. Identity-verified accounts may publish automatically only after office evidence and system checks pass. Your first 10 approved jobs are free.</p>
+          <Button type="submit" disabled={busy || !officeEvidenceIds.length}>
+            {busy ? "Submitting…" : "Submit job for review"}
           </Button>
         </form>
       )}

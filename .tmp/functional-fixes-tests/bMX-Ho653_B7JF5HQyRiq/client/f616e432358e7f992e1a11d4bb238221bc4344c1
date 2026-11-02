@@ -1,0 +1,17 @@
+__vite_ssr_exportName__("default", () => { try { return ForgotPasswordPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/components/auth/password-recovery.tsx", {"importedNames":["PasswordRecovery"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/app/(auth)/forgot-password/page.tsx";
+
+function ForgotPasswordPage() {
+	return /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.PasswordRecovery), {}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 3,
+		columnNumber: 10
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7OztBQUNlLFNBQVMscUJBQXFCO0NBQzNDLE9BQU8sb0RBQUMseUNBQUQsQ0FBbUI7Ozs7O0FBQzVCIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJwYWdlLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBQYXNzd29yZFJlY292ZXJ5IH0gZnJvbSBcIkAvY29tcG9uZW50cy9hdXRoL3Bhc3N3b3JkLXJlY292ZXJ5XCI7XG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBGb3Jnb3RQYXNzd29yZFBhZ2UoKSB7XG4gIHJldHVybiA8UGFzc3dvcmRSZWNvdmVyeSAvPjtcbn1cbiJdLCJmaWxlIjoiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKGF1dGgpXFxmb3Jnb3QtcGFzc3dvcmRcXHBhZ2UudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhhdXRoKS9mb3Jnb3QtcGFzc3dvcmQvcGFnZS50c3giLCJDOlxcV29ya3NwYWNlXFxXZWJzaXRlYnVpbGRlcnRvb2xzYWlcXFBvc3RCYXNlLXByb2plY3RcXHNyY1xcYXBwXFwoYXV0aClcXGZvcmdvdC1wYXNzd29yZFxccGFnZS50c3giLFtdXQ==

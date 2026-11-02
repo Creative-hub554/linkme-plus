@@ -1,0 +1,88 @@
+__vite_ssr_exportName__("usePresence", () => { try { return usePresence } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useState","useEffect","useCallback"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/hooks/use-websocket.ts", {"importedNames":["useWebSocket"]});
+"use client";
+
+
+function usePresence(_targetUserId) {
+	const [presenceMap, setPresenceMap] = (0,__vite_ssr_import_0__.useState)(new Map());
+	const { isConnected, send, lastMessage } = (0,__vite_ssr_import_1__.useWebSocket)({ room: "presence" });
+	// Track online users
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		if (!lastMessage) return;
+		switch (lastMessage.type) {
+			case "user:online": {
+				const { userId } = lastMessage;
+				if (typeof userId !== "string") break;
+				setPresenceMap((prev) => {
+					const next = new Map(prev);
+					next.set(userId, {
+						online: true,
+						lastSeen: Date.now()
+					});
+					return next;
+				});
+				break;
+			}
+			case "user:offline": {
+				const { userId } = lastMessage;
+				if (typeof userId !== "string") break;
+				setPresenceMap((prev) => {
+					const next = new Map(prev);
+					next.set(userId, {
+						online: false,
+						lastSeen: Date.now()
+					});
+					return next;
+				});
+				break;
+			}
+		}
+	}, [lastMessage]);
+	// Check if specific user is online
+	const isUserOnline = (0,__vite_ssr_import_0__.useCallback)((userId) => {
+		const presence = presenceMap.get(userId);
+		return presence?.online ?? false;
+	}, [presenceMap]);
+	// Get user's last seen time
+	const getLastSeen = (0,__vite_ssr_import_0__.useCallback)((userId) => {
+		const presence = presenceMap.get(userId);
+		return presence?.lastSeen ?? null;
+	}, [presenceMap]);
+	// Format last seen time
+	/**
+	* How long ago the user was last seen, or `null` when there is nothing to
+	* say — which is not the same as "a while ago", so it is not spelled out as
+	* a word here. The component that shows it decides what to say instead; a
+	* hook that returns the sentence "Unknown" puts the wording somewhere the
+	* words are not.
+	*/
+	const formatLastSeen = (0,__vite_ssr_import_0__.useCallback)((userId) => {
+		const lastSeen = getLastSeen(userId);
+		if (!lastSeen) return null;
+		const now = Date.now();
+		const diff = now - lastSeen;
+		if (diff < 6e4) return "Just now";
+		if (diff < 36e5) return `${Math.floor(diff / 6e4)}m ago`;
+		if (diff < 864e5) return `${Math.floor(diff / 36e5)}h ago`;
+		return `${Math.floor(diff / 864e5)}d ago`;
+	}, [getLastSeen]);
+	// Request presence for specific user
+	const checkPresence = (0,__vite_ssr_import_0__.useCallback)((userId) => {
+		send({
+			type: "check-presence",
+			userId
+		});
+	}, [send]);
+	return {
+		isUserOnline,
+		getLastSeen,
+		formatLastSeen,
+		checkPresence,
+		isConnected
+	};
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFIQTs7O0FBVU8sU0FBUyxZQUFZLGVBQXdCO0NBQ2xELE1BQU0sQ0FBQyxhQUFhLGtCQUFrQixtQ0FBb0MsSUFBSSxJQUFJLENBQUM7Q0FDbkYsTUFBTSxFQUFFLGFBQWEsTUFBTSxnQkFBZ0IsdUNBQWEsRUFDdEQsTUFBTSxXQUNSLENBQUM7O0NBR0QsMENBQWdCO0VBQ2QsSUFBSSxDQUFDLGFBQWE7RUFFbEIsUUFBUSxZQUFZLE1BQXBCO0dBQ0UsS0FBSyxlQUFlO0lBQ2xCLE1BQU0sRUFBRSxXQUFXO0lBQ25CLElBQUksT0FBTyxXQUFXLFVBQVU7SUFDaEMsZ0JBQWdCLFNBQVM7S0FDdkIsTUFBTSxPQUFPLElBQUksSUFBSSxJQUFJO0tBQ3pCLEtBQUssSUFBSSxRQUFRO01BQ2YsUUFBUTtNQUNSLFVBQVUsS0FBSyxJQUFJO0tBQ3JCLENBQUM7S0FDRCxPQUFPO0lBQ1QsQ0FBQztJQUNEO0dBQ0Y7R0FFQSxLQUFLLGdCQUFnQjtJQUNuQixNQUFNLEVBQUUsV0FBVztJQUNuQixJQUFJLE9BQU8sV0FBVyxVQUFVO0lBQ2hDLGdCQUFnQixTQUFTO0tBQ3ZCLE1BQU0sT0FBTyxJQUFJLElBQUksSUFBSTtLQUN6QixLQUFLLElBQUksUUFBUTtNQUNmLFFBQVE7TUFDUixVQUFVLEtBQUssSUFBSTtLQUNyQixDQUFDO0tBQ0QsT0FBTztJQUNULENBQUM7SUFDRDtHQUNGO0VBQ0Y7Q0FDRixHQUFHLENBQUMsV0FBVyxDQUFDOztDQUdoQixNQUFNLGVBQWUsdUNBQ2xCLFdBQTRCO0VBQzNCLE1BQU0sV0FBVyxZQUFZLElBQUksTUFBTTtFQUN2QyxPQUFPLFVBQVUsVUFBVTtDQUM3QixHQUNBLENBQUMsV0FBVyxDQUNkOztDQUdBLE1BQU0sY0FBYyx1Q0FDakIsV0FBa0M7RUFDakMsTUFBTSxXQUFXLFlBQVksSUFBSSxNQUFNO0VBQ3ZDLE9BQU8sVUFBVSxZQUFZO0NBQy9CLEdBQ0EsQ0FBQyxXQUFXLENBQ2Q7Ozs7Ozs7OztDQVVBLE1BQU0saUJBQWlCLHVDQUNwQixXQUFrQztFQUNqQyxNQUFNLFdBQVcsWUFBWSxNQUFNO0VBQ25DLElBQUksQ0FBQyxVQUFVLE9BQU87RUFFdEIsTUFBTSxNQUFNLEtBQUssSUFBSTtFQUNyQixNQUFNLE9BQU8sTUFBTTtFQUVuQixJQUFJLE9BQU8sS0FBTyxPQUFPO0VBQ3pCLElBQUksT0FBTyxNQUFTLE9BQU8sR0FBRyxLQUFLLE1BQU0sT0FBTyxHQUFLLEVBQUU7RUFDdkQsSUFBSSxPQUFPLE9BQVUsT0FBTyxHQUFHLEtBQUssTUFBTSxPQUFPLElBQU8sRUFBRTtFQUMxRCxPQUFPLEdBQUcsS0FBSyxNQUFNLE9BQU8sS0FBUSxFQUFFO0NBQ3hDLEdBQ0EsQ0FBQyxXQUFXLENBQ2Q7O0NBR0EsTUFBTSxnQkFBZ0IsdUNBQ25CLFdBQW1CO0VBQ2xCLEtBQUs7R0FBRSxNQUFNO0dBQWtCO0VBQU8sQ0FBQztDQUN6QyxHQUNBLENBQUMsSUFBSSxDQUNQO0NBRUEsT0FBTztFQUNMO0VBQ0E7RUFDQTtFQUNBO0VBQ0E7Q0FDRjtBQUNGIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJ1c2UtcHJlc2VuY2UudHMiXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCB7IHVzZVN0YXRlLCB1c2VFZmZlY3QsIHVzZUNhbGxiYWNrIH0gZnJvbSBcInJlYWN0XCI7XG5pbXBvcnQgeyB1c2VXZWJTb2NrZXQgfSBmcm9tIFwiQC9ob29rcy91c2Utd2Vic29ja2V0XCI7XG5cbmludGVyZmFjZSBQcmVzZW5jZUluZm8ge1xuICBvbmxpbmU6IGJvb2xlYW47XG4gIGxhc3RTZWVuOiBudW1iZXI7XG59XG5cbmV4cG9ydCBmdW5jdGlvbiB1c2VQcmVzZW5jZShfdGFyZ2V0VXNlcklkPzogc3RyaW5nKSB7XG4gIGNvbnN0IFtwcmVzZW5jZU1hcCwgc2V0UHJlc2VuY2VNYXBdID0gdXNlU3RhdGU8TWFwPHN0cmluZywgUHJlc2VuY2VJbmZvPj4obmV3IE1hcCgpKTtcbiAgY29uc3QgeyBpc0Nvbm5lY3RlZCwgc2VuZCwgbGFzdE1lc3NhZ2UgfSA9IHVzZVdlYlNvY2tldCh7XG4gICAgcm9vbTogXCJwcmVzZW5jZVwiLFxuICB9KTtcblxuICAvLyBUcmFjayBvbmxpbmUgdXNlcnNcbiAgdXNlRWZmZWN0KCgpID0+IHtcbiAgICBpZiAoIWxhc3RNZXNzYWdlKSByZXR1cm47XG5cbiAgICBzd2l0Y2ggKGxhc3RNZXNzYWdlLnR5cGUpIHtcbiAgICAgIGNhc2UgXCJ1c2VyOm9ubGluZVwiOiB7XG4gICAgICAgIGNvbnN0IHsgdXNlcklkIH0gPSBsYXN0TWVzc2FnZTtcbiAgICAgICAgaWYgKHR5cGVvZiB1c2VySWQgIT09IFwic3RyaW5nXCIpIGJyZWFrO1xuICAgICAgICBzZXRQcmVzZW5jZU1hcCgocHJldikgPT4ge1xuICAgICAgICAgIGNvbnN0IG5leHQgPSBuZXcgTWFwKHByZXYpO1xuICAgICAgICAgIG5leHQuc2V0KHVzZXJJZCwge1xuICAgICAgICAgICAgb25saW5lOiB0cnVlLFxuICAgICAgICAgICAgbGFzdFNlZW46IERhdGUubm93KCksXG4gICAgICAgICAgfSk7XG4gICAgICAgICAgcmV0dXJuIG5leHQ7XG4gICAgICAgIH0pO1xuICAgICAgICBicmVhaztcbiAgICAgIH1cblxuICAgICAgY2FzZSBcInVzZXI6b2ZmbGluZVwiOiB7XG4gICAgICAgIGNvbnN0IHsgdXNlcklkIH0gPSBsYXN0TWVzc2FnZTtcbiAgICAgICAgaWYgKHR5cGVvZiB1c2VySWQgIT09IFwic3RyaW5nXCIpIGJyZWFrO1xuICAgICAgICBzZXRQcmVzZW5jZU1hcCgocHJldikgPT4ge1xuICAgICAgICAgIGNvbnN0IG5leHQgPSBuZXcgTWFwKHByZXYpO1xuICAgICAgICAgIG5leHQuc2V0KHVzZXJJZCwge1xuICAgICAgICAgICAgb25saW5lOiBmYWxzZSxcbiAgICAgICAgICAgIGxhc3RTZWVuOiBEYXRlLm5vdygpLFxuICAgICAgICAgIH0pO1xuICAgICAgICAgIHJldHVybiBuZXh0O1xuICAgICAgICB9KTtcbiAgICAgICAgYnJlYWs7XG4gICAgICB9XG4gICAgfVxuICB9LCBbbGFzdE1lc3NhZ2VdKTtcblxuICAvLyBDaGVjayBpZiBzcGVjaWZpYyB1c2VyIGlzIG9ubGluZVxuICBjb25zdCBpc1VzZXJPbmxpbmUgPSB1c2VDYWxsYmFjayhcbiAgICAodXNlcklkOiBzdHJpbmcpOiBib29sZWFuID0+IHtcbiAgICAgIGNvbnN0IHByZXNlbmNlID0gcHJlc2VuY2VNYXAuZ2V0KHVzZXJJZCk7XG4gICAgICByZXR1cm4gcHJlc2VuY2U/Lm9ubGluZSA/PyBmYWxzZTtcbiAgICB9LFxuICAgIFtwcmVzZW5jZU1hcF1cbiAgKTtcblxuICAvLyBHZXQgdXNlcidzIGxhc3Qgc2VlbiB0aW1lXG4gIGNvbnN0IGdldExhc3RTZWVuID0gdXNlQ2FsbGJhY2soXG4gICAgKHVzZXJJZDogc3RyaW5nKTogbnVtYmVyIHwgbnVsbCA9PiB7XG4gICAgICBjb25zdCBwcmVzZW5jZSA9IHByZXNlbmNlTWFwLmdldCh1c2VySWQpO1xuICAgICAgcmV0dXJuIHByZXNlbmNlPy5sYXN0U2VlbiA/PyBudWxsO1xuICAgIH0sXG4gICAgW3ByZXNlbmNlTWFwXVxuICApO1xuXG4gIC8vIEZvcm1hdCBsYXN0IHNlZW4gdGltZVxuICAvKipcbiAgICogSG93IGxvbmcgYWdvIHRoZSB1c2VyIHdhcyBsYXN0IHNlZW4sIG9yIGBudWxsYCB3aGVuIHRoZXJlIGlzIG5vdGhpbmcgdG9cbiAgICogc2F5IOKAlCB3aGljaCBpcyBub3QgdGhlIHNhbWUgYXMgXCJhIHdoaWxlIGFnb1wiLCBzbyBpdCBpcyBub3Qgc3BlbGxlZCBvdXQgYXNcbiAgICogYSB3b3JkIGhlcmUuIFRoZSBjb21wb25lbnQgdGhhdCBzaG93cyBpdCBkZWNpZGVzIHdoYXQgdG8gc2F5IGluc3RlYWQ7IGFcbiAgICogaG9vayB0aGF0IHJldHVybnMgdGhlIHNlbnRlbmNlIFwiVW5rbm93blwiIHB1dHMgdGhlIHdvcmRpbmcgc29tZXdoZXJlIHRoZVxuICAgKiB3b3JkcyBhcmUgbm90LlxuICAgKi9cbiAgY29uc3QgZm9ybWF0TGFzdFNlZW4gPSB1c2VDYWxsYmFjayhcbiAgICAodXNlcklkOiBzdHJpbmcpOiBzdHJpbmcgfCBudWxsID0+IHtcbiAgICAgIGNvbnN0IGxhc3RTZWVuID0gZ2V0TGFzdFNlZW4odXNlcklkKTtcbiAgICAgIGlmICghbGFzdFNlZW4pIHJldHVybiBudWxsO1xuXG4gICAgICBjb25zdCBub3cgPSBEYXRlLm5vdygpO1xuICAgICAgY29uc3QgZGlmZiA9IG5vdyAtIGxhc3RTZWVuO1xuXG4gICAgICBpZiAoZGlmZiA8IDYwMDAwKSByZXR1cm4gXCJKdXN0IG5vd1wiO1xuICAgICAgaWYgKGRpZmYgPCAzNjAwMDAwKSByZXR1cm4gYCR7TWF0aC5mbG9vcihkaWZmIC8gNjAwMDApfW0gYWdvYDtcbiAgICAgIGlmIChkaWZmIDwgODY0MDAwMDApIHJldHVybiBgJHtNYXRoLmZsb29yKGRpZmYgLyAzNjAwMDAwKX1oIGFnb2A7XG4gICAgICByZXR1cm4gYCR7TWF0aC5mbG9vcihkaWZmIC8gODY0MDAwMDApfWQgYWdvYDtcbiAgICB9LFxuICAgIFtnZXRMYXN0U2Vlbl1cbiAgKTtcblxuICAvLyBSZXF1ZXN0IHByZXNlbmNlIGZvciBzcGVjaWZpYyB1c2VyXG4gIGNvbnN0IGNoZWNrUHJlc2VuY2UgPSB1c2VDYWxsYmFjayhcbiAgICAodXNlcklkOiBzdHJpbmcpID0+IHtcbiAgICAgIHNlbmQoeyB0eXBlOiBcImNoZWNrLXByZXNlbmNlXCIsIHVzZXJJZCB9KTtcbiAgICB9LFxuICAgIFtzZW5kXVxuICApO1xuXG4gIHJldHVybiB7XG4gICAgaXNVc2VyT25saW5lLFxuICAgIGdldExhc3RTZWVuLFxuICAgIGZvcm1hdExhc3RTZWVuLFxuICAgIGNoZWNrUHJlc2VuY2UsXG4gICAgaXNDb25uZWN0ZWQsXG4gIH07XG59XG4iXSwiZmlsZSI6Ii9zcmMvaG9va3MvdXNlLXByZXNlbmNlLnRzIn0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvaG9va3MvdXNlLXByZXNlbmNlLnRzIiwiL3NyYy9ob29rcy91c2UtcHJlc2VuY2UudHMiLFtdXQ==

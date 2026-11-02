@@ -19,6 +19,7 @@
  * publishing fails.
  */
 import type { PostAudience } from "@/lib/post-audiences";
+import { isFeedTopic } from "@/lib/feed-topics";
 
 /** Media as the API stores it. */
 export interface PublishedMedia {
@@ -40,6 +41,7 @@ export interface PublishedPost {
 }
 
 export interface PublishPostInput {
+  topicId?: string;
   content: string;
   /** Attachment chosen in the composer, if any. */
   file?: File | null;
@@ -84,6 +86,7 @@ export async function uploadPostAttachment(file: File): Promise<{ url: string; t
  * they wrote.
  */
 export async function publishPost({
+  topicId,
   content,
   file,
   audience = "public",
@@ -92,6 +95,7 @@ export async function publishPost({
   if (!trimmed && !file) {
     throw new Error("Write something, or attach a photo or video.");
   }
+  if (!isFeedTopic(topicId)) throw new Error("Choose a post category before publishing.");
 
   const media: PublishedMedia[] = [];
   if (file) {
@@ -108,6 +112,7 @@ export async function publishPost({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content: trimmed,
+      topicId,
       type: file ? attachmentType(file) : "text",
       visibility: audience,
       media,

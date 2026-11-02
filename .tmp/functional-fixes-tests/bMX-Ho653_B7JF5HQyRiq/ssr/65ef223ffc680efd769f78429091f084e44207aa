@@ -1,0 +1,1128 @@
+__vite_ssr_exportName__("TRACKED_IMPORTS", () => { try { return TRACKED_IMPORTS } catch {} });
+__vite_ssr_exportName__("COMMITTED_BASELINES", () => { try { return COMMITTED_BASELINES } catch {} });
+__vite_ssr_exportName__("COMMITTED_IMPORT_BUDGET", () => { try { return COMMITTED_IMPORT_BUDGET } catch {} });
+__vite_ssr_exportName__("importBudgetFor", () => { try { return importBudgetFor } catch {} });
+__vite_ssr_exportName__("medianCollect", () => { try { return medianCollect } catch {} });
+__vite_ssr_exportName__("collectCeilingFor", () => { try { return collectCeilingFor } catch {} });
+__vite_ssr_exportName__("MIN_SOFT_THRESHOLD", () => { try { return MIN_SOFT_THRESHOLD } catch {} });
+__vite_ssr_exportName__("slowestCollects", () => { try { return slowestCollects } catch {} });
+__vite_ssr_exportName__("softWarnings", () => { try { return softWarnings } catch {} });
+__vite_ssr_exportName__("worstUsed", () => { try { return worstUsed } catch {} });
+__vite_ssr_exportName__("nextSoftThreshold", () => { try { return nextSoftThreshold } catch {} });
+__vite_ssr_exportName__("collectBudgetBreaches", () => { try { return collectBudgetBreaches } catch {} });
+__vite_ssr_exportName__("measuredImportCosts", () => { try { return measuredImportCosts } catch {} });
+__vite_ssr_exportName__("staleBaseline", () => { try { return staleBaseline } catch {} });
+__vite_ssr_exportName__("importStaleThresholds", () => { try { return importStaleThresholds } catch {} });
+__vite_ssr_exportName__("staleHighBaselines", () => { try { return staleHighBaselines } catch {} });
+__vite_ssr_exportName__("STALE_BAND_HEADROOM", () => { try { return STALE_BAND_HEADROOM } catch {} });
+__vite_ssr_exportName__("staleSoftBand", () => { try { return staleSoftBand } catch {} });
+__vite_ssr_exportName__("staleGates", () => { try { return staleGates } catch {} });
+__vite_ssr_exportName__("lowerImportBaselines", () => { try { return lowerImportBaselines } catch {} });
+__vite_ssr_exportName__("aggregateSamples", () => { try { return aggregateSamples } catch {} });
+__vite_ssr_exportName__("renderBaselines", () => { try { return renderBaselines } catch {} });
+__vite_ssr_exportName__("proposalChanges", () => { try { return proposalChanges } catch {} });
+__vite_ssr_exportName__("renderProposal", () => { try { return renderProposal } catch {} });
+__vite_ssr_exportName__("CollectBudgetReporter", () => { try { return CollectBudgetReporter } catch {} });
+__vite_ssr_exportName__("default", () => { try { return __vite_ssr_export_default__ } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("node:fs", {"importedNames":["mkdirSync","readFileSync","readdirSync","rmSync","writeFileSync"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("node:path", {"importedNames":["join"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/.freebuff/collect-budget-soft.mjs", {"importedNames":["SOFT_GATE_FILE"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/.freebuff/collect-run.mjs", {"importedNames":["RUN_REPORT_FILE"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/.freebuff/collect-apply.mjs", {"importedNames":["APPLY_COMMAND","PROPOSAL_MARKER","renderProposalState"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("/.freebuff/collect-budget-baselines.mjs", {"importedNames":["importBaselines","importMarginMs","softThreshold"]});
+/**
+* The collect-time budget: a reporter that fails a run when a test file's
+* *collection* — the transform and import work Vitest does before a single case
+* runs — crosses a ceiling.
+*
+* Collect cost is invisible in the suite's own result. A file can pass every
+* case while quietly making the whole run slower for everyone, and that is
+* exactly the shape of the eager `?raw` globs this repository has been removing:
+* Vite read and registered every page and route into *each* test file that
+* imported the shared index, and the only symptom was collect time. A source
+* guard can pin the one shape it knows about; this is the backstop for the ones
+* it does not.
+*
+* It is a reporter rather than a test because Vitest exposes `collectDuration`
+* only on a module's `diagnostic()`, which a test cannot reach, and because it
+* has to run once for the whole run rather than once per file. `onTestRunEnd`
+* hands over every module and a place to fail the process.
+*
+* The per-file ceiling is *load-aware*: it is a multiple of the run's own median
+* collect, not a fixed number of milliseconds. Collection is wall-clock on a
+* shared checkout and moves with whatever else is running — a run whose median
+* file collected in ~160ms on a quiet machine collected in ~244ms with the box
+* loaded, and individual files swung by an order of magnitude — so a fixed
+* ceiling has to be set for the worst load it might ever meet, loose enough that
+* it never fires on the machine it is meant to protect. Dividing each file's
+* collect by the run's median cancels most of that swing, because the *ratio* of
+* a file to the median of all files moves far less than its milliseconds do (the
+* heaviest app file sat at 6.9× the median quiet and 6.1× loaded). A ratio
+* budget can therefore be tied to the machine's own pace and still not flake.
+*
+* There are two collect shapes, chosen by where a file lives: a tighter multiple
+* for `src/test` files, which are small and whose collect is dominated by the
+* shared index they import, and a looser one for the app's tests, whose route
+* files legitimately pull in the real client stack. Each has a floor, so a run
+* too small or too fast to produce a meaningful median — a focused run of a
+* single file — still gets a sensible ceiling rather than one the median would
+* collapse toward nothing.
+*
+* The multiples were measured, not guessed. Over several full runs of this suite
+* the heaviest file was a `src/test` file at about 6.2× the median and a
+* `src/lib/db` one at about 7.6×, so the two multiples sit a little above twice
+* the worst ratio actually seen — enough that load alone cannot carry a file
+* over, while still well under the fixed ceilings this replaces, which never
+* fired.
+*
+* The check has three parts:
+*
+* 1. the per-file collect ceiling above, so a file that starts eagerly importing
+*    the world fails here rather than in a code review;
+* 2. a ceiling on the *import* of the shared scanners (`module-index.ts`,
+*    `source-scan.ts`) — the sharp signal. Those modules hold only path
+*    arithmetic and a `readFileSync` cache, so importing one is milliseconds
+*    even under load; a returning glob makes it the slowest import the file has;
+*    and
+* 3. the same comparison in the other direction, for *both* recorded values: a
+*    baseline — or the warning band — that sits *far above* what the tree measures
+*    is reported too. The ratchet only ever lowers, so a number raised by hand, or
+*    first recorded on a day the scanner happened to be slow, would sit there
+*    keeping the gate loose forever with nothing to notice it. This is what
+*    notices, and `npm run collect:record` is the fix. The band is judged by how
+*    far the recorder would move it, and the imports by how far the recorded cost
+*    sits above the measurement. Because one run is one noisy sample, this
+*    direction is *warned* on a single run and only *failed* when a repeated
+*    session confirms it — the same repeated-sample treatment the proposal gives a
+*    tightening, and the same approve-and-apply flow closes it.
+*
+* Both the import check and the warning band *ratchet*. Their numbers are not
+* hand-picked: they are recorded in `.freebuff/collect-budget-baselines.mjs`, and
+* `npm run collect:record` re-measures a full run and lowers any value the run
+* beat. The import baseline is a low-water mark — the recorded cost of the module
+* plus a fixed margin the gate keeps over it — so as the shared index gets cheaper
+* the gate tightens on its own. The soft threshold is the same idea one step
+* removed: it sits a fixed margin above the *tightest file the recording run saw*,
+* so as the tree's collects improve the band that warns moves down with them. The
+* recorder only ever lowers these values, so a regression cannot be recorded away:
+* it has to be fixed, or the number raised by hand with a reason. This mirrors
+* `coverage-headroom.mjs`, which enforces a backstop plus a margin; here the
+* recorded numbers are the backstops.
+*
+* The recorder can also *propose* rather than apply: `npm run collect:propose`
+* measures the same way but writes a Markdown proposal instead of the checked-in
+* file, so a pull request can be told what it would tighten without anything
+* under version control changing. Because a proposal is advice rather than a
+* gate, and because one run's collect time is one sample of a noisy quantity, the
+* proposal is measured several times and only a drop that holds across *every* run
+* is posted — the aggregate is the worst case any of them saw, so a single quietly
+* fast machine cannot propose a tightening the others did not confirm — the same propose-don't-apply shape as
+* `.freebuff/coverage-propose.mjs`. The proposal comment carries a hidden payload
+* of the values the run earned; a reviewer replies with the apply command and
+* `.github/workflows/collect-apply.yml` turns that payload into a follow-up pull
+* request, so the tightening is one deliberate merge rather than a number someone
+* has to transcribe. The payload and the merge are `.freebuff/collect-apply.mjs`'s
+* contract, and the merge is tighten-only, so the command can never loosen a gate.
+*
+* The proposal also names the direction the gate fails on. `npm run collect:record`
+* is the documented fix for a *stale-high* baseline, but it runs on the developer's
+* machine; a proposal that only showed an ordinary drop would leave a reviewer to
+* work out from the numbers alone that one of them was a red gate rather than a
+* tidy-up. So a stale baseline is called out, and the same approve-and-apply reply
+* that applies a tightening is also how a loose gate is closed.
+*
+* A run does not have to fail to say something. Every run ends by naming the few
+* files nearest their collect budget, and once any file is inside the soft band
+* the notice becomes a warning: still green, but printed loudly and left where the
+* CI runner turns it into a GitHub annotation, so a creep is visible on the green
+* runs that come before it breaches rather than only on the red one after.
+*/
+
+
+
+
+
+
+/**
+* A Vitest path as a `src`-relative one (`src/test/render.test.ts`).
+*
+* Vitest reports a module id that may be bare (`src/…`) or absolute, with either
+* platform's separators, and the reporter is named by path — from the config's
+* `reporters` and from `--reporter=…` in CI — so nothing here should depend on
+* where the module itself sits. The `/src/` marker is all the arithmetic needed.
+*/
+function projectPath(file) {
+	const normalized = file.replace(/\\/g, "/");
+	const marker = normalized.lastIndexOf("/src/");
+	return marker === -1 ? normalized : normalized.slice(marker + 1);
+}
+/**
+* The shape for a `src/test` file. Fourteen times the median, measured against
+* the heaviest such files — the convention guards `fake-db` and `expect-gated`,
+* whose collect legitimately reaches roughly 6.2× the run median — so a real file
+* keeps about a factor of two of headroom. The floor covers the focused or
+* mostly-cached run whose median is too small for the multiple to mean anything.
+*/
+const TEST_DIR_SHAPE = {
+	multiple: 14,
+	floor: 2e3
+};
+/**
+* The shape for a file elsewhere in the app. Looser, because a route or db test
+* imports the real handler and its whole client stack: those files reached about
+* 7.6× the median, so seventeen keeps roughly the same headroom the `src/test`
+* shape does. The floor keeps a run too small to produce a real median from
+* pinning a route test to a ceiling load alone would cross.
+*/
+const APP_SHAPE = {
+	multiple: 17,
+	floor: 2600
+};
+/** The ceiling shape that applies to a test file, by where it lives. */
+function shapeFor(file) {
+	return projectPath(file).startsWith("src/test/") ? TEST_DIR_SHAPE : APP_SHAPE;
+}
+/**
+* The modules whose *import* must stay near-free, because they are the shared
+* index every convention guard reads through. Each is matched by the tail of a
+* project-relative path, so the absolute path Vitest reports does not matter, and
+* each is a key in `.freebuff/collect-budget-baselines.mjs`.
+*/
+const TRACKED_IMPORTS = ["src/test/module-index.ts", "src/test/source-scan.ts"];
+/** The baselines read from the checked-in file, which the reporter enforces. */
+const COMMITTED_BASELINES = {
+	importMarginMs: __vite_ssr_import_5__.importMarginMs,
+	softThreshold: __vite_ssr_import_5__.softThreshold,
+	importBaselines: __vite_ssr_import_5__.importBaselines
+};
+/** The import budget read from the checked-in baseline file. */
+const COMMITTED_IMPORT_BUDGET = {
+	baselines: COMMITTED_BASELINES.importBaselines,
+	marginMs: COMMITTED_BASELINES.importMarginMs
+};
+/**
+* The import budget a tracked module has, in ms.
+*
+* A module the baseline file does not name gets the margin alone: a brand-new
+* tracked scanner would still be held to a small number rather than none, and the
+* recorder is what gives it a real baseline.
+*/
+function importBudgetFor(tracked, budget = COMMITTED_IMPORT_BUDGET) {
+	return (budget.baselines[tracked] ?? 0) + budget.marginMs;
+};
+/**
+* The run's median collect, in ms — the number every per-file ceiling scales
+* from.
+*
+* The median rather than the mean because it is the point a regression in one
+* file cannot drag: a single file that starts eagerly importing the world is one
+* sample out of more than a hundred, so it moves the median by nothing while it
+* moves the mean by however big it got. That is what lets a file trip its own
+* ratio budget instead of hiding behind a raised average.
+*
+* An empty run has no median; zero is returned so the shapes fall back to their
+* floors.
+*/
+function medianCollect(modules) {
+	if (modules.length === 0) return 0;
+	const sorted = modules.map((entry) => entry.collect).sort((a, b) => a - b);
+	const mid = Math.floor(sorted.length / 2);
+	// An even run has no single middle: the average of the two is the median.
+	return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+/**
+* The collect ceiling a test file has, given the run's median.
+*
+* Pure and synchronous so fixtures can drive it: the multiple is chosen so that
+* a quiet run and a loaded one put the same file on the same side of its budget.
+* `median` is threaded in rather than computed here so the reporter can compute
+* it once for the whole run and so a test can pin the arithmetic without having
+* to build a whole run's worth of modules.
+*/
+function collectCeilingFor(file, median) {
+	const shape = shapeFor(file);
+	return Math.max(shape.floor, shape.multiple * median);
+};
+/**
+* How many files the end-of-run notice names. Five is enough to spot a file
+* trending toward its budget without turning every green run into a report.
+*/
+const SLOWEST_SHOWN = 5;
+/**
+* How far above the tightest file a recording run saw the soft band is kept, as a
+* fraction of a budget.
+*
+* The recorded `softThreshold` is `tightest + this margin`, so the band always
+* clears the worst file the run measured by enough that the ordinary wobble of a
+* shared machine cannot trip it — while still tightening whenever the tree's own
+* worst case improves, because the recorder lowers the threshold with it.
+*/
+const SOFT_THRESHOLD_MARGIN = .2;
+/**
+* The tightest the recorded soft band may ever become.
+*
+* Without a floor, a run that found every file comfortable would drive the
+* threshold toward zero and the warning would fire on noise rather than on a
+* creep. A third of the budget is still far from the hard gate, so it warns well
+* before a file is in danger.
+*
+* It is also the floor the band is *judged* against: a run whose tightest file
+* never reached it is not compared to the band at all, and published in the run
+* report so the summary can show that as a word rather than a boundary the run had
+* no chance to cross.
+*/
+const MIN_SOFT_THRESHOLD = .3;
+/** Every file's collect against its ceiling, unsorted. */
+function collectRows(modules, median) {
+	return modules.map((entry) => {
+		const ceiling = collectCeilingFor(entry.file, median);
+		return {
+			file: entry.file,
+			collect: entry.collect,
+			ceiling,
+			used: entry.collect / ceiling
+		};
+	});
+}
+/** Tightest first; raw milliseconds break ties so the order is stable. */
+const byUsed = (a, b) => b.used - a.used || b.collect - a.collect;
+/**
+* The test files closest to their collect budget, tightest first.
+*
+* Ordered by the fraction of its budget a file used, not by raw milliseconds,
+* because that is the form a creep becomes visible in *before* it breaches: a
+* file that has quietly doubled but is still a third of a loose ceiling shows up
+* beside one that is nearly over, while a fixed millisecond cut would keep naming
+* the same heavy route tests and hide the one that is moving. Exported so a
+* fixture can pin the ordering and the arithmetic — the reporter cannot be
+* reached from a test.
+*/
+function slowestCollects(modules, median, limit = SLOWEST_SHOWN) {
+	return collectRows(modules, median).sort(byUsed).slice(0, limit);
+};
+/**
+* The files at or over the soft threshold, tightest first and not truncated.
+*
+* The soft gate's input. Separate from `collectBudgetBreaches` on purpose:
+* crossing it does not fail the run, it warns — and the reporter leaves the same
+* list where the CI runner reads it, so the warning becomes a GitHub annotation
+* rather than a line nobody sees.
+*/
+function softWarnings(modules, median, threshold = COMMITTED_BASELINES.softThreshold) {
+	return collectRows(modules, median).filter((row) => row.used >= threshold).sort(byUsed);
+};
+/**
+* The tightest file in a run, as a fraction of its budget.
+*
+* The quantity the recorder lowers the soft threshold from: the largest `used`
+* any file reached. Zero for an empty run, so the threshold cannot move on one.
+*/
+function worstUsed(modules, median) {
+	return collectRows(modules, median).reduce((worst, row) => Math.max(worst, row.used), 0);
+};
+/**
+* The soft threshold a run's headroom earns: never above the current one, and
+* never below the floor.
+*
+* This is what lets the band tighten on its own. A recording run measures its own
+* tightest file and proposes a band a margin above it; `Math.min` keeps that
+* proposal from ever *raising* the threshold, so a busy run cannot loosen a band a
+* quiet one already tightened, and `Math.max` keeps it from collapsing to zero.
+*
+* The proposal is rounded to two decimals — a fraction of a budget is not worth
+* more, and an unrounded `tightest + margin` would write a different noise tail
+* into the committed file on every run.
+*/
+function nextSoftThreshold(current, tightest, margin = SOFT_THRESHOLD_MARGIN) {
+	const proposed = Math.round((tightest + margin) * 100) / 100;
+	return Math.max(MIN_SOFT_THRESHOLD, Math.min(current, proposed));
+};
+/**
+* The dearest import of one tracked module in a file, in ms.
+*
+* A file can import a tracked scanner through several specifiers, so the dearest
+* one is what it actually paid; zero means the file never imported it.
+*/
+function dearestImport(entry, tracked) {
+	let cost = 0;
+	for (const imported of entry.imports) {
+		if (imported.path !== tracked && !imported.path.endsWith(`/${tracked}`)) continue;
+		cost = Math.max(cost, imported.total);
+	};
+	return cost;
+}
+/**
+* Every budget the modules crossed, in no particular order.
+*
+* Split out from the reporter so it can be driven by fixtures: a budget check
+* that has only ever seen a green tree has not been shown to do anything, and
+* the reporter itself cannot be reached from a test. Both the median and the
+* import budget default to the run's own and the committed file, so a caller with
+* no reason to compute them separately can pass just the modules.
+*/
+function collectBudgetBreaches(modules, median = medianCollect(modules), importBudget = COMMITTED_IMPORT_BUDGET) {
+	const breaches = [];
+	for (const entry of modules) {
+		const ceiling = collectCeilingFor(entry.file, median);
+		if (entry.collect > ceiling) {
+			breaches.push({
+				file: entry.file,
+				kind: "collect",
+				ms: entry.collect,
+				budget: ceiling,
+				detail: "collecting the file"
+			});
+		};
+		for (const tracked of TRACKED_IMPORTS) {
+			const cost = dearestImport(entry, tracked);
+			const budget = importBudgetFor(tracked, importBudget);
+			if (cost > budget) {
+				breaches.push({
+					file: entry.file,
+					kind: "import",
+					ms: cost,
+					budget,
+					detail: `importing ${tracked}`
+				});
+			}
+		}
+	};
+	// A stale-high baseline is deliberately *not* a breach. It is the reverse of a
+	// budget being crossed — the gate is looser than the tree needs, not tighter —
+	// and one run is one noisy sample of a wall-clock quantity, so a single reading
+	// is not evidence enough to fail a build on. What notices it is
+	// `staleHighBaselines` below, reported as a warning here and judged across a
+	// repeated session by `npm run collect:stale`.
+	return breaches;
+};
+/**
+* The dearest import of each tracked module across the run, in ms.
+*
+* The quantity the recorder lowers a baseline to: the worst a file actually paid
+* to import the module, maximized across files so one fast import cannot hide a
+* slow one. A module no file imported is left out rather than recorded at zero,
+* so a rename cannot quietly drop it from the baseline.
+*/
+function measuredImportCosts(modules) {
+	const costs = {};
+	for (const entry of modules) {
+		for (const tracked of TRACKED_IMPORTS) {
+			const cost = dearestImport(entry, tracked);
+			if (cost > 0) costs[tracked] = Math.max(costs[tracked] ?? 0, cost);
+		}
+	};
+	return costs;
+};
+/**
+* How many times the measured cost a recorded baseline may sit above before it is
+* called stale.
+*
+* A ratio rather than a fixed number so the check means the same thing when a
+* scanner gets slower: the baseline should be *near* what the tree pays, not a
+* multiple of it.
+*/
+const STALE_BASELINE_FACTOR = 4;
+/**
+* The absolute clearance below which a baseline is never called stale, in ms.
+*
+* This is the part that keeps the check from flaking. A baseline is compared
+* against one run's measurement, and one run is one noisy sample on a shared
+* machine — a focused run or a warm cache can put an import at a fraction of a
+* millisecond. Ten milliseconds is well past anything that wobble produces at
+* these magnitudes, so the check fires on a *gross* loosening and stays quiet
+* about the few milliseconds that are genuinely immaterial against a 50ms margin.
+* Micro-drift is `npm run collect:propose`'s business, not this gate's.
+*/
+const STALE_BASELINE_FLOOR_MS = 10;
+/** The size a recorded baseline would have to exceed to be stale, in ms. */
+function staleThreshold(measured) {
+	return Math.max(measured * STALE_BASELINE_FACTOR, STALE_BASELINE_FLOOR_MS);
+}
+/**
+* Whether a recorded baseline has gone stale against what this run measured.
+*
+* The ratchet lowers a baseline a run beats and never raises one, which is what
+* makes it safe to run unattended — but it also means a number that is too *high*
+* has nothing pushing it down. A baseline raised by hand to silence a breach, or
+* recorded on the one day a scanner was slow, would keep the gate looser than the
+* tree needs for as long as nobody looks. This is the direction the recorder
+* cannot correct on its own, so it is the direction that has to be *reported*.
+*
+* A module the run never imported is not judged: no measurement is not a
+* measurement of zero.
+*/
+function staleBaseline(recorded, measured) {
+	return recorded > staleThreshold(measured);
+};
+/**
+* The cost each recorded baseline would be called loose past, keyed by tracked module.
+*
+* The per-import half of the boundaries the run report publishes, built with the very
+* `staleThreshold` the check calls: a baseline is stale once the recorded value sits
+* above the returned number, so the run summary can print the boundary that judged a
+* baseline instead of a script restating the rule. It is a function of the *measurement*
+* rather than of the recorded value, which is why it is built per module here rather
+* than as one number. A module the run did not import is absent, as it is from
+* `measured` — no measurement is not a measurement of zero.
+*/
+function importStaleThresholds(measured) {
+	return Object.fromEntries(Object.entries(measured).map(([tracked, cost]) => [tracked, staleThreshold(cost)]));
+};
+/**
+* The recorded import baselines that are stale-high against a measurement.
+*
+* The one place the import predicate is applied to a whole set of baselines, so the
+* warning a single run leaves, the repeated session's report and the stale callout
+* in a proposal cannot come to disagree about which module is loose.
+*
+* `measured` is the dearest reading each tracked module produced — across the run's
+* files, or across a session's samples. Judging against the dearest is what makes
+* the answer "every measurement agreed": the threshold rises with the measurement,
+* so a baseline that is stale against the largest reading is stale against all of
+* them, and one cheap sample can never be what condemns a gate.
+*
+* A module the measurement never mentions is not judged: no measurement is not a
+* measurement of zero, and a rename must not quietly drop a baseline from the
+* check.
+*/
+function staleHighBaselines(recorded, measured) {
+	const stale = [];
+	for (const tracked of TRACKED_IMPORTS) {
+		const was = recorded[tracked];
+		const cost = measured[tracked];
+		if (was === undefined || cost === undefined) continue;
+		if (!staleBaseline(was, cost)) continue;
+		stale.push({
+			kind: "import",
+			name: tracked,
+			recorded: was,
+			measured: cost
+		});
+	};
+	return stale;
+};
+/**
+* The clearance below which the warning band is never called too loose, as a
+* fraction of a collect budget.
+*
+* Additive where the import check's is a factor, because a fraction is bounded:
+* four times a tightest file of 0.3 is more than the whole budget, so a ratio here
+* would never fire at all. What matters is how much of a budget the band sits above
+* the tightest file a run saw — a band that warns at 90% of a budget while the
+* tree's worst file uses a third is not warning anyone of anything.
+*
+* Calibrated against real full-suite runs, whose tightest file lands anywhere from
+* 0.34 to 0.52 of its budget depending on how loaded the machine is: the committed
+* band is then 0 to 0.08 above what the recorder would set it to, while a band
+* raised by hand to 0.9 is 0.18 to 0.36 above it. Fifteen points of a budget clears
+* that gap, and — because the band is only judged against a run that got within
+* `MIN_SOFT_THRESHOLD` of a budget — it is also more than the committed band can
+* ever be moved, so machine speed and load alone can never fail it.
+*/
+const STALE_BAND_CLEARANCE = .15;
+/**
+* The headroom over the tightest file past which the warning band is called stale,
+* as a fraction of a budget.
+*
+* The boundary the check below actually draws, in the units the run summary shows:
+* `staleSoftBand` judges the drop the recorder would make, and `nextSoftThreshold`
+* keeps the band `SOFT_THRESHOLD_MARGIN` above the run's tightest file, so the
+* headroom at which the band is called loose is the two constants added up. Exported
+* and published in the run report for one reason: the summary can then show how much
+* headroom counts as too much, rather than a Node script copying either constant out
+* of this module and drifting from the gate it is describing.
+*/
+const STALE_BAND_HEADROOM = STALE_BAND_CLEARANCE + SOFT_THRESHOLD_MARGIN;
+/**
+* Whether the recorded warning band sits far above the tightest file a measurement saw.
+*
+* The band's job is to warn *before* a file breaches, so one that warns far later
+* than the tree needs is as useless as one that is too tight — and it is the
+* direction the ratchet moves only when someone happens to run the recorder, since
+* `nextSoftThreshold` lowers it and never raises it. The drop the recorder *would*
+* make against this measurement is the honest size of the looseness, so that is
+* what is measured: a band the recorder would not move is never called loose, by
+* construction rather than by a second opinion.
+*
+* A run whose tightest file never reached `MIN_SOFT_THRESHOLD` is not judged at all.
+* The recorder would clamp its target to that floor rather than to the tree, so the
+* comparison would be against the floor — and every focused run, whose one file is
+* nowhere near its ceiling, would then "prove" the committed band loose.
+*/
+function staleSoftBand(threshold, worst) {
+	if (worst < MIN_SOFT_THRESHOLD) return false;
+	return threshold - nextSoftThreshold(threshold, worst) > STALE_BAND_CLEARANCE;
+};
+/**
+* Every recorded gate a measurement found too loose — the imports and the band.
+*
+* The one place the decision is made, so the warning a single run prints, the run
+* report the repeated session's gate reads and the stale callout in a proposal all
+* name the same loose gates.
+*
+* `sample` is a run's measurement: each tracked module's dearest import, and
+* `tightest`, the fraction of its budget the worst file used. A session passes the
+* worst case of its samples, which is what makes the answer "every measurement
+* agreed" — the import threshold rises with the measurement, and the band only
+* looks looser as the tightest file falls, so a gate that is loose against the
+* worst case is loose against every reading that went into it.
+*/
+function staleGates(baselines, sample) {
+	const stale = staleHighBaselines(baselines.importBaselines, sample.measured);
+	if (staleSoftBand(baselines.softThreshold, sample.tightest)) {
+		stale.push({
+			kind: "band",
+			name: "softThreshold",
+			recorded: baselines.softThreshold,
+			measured: sample.tightest
+		});
+	};
+	return stale;
+};
+/**
+* The ratchet: the baselines with each measured module lowered to the run's
+* cost, never raised.
+*
+* A recorded cost is rounded to whole milliseconds, which the margin dwarfs. A
+* module the run did not import keeps its baseline; a module the baseline file
+* does not yet name is added. Raising a baseline is deliberately not possible
+* here — a regression has to be fixed, or the number lifted by hand — so the
+* recorder can only ever tighten the gate.
+*/
+function lowerImportBaselines(existing, measured) {
+	const next = { ...existing };
+	for (const [module, cost] of Object.entries(measured)) {
+		const recorded = Math.round(cost);
+		const current = next[module];
+		if (current === undefined || recorded < current) next[module] = recorded;
+	};
+	return next;
+};
+/**
+* The aggregation that makes a proposal noise-proof: the worst case any sample
+* saw.
+*
+* A drop is only posted when *every* run measured it, which is the maximum of the
+* samples — taking the largest is taking the least aggressive proposal. A single
+* run whose machine was briefly idle is exactly the noise this absorbs, and the
+* cost of insisting on a confirmed number is only that the ratchet turns a little
+* later than the luckiest run alone would have turned it.
+*
+* A module no sample imported is left out, so the ratchet keeps its recorded
+* value rather than being handed a zero to fall to.
+*/
+function aggregateSamples(samples) {
+	const measured = {};
+	let tightest = 0;
+	for (const sample of samples) {
+		for (const [tracked, cost] of Object.entries(sample.measured)) {
+			measured[tracked] = Math.max(measured[tracked] ?? 0, cost);
+		};
+		tightest = Math.max(tightest, sample.tightest);
+	};
+	return {
+		measured,
+		tightest
+	};
+};
+/**
+* The baselines a measured sample earns, before any of it is written.
+*
+* The whole ratchet in one place: each tracked import to its measured cost, never
+* raised, and the soft threshold to a margin above the run's tightest file, never
+* raised. Shared by the recorder, the single-sample proposer and the repeated one
+* so none of them can disagree about the direction.
+*/
+function loweredFrom(before, sample) {
+	return {
+		importMarginMs: before.importMarginMs,
+		softThreshold: nextSoftThreshold(before.softThreshold, sample.tightest),
+		importBaselines: lowerImportBaselines(before.importBaselines, sample.measured)
+	};
+}
+/**
+* Where the repeated propose runs leave the samples the reporter reads back.
+*
+* A directory the launcher clears before its first run, so the samples present are
+* exactly that session's — a stale file from an earlier propose run would be
+* folded into this one's worst case and quietly hold a real drop back.
+*/
+const SAMPLE_DIR = ".collect-budget-samples";
+/** The path of the sample directory, resolved from the run's directory. */
+function sampleDirPath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", SAMPLE_DIR);
+}
+/**
+* Leave this run's sample and read back every sample the session has written.
+*
+* The aggregation happens in the reporter rather than in the launcher because the
+* ratchet is here, and re-implementing it in plain Node is how the two would come
+* to disagree. So each run of the session folds its own sample in and rewrites
+* the proposal; after the launcher's last run the proposal on disk is the one
+* aggregate over all of them, and the launcher only has to read it.
+*/
+function accumulateSample(index, sample) {
+	const dir = sampleDirPath();
+	(0,__vite_ssr_import_0__.mkdirSync)(dir, { recursive: true });
+	(0,__vite_ssr_import_0__.writeFileSync)((0,__vite_ssr_import_1__.join)(dir, `${index}.json`), `${JSON.stringify(sample)}\n`);
+	return (0,__vite_ssr_import_0__.readdirSync)(dir).filter((entry) => /^\d+\.json$/.test(entry)).sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10)).map((entry) => JSON.parse((0,__vite_ssr_import_0__.readFileSync)((0,__vite_ssr_import_1__.join)(dir, entry), "utf8")));
+}
+/**
+* How many runs the propose session set out to take, for the run report.
+*
+* The launcher declares its target as it starts each run, so a session that came up
+* short can be told apart from a complete one — `npm run collect:stale` fails
+* closed on a partial session rather than judging a baseline the missing runs might
+* have contradicted. A plain `npm run collect:propose` declares nothing and is its
+* own single run, which is exactly what it is.
+*/
+function proposalRunTarget(samples) {
+	const declared = Number.parseInt(process.env.COLLECT_PROPOSAL_RUNS ?? "", 10);
+	return Number.isFinite(declared) && declared > 0 ? declared : samples;
+}
+/** The doc comment at the top of the generated baseline file. */
+const BASELINE_HEADER = `/**
+ * The collect-budget baselines: the recorded inputs the collect-time reporter
+ * enforces, in one place.
+ *
+ * \`importBaselines\` and \`softThreshold\` are recorded — \`npm run collect:record\`
+ * measures a run and lowers either one the run beat, never raises it, so both
+ * gates only ever tighten:
+ *
+ *   - \`importBaselines\` — each tracked scanner's low-water import cost. A file's
+ *     import of that scanner must stay within \`importMarginMs\` of it.
+ *   - \`softThreshold\` — the fraction of its collect budget at which a file stops
+ *     being merely interesting and starts being a warning, kept a margin above
+ *     the tightest file the recording run saw.
+ *
+ * \`importMarginMs\` is the fixed margin the import gate keeps over each
+ * \`importBaselines\` entry. It is hand-set on purpose: it is about how much noise
+ * a single import can absorb, not about what the machine measured.
+ *
+ * Generated — do not edit \`importBaselines\` or \`softThreshold\` by hand. \`npm
+ * run collect:record\` rewrites them, and a hand-edit fails the freshness test in
+ * \`src/test/collect-budget.test.ts\`. To loosen a gate deliberately, edit this
+ * file and say why in the commit.
+ *
+ * Mirrors the coverage pair whose shape it borrows: \`coverage-thresholds.mjs\`
+ * holds the backstop and \`coverage-headroom.mjs\` fails the build when the margin
+ * over it is too thin. Here the recorded values are the backstops.
+ */`;
+/**
+* The exact source of `.freebuff/collect-budget-baselines.mjs` for a set of
+* baselines.
+*
+* The recorder writes this, and a test compares it to the committed file, so the
+* checked-in baselines cannot drift from what the recorder would write — the same
+* contract `npm run skill:index` keeps for its generated index.
+*/
+function renderBaselines(committed = COMMITTED_BASELINES) {
+	const rows = Object.keys(committed.importBaselines).sort().map((module) => `  ${JSON.stringify(module)}: ${committed.importBaselines[module]},`).join("\n");
+	return `${BASELINE_HEADER}\n\n` + `export const importMarginMs = ${committed.importMarginMs};\n\n` + `export const softThreshold = ${committed.softThreshold};\n\n` + `export const importBaselines = {\n${rows}\n};\n`;
+};
+/**
+* The lowerings between two sets of baselines, a tracked module name apart.
+*
+* A value only appears when the run beat the committed one, so an empty list is
+* the honest "nothing to propose" — the same direction `lowerImportBaselines`
+* and `nextSoftThreshold` enforce, read back out as a diff.
+*
+* `measured` and `tightest` are what the run saw — each tracked module's dearest
+* import, and the fraction of its budget the worst file used. They are the
+* quantities the staleness checks judge against, so the proposal can tell a loose
+* gate from a tidy-up. Both are optional: a caller that only wants the diff leaves
+* them out and nothing is marked stale, which is the conservative reading — a
+* change then claims no more than "this could be tighter". Which gates are loose is
+* `staleGates`'s answer, so the callout and the run report agree.
+*/
+function proposalChanges(before, after, measured = {}, tightest) {
+	const changes = [];
+	if (after.softThreshold < before.softThreshold) {
+		changes.push({
+			kind: "band",
+			name: "softThreshold",
+			from: before.softThreshold,
+			to: after.softThreshold,
+			stale: tightest === undefined ? false : staleSoftBand(before.softThreshold, tightest)
+		});
+	};
+	const loose = new Set(staleHighBaselines(before.importBaselines, measured).map((e) => e.name));
+	for (const tracked of Object.keys(after.importBaselines).sort()) {
+		const from = before.importBaselines[tracked];
+		const to = after.importBaselines[tracked];
+		if (from === undefined || to < from) {
+			changes.push({
+				kind: "import",
+				name: tracked,
+				from,
+				to,
+				stale: loose.has(tracked)
+			});
+		}
+	};
+	return changes;
+};
+/**
+* The proposal markdown — the body of the sticky pull-request comment.
+*
+* Mirrors `.freebuff/coverage-propose.mjs`'s output: a marker line so the workflow
+* can find and update the previous comment, a table of what would move, and a
+* closing line that says nothing is applied until a person runs the recorder. It
+* is written even when there is nothing to propose, so the artifact a workflow
+* uploads still records that the check ran.
+*
+* A stale-high baseline gets a callout of its own above the table. It is the one
+* row a reviewer must not read as housekeeping: the gate is failing on it, and
+* applying the proposal is the fix — so it is named rather than left to be
+* inferred from a committed number someone would have to know was too big.
+*/
+function renderProposal(changes, applied, samples = 1) {
+	if (changes.length === 0) {
+		return `${__vite_ssr_import_4__.PROPOSAL_MARKER}\n## Collect-budget proposal\n\n` + "Nothing to record — no measured value beat its committed one. The gates " + "already sit at or below this run's numbers.\n";
+	};
+	const stale = changes.filter((change) => change.stale);
+	const rows = changes.map((change) => `| \`${change.name}\`${change.stale ? " **(stale)**" : ""} | ` + `${change.from ?? "—"} | ${change.to} |`).join("\n");
+	return `${__vite_ssr_import_4__.PROPOSAL_MARKER}\n## Collect-budget proposal\n\n` + (stale.length > 0 ? staleNote(stale) : "") + "`npm run collect:record` ran against this change's measured collect times and would lower:\n\n" + "| value | committed | this run |\n| --- | --: | --: |\n" + `${rows}\n\n` + (samples > 1 ? `Every value here held across ${samples} runs: the proposal is the worst ` + "case any of them measured, so one quietly fast machine cannot post a " + "tightening the others did not confirm.\n\n" : "") + "Nothing here is applied — a lower number only *tightens* a gate. Run " + "`npm run collect:record` locally and commit the result, or reply " + `\`${__vite_ssr_import_4__.APPLY_COMMAND}\` to open a pull request that applies exactly these values.\n\n` + `${(0,__vite_ssr_import_4__.renderProposalState)(applied)}\n`;
+};
+/**
+* The callout for a proposal's stale-high baselines, or nothing when there are none.
+*
+* Called out above the table rather than folded into it because a stale baseline
+* is the one row that is not optional: the committed number is so far above what
+* the run measured that the gate is failing on it, and the same approve-and-apply
+* reply that applies an ordinary tightening is what clears the failure. A reviewer
+* who read only the table would take a red gate for a housekeeping nit.
+*/
+/** A fraction of a collect budget, as the percentage a person reads it as. */
+function percent(value) {
+	return `${Math.round((value ?? 0) * 100)}%`;
+}
+/**
+* One stale change as a line of the callout, in the units its value is recorded in.
+*
+* A band is a fraction of a budget and an import is milliseconds, so the two cannot
+* share a sentence: `recorded at 0.58ms` is a different claim from `recorded at
+* 58%`. The kind is what picks the reading.
+*/
+function staleChangeLine(change) {
+	if (change.kind === "band") {
+		// `to` is the band the recorder would *set* — one margin above the tightest
+		// file — not the tightest file itself, so the line says that rather than
+		// claiming a measurement it does not hold.
+		return `> - the warning band is recorded at ${percent(change.from)} of a budget; the ` + `recorder would set it to ${percent(change.to)}`;
+	};
+	return `> - \`${change.name}\` — recorded at ${change.from}ms, this run measured ${change.to}ms`;
+}
+function staleNote(stale) {
+	const rows = stale.map(staleChangeLine).join("\n");
+	return "> **A loose gate, not a tidy-up.** " + (stale.length === 1 ? "This recorded value is" : "These recorded values are") + " *stale-high*: the committed number sits far above what the run measured, " + "which is the direction the collect-budget gate fails a run on. Applying " + "the values below is not optional housekeeping — it is what turns the build " + "green again.\n>\n" + `${rows}\n\n`;
+}
+/** Where the checked-in baseline file lives, resolved from the run's directory. */
+function baselineFilePath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", "collect-budget-baselines.mjs");
+}
+/** Where the proposal markdown is written, resolved from the run's directory. */
+function proposalFilePath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", "collect-budget-proposal.md");
+}
+/** The one-field state file the launcher reads to set its `earned` output. */
+function proposalStatePath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", ".collect-budget-proposal.json");
+}
+/** The lines the report prints, worst overrun first. */
+function formatBreaches(breaches, median) {
+	const rows = [...breaches].sort((a, b) => b.ms / b.budget - a.ms / a.budget).map((breach) => `  ${breach.ms.toFixed(0).padStart(6)}ms  ` + `over ${String(Math.round(breach.budget)).padStart(5)}ms  ` + `${breach.kind.padEnd(7)}  ${breach.file}  (${breach.detail})`).join("\n");
+	return `collect-budget: ${breaches.length} breach(es) at a run median of ` + `${median.toFixed(0)}ms — a budget was crossed\n` + `${rows}\n` + "A file that suddenly costs much more to collect usually means an eager import " + "or a `?raw` glob came back. Read the shared index on demand instead. A `collect` " + "breach wants the multiple in `src/test/collect-budget.ts` raised deliberately; an " + "`import` breach is a tracked scanner being read eagerly again.\n";
+}
+/** The one-line summary the recorder prints for each tracked module. */
+function recordLine(tracked, before, after, measured) {
+	const saw = measured[tracked];
+	const was = before[tracked];
+	const now = after[tracked];
+	const change = now === undefined ? "left unnamed (not imported this run)" : was === undefined ? `added ${now}ms` : now < was ? `lowered ${was}ms -> ${now}ms` : `kept ${now}ms`;
+	return `  ${tracked}: ${change}${saw === undefined ? "" : ` (measured ${saw.toFixed(1)}ms)`}`;
+}
+/** The one-line summary the recorder prints for the soft threshold. */
+function recordThresholdLine(before, after, tightest) {
+	const change = after < before ? `lowered ${before} -> ${after}` : `kept ${after}`;
+	return `  softThreshold: ${change} (tightest file ${tightest.toFixed(2)} of its budget)`;
+}
+/**
+* The end-of-run notice: the files nearest their budget, on every run so a creep
+* is visible before it breaches.
+*
+* Written to stderr: the CI runner gives Vitest's JSON reporter stdout and parses
+* it, so a stray line there would corrupt the report.
+*/
+function formatTightest(rows, median, total) {
+	if (rows.length === 0) return "";
+	const lines = rows.map((row) => `  ${`${Math.round(row.used * 100)}%`.padStart(4)} of ` + `${String(Math.round(row.ceiling)).padStart(5)}ms  ` + `${row.collect.toFixed(0).padStart(6)}ms  ${row.file}`).join("\n");
+	return `collect-budget: the files nearest their collect budget out of ${total} ` + `(run median ${median.toFixed(0)}ms) — watch these for a creeping regression\n` + `${lines}\n`;
+}
+/**
+* The soft-gate block: the files near their budget, which do not fail the run but
+* are what to look at before the next change trips the hard gate.
+*/
+function formatSoftGate(warnings, threshold, median, total) {
+	const lines = warnings.map((row) => `  ${`${Math.round(row.used * 100)}%`.padStart(4)} of ` + `${String(Math.round(row.ceiling)).padStart(5)}ms  ` + `${row.collect.toFixed(0).padStart(6)}ms  ${row.file}`).join("\n");
+	return `collect-budget: ${warnings.length} of ${total} file(s) at or over ` + `${Math.round(threshold * 100)}% of their collect budget ` + `(run median ${median.toFixed(0)}ms) — still green, but close to the hard gate\n` + `${lines}\n`;
+}
+/** Where the soft-gate sidecar lives, resolved from the run's directory. */
+function softGateFilePath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", (0,__vite_ssr_import_2__.SOFT_GATE_FILE));
+}
+/**
+* Leave the soft-gate warnings where the CI runner can find them.
+*
+* A plain JSON sidecar rather than a line of stderr to parse: the runner already
+* reads its Vitest report the same way, and a warning naming a file with a space
+* or a colon in it would break a text parse but not this.
+*/
+function writeSoftGate(warnings, threshold) {
+	(0,__vite_ssr_import_0__.writeFileSync)(softGateFilePath(), `${JSON.stringify({
+		threshold,
+		warnings
+	}, null, 2)}\n`);
+}
+/** Drop a stale sidecar, so a warning from an earlier run cannot be re-reported. */
+function clearSoftGate() {
+	(0,__vite_ssr_import_0__.rmSync)(softGateFilePath(), { force: true });
+}
+/** Where the run report lives, resolved from the run's directory. */
+function runReportPath() {
+	return (0,__vite_ssr_import_1__.join)(process.cwd(), ".freebuff", (0,__vite_ssr_import_3__.RUN_REPORT_FILE));
+}
+/**
+* Leave the run report where its three readers can find it.
+*
+* A plain JSON sidecar rather than a line of stderr, for the same reason the soft
+* gate uses one: the CI runner captures a passing run's stderr and never prints it.
+* It is written on *every* run that judged the baselines — including the ones that
+* found nothing loose — because `npm run collect:stale` has to tell "judged and
+* clean" apart from "never judged at all", and the second must not pass; and
+* because `npm run collect:gates` publishes the measurement, which is worth seeing
+* precisely on the green runs where nothing is wrong yet.
+*
+* `tightest` rides along so the summary can show the *other* half of the gate: the
+* recorded warning band against the file nearest its budget, which otherwise only
+* appears in the report when the band is stale. The imports are a table here and the
+* band is one number, so a run that never came near either is the one a reader most
+* needs to see both halves on.
+*/
+function writeRunReport(runs, samples, measured, tightest, stale) {
+	// `importStaleAbove`, `staleBandHeadroom` and `bandJudgedFrom` are the reporter's
+	// own rule rather than measurements: the cost a recorded baseline may sit at before
+	// this run calls it stale, the headroom past which the band is called loose, and the
+	// tightest file a run must reach before the band is judged at all. They ride here so
+	// the run summary can print the boundaries the gate enforces — and the word for a
+	// run that never reached one — rather than a second copy that could drift. The same
+	// reason the measured columns read this file.
+	//
+	// The per-import threshold is built with the same `staleThreshold` the check calls,
+	// so the number a reader compares a baseline against is the one that judged it.
+	const importStaleAbove = importStaleThresholds(measured);
+	(0,__vite_ssr_import_0__.writeFileSync)(runReportPath(), `${JSON.stringify({
+		runs,
+		samples,
+		measured,
+		importStaleAbove,
+		tightest,
+		staleBandHeadroom: STALE_BAND_HEADROOM,
+		bandJudgedFrom: MIN_SOFT_THRESHOLD,
+		stale
+	}, null, 2)}\n`);
+}
+/** Drop the report, so a run that does not judge cannot leave an earlier one's. */
+function clearRunReport() {
+	(0,__vite_ssr_import_0__.rmSync)(runReportPath(), { force: true });
+}
+/**
+* The staleness warning: the recorded baselines looser than this run measured.
+*
+* A warning rather than a failure on purpose. One run is one sample of a
+* wall-clock quantity, so a loose gate is only *confirmed* when a repeated session
+* agrees on it; a lone reading is printed loudly and annotated, and
+* `npm run collect:stale` is what fails on it.
+*/
+/** One recorded gate's two numbers, in the units that gate is recorded in. */
+function staleNumbers(entry) {
+	return entry.kind === "band" ? {
+		was: percent(entry.recorded),
+		now: percent(entry.measured)
+	} : {
+		was: `${entry.recorded}ms`,
+		now: `${entry.measured.toFixed(1)}ms`
+	};
+}
+function formatStale(stale) {
+	const rows = stale.map((entry) => {
+		const { was, now } = staleNumbers(entry);
+		const label = entry.kind === "band" ? "worst file" : "measured";
+		return `  recorded ${was.padStart(7)}  ${label} ${now.padStart(7)}  ${entry.name}`;
+	}).join("\n");
+	return `collect-budget: ${stale.length} recorded gate(s) are looser than this run ` + "measured — a warning, not a failure\n" + `${rows}\n` + "One run is not evidence enough to fail on. `npm run collect:propose` runs the " + "suite repeatedly and fails when every run agrees; `npm run collect:record` " + "lowers the recorded value now.\n";
+}
+/**
+* The reporter itself: turns each module's `diagnostic()` into a `ModuleTiming`,
+* asks `collectBudgetBreaches`, and fails the process when anything is over.
+*
+* Two modes, chosen by `COLLECT_BASELINE_RECORD`, which only
+* `npm run collect:record` sets: normally it is a read-only gate and never writes
+* a file; in record mode it lowers the tracked-import baselines and returns
+* without failing. Keeping the recorder behind an environment variable rather
+* than a normal-run side effect is what lets every other run — including CI —
+* treat the checked-in baseline as read-only.
+*
+* A *loose* gate is the one thing no single run fails on. It is judged apart from
+* the breaches, reported as a warning, and left in a sidecar; the repeated
+* `collect:propose` session is what confirms it, and `npm run collect:stale` is
+* what fails on a confirmation. That is the same shape the proposal already uses
+* for a drop — measure several times, act only on what every run agrees to.
+*
+* `process.exitCode = 1` is the same lever Vitest pulls for a failed test, and
+* it is set here rather than throwing because a reporter error is swallowed into
+* an "unhandled reporter error" warning that does not fail the run.
+*/
+class CollectBudgetReporter {
+	onTestRunEnd(modules) {
+		const timings = modules.map((entry) => {
+			const diagnostic = entry.diagnostic();
+			return {
+				file: projectPath(entry.moduleId),
+				collect: diagnostic.collectDuration,
+				imports: Object.entries(diagnostic.importDurations ?? {}).map(([file, duration]) => ({
+					path: projectPath(file),
+					total: duration.totalTime
+				}))
+			};
+		});
+		// Computed once and passed to every consumer, so the number the reports
+		// print is the number the ceilings were built from.
+		const median = medianCollect(timings);
+		if (process.env.COLLECT_BASELINE_RECORD) {
+			this.record(timings, median);
+		} else if (process.env.COLLECT_BASELINE_PROPOSE) {
+			this.propose(timings, median);
+		} else {
+			const breaches = collectBudgetBreaches(timings, median);
+			if (breaches.length > 0) {
+				process.exitCode = 1;
+				process.stderr.write(formatBreaches(breaches, median));
+			};
+			// Judged apart from the breaches and never fatal: a recorded value that has
+			// gone too loose is the one finding a single run may not fail on. The report is
+			// left for `npm run collect:stale`, which confirms it across a repeated session
+			// — so `runs` and `samples` are both one here, and that step refuses a report
+			// this thin rather than reading it as a clean bill. It is written even when
+			// nothing is loose, because the summary publishes the measurement and the gate
+			// step tells "judged clean" from "never judged".
+			const sample = {
+				measured: measuredImportCosts(timings),
+				tightest: worstUsed(timings, median)
+			};
+			const stale = staleGates(COMMITTED_BASELINES, sample);
+			writeRunReport(1, 1, sample.measured, sample.tightest, stale);
+			if (stale.length > 0) process.stderr.write(formatStale(stale));
+		};
+		// Always last: the files nearest their budget, so a creep shows up on the
+		// green runs that come before it breaches, not only on the red one after.
+		// Past the soft threshold the notice becomes a warning — still green, but
+		// left where the CI runner turns it into an annotation.
+		const warnings = softWarnings(timings, median);
+		if (warnings.length > 0) {
+			const threshold = COMMITTED_BASELINES.softThreshold;
+			writeSoftGate(warnings, threshold);
+			process.stderr.write(formatSoftGate(warnings, threshold, median, timings.length));
+		} else {
+			clearSoftGate();
+			process.stderr.write(formatTightest(slowestCollects(timings, median), median, timings.length));
+		}
+	}
+	/**
+	* The baselines this run's measurements earn: what it would lower, before any
+	* of it is written.
+	*
+	* Shared by the recorder and the proposer so they cannot disagree — the one
+	* writes the result to the checked-in file, the other only describes it.
+	*/
+	lowered(timings, median) {
+		const before = COMMITTED_BASELINES;
+		const measured = measuredImportCosts(timings);
+		const tightest = worstUsed(timings, median);
+		const after = loweredFrom(before, {
+			measured,
+			tightest
+		});
+		return {
+			before,
+			after,
+			measured,
+			tightest
+		};
+	}
+	/**
+	* Lower the recorded baselines to what this run measured, and write them.
+	*
+	* Two values move: each tracked import to the run's dearest cost, and the soft
+	* threshold to a margin above the run's tightest file. Both only ever fall.
+	*/
+	record(timings, median) {
+		const { before, after, measured, tightest } = this.lowered(timings, median);
+		const path = baselineFilePath();
+		(0,__vite_ssr_import_0__.writeFileSync)(path, renderBaselines(after));
+		// Nothing is loose once this has run, and a report from before it ran would
+		// only be describing baselines that no longer exist.
+		clearRunReport();
+		const lines = [...TRACKED_IMPORTS.map((tracked) => recordLine(tracked, before.importBaselines, after.importBaselines, measured)), recordThresholdLine(before.softThreshold, after.softThreshold, tightest)];
+		process.stderr.write(`collect-budget: recorded baselines to ${path}\n${lines.join("\n")}\n`);
+	}
+	/**
+	* Describe what the recorder *would* lower, without writing the checked-in file.
+	*
+	* What a pull request runs: the measurement happens here, in the reporter, but
+	* the decision to apply it stays with a person, so nothing under version control
+	* is touched. A proposal and a small state file are left for the launcher.
+	*
+	* The measurement is repeated — the launcher runs the suite several times — so a
+	* drop has to hold across every run before it is posted. `COLLECT_PROPOSAL_SAMPLE`
+	* is what tells this run it is part of such a session: it names the sample to
+	* leave, and the reporter then proposes from the worst case of every sample the
+	* session has left so far. Without it (a plain `npm run collect:propose`) the
+	* run is its own single sample, exactly as before.
+	*/
+	propose(timings, median) {
+		const before = COMMITTED_BASELINES;
+		const sample = {
+			measured: measuredImportCosts(timings),
+			tightest: worstUsed(timings, median)
+		};
+		const index = process.env.COLLECT_PROPOSAL_SAMPLE;
+		const samples = index === undefined ? [sample] : accumulateSample(Number(index), sample);
+		const aggregate = aggregateSamples(samples);
+		const after = loweredFrom(before, aggregate);
+		// The aggregate's measurement is what the ratchet saw, so it is also what
+		// decides whether a committed baseline was stale-high — the gate judges the
+		// same quantity, so a proposal cannot call a gate loose that a run would pass.
+		const changes = proposalChanges(before, after, aggregate.measured, aggregate.tightest);
+		(0,__vite_ssr_import_0__.writeFileSync)(proposalFilePath(), renderProposal(changes, after, samples.length));
+		(0,__vite_ssr_import_0__.writeFileSync)(proposalStatePath(), `${JSON.stringify({
+			changed: changes.length > 0,
+			samples: samples.length
+		}, null, 2)}\n`);
+		// The same aggregate that earned the drop judges the loose gate, so the session
+		// that confirms a tightening also confirms a stale-high baseline — and
+		// `npm run collect:stale` fails on the second without re-measuring anything.
+		// `runs` is the session's target, so a session that came up short is visible to
+		// that step rather than passing as a complete one.
+		writeRunReport(proposalRunTarget(samples.length), samples.length, aggregate.measured, aggregate.tightest, staleGates(before, aggregate));
+		process.stderr.write(`collect-budget: wrote a proposal with ${changes.length} change(s) from ` + `${samples.length} sample(s) to ${proposalFilePath()}\n`);
+	}
+};
+// Vitest loads a reporter named by path — from `--reporter=…` or the config's
+// `reporters` — through the module's *default* export, and constructs it. The
+// named export stays for the test that drives the budget logic directly.
+const __vite_ssr_export_default__ = CollectBudgetReporter;
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,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Z0JBLE9BQVEsQ0FBUSxTQUF5QixRQUFzQjtFQUM3RCxNQUFNLFNBQVM7RUFDZixNQUFNLFNBQXdCO0dBQzVCLFVBQVUsb0JBQW9CLE9BQU87R0FDckMsVUFBVSxVQUFVLFNBQVMsTUFBTTtFQUNyQztFQUNBLE1BQU0sUUFBUSxRQUFRLElBQUk7RUFDMUIsTUFBTSxVQUFVLFVBQVUsWUFBWSxDQUFDLE1BQU0sSUFBSSxpQkFBaUIsT0FBTyxLQUFLLEdBQUcsTUFBTTtFQUN2RixNQUFNLFlBQVksaUJBQWlCLE9BQU87RUFDMUMsTUFBTSxRQUFRLFlBQVksUUFBUSxTQUFTOzs7O0VBSTNDLE1BQU0sVUFBVSxnQkFBZ0IsUUFBUSxPQUFPLFVBQVUsVUFBVSxVQUFVLFFBQVE7RUFDckYsd0NBQWMsaUJBQWlCLEdBQUcsZUFBZSxTQUFTLE9BQU8sUUFBUSxNQUFNLENBQUM7RUFDaEYsd0NBQ0Usa0JBQWtCLEdBQ2xCLEdBQUcsS0FBSyxVQUFVO0dBQUUsU0FBUyxRQUFRLFNBQVM7R0FBRyxTQUFTLFFBQVE7RUFBTyxHQUFHLE1BQU0sQ0FBQyxFQUFFLEdBQ3ZGOzs7Ozs7RUFNQSxlQUNFLGtCQUFrQixRQUFRLE1BQU0sR0FDaEMsUUFBUSxRQUNSLFVBQVUsVUFDVixVQUFVLFVBQ1YsV0FBVyxRQUFRLFNBQVMsQ0FDOUI7RUFDQSxRQUFRLE9BQU8sTUFDYix5Q0FBeUMsUUFBUSxPQUFPLG9CQUN0RCxHQUFHLFFBQVEsT0FBTyxnQkFBZ0IsaUJBQWlCLEVBQUUsR0FDekQ7Q0FDRjtBQUNGOzs7O0FBS0Esb0NBQWUiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbImNvbGxlY3QtYnVkZ2V0LnRzIl0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogVGhlIGNvbGxlY3QtdGltZSBidWRnZXQ6IGEgcmVwb3J0ZXIgdGhhdCBmYWlscyBhIHJ1biB3aGVuIGEgdGVzdCBmaWxlJ3NcbiAqICpjb2xsZWN0aW9uKiDigJQgdGhlIHRyYW5zZm9ybSBhbmQgaW1wb3J0IHdvcmsgVml0ZXN0IGRvZXMgYmVmb3JlIGEgc2luZ2xlIGNhc2VcbiAqIHJ1bnMg4oCUIGNyb3NzZXMgYSBjZWlsaW5nLlxuICpcbiAqIENvbGxlY3QgY29zdCBpcyBpbnZpc2libGUgaW4gdGhlIHN1aXRlJ3Mgb3duIHJlc3VsdC4gQSBmaWxlIGNhbiBwYXNzIGV2ZXJ5XG4gKiBjYXNlIHdoaWxlIHF1aWV0bHkgbWFraW5nIHRoZSB3aG9sZSBydW4gc2xvd2VyIGZvciBldmVyeW9uZSwgYW5kIHRoYXQgaXNcbiAqIGV4YWN0bHkgdGhlIHNoYXBlIG9mIHRoZSBlYWdlciBgP3Jhd2AgZ2xvYnMgdGhpcyByZXBvc2l0b3J5IGhhcyBiZWVuIHJlbW92aW5nOlxuICogVml0ZSByZWFkIGFuZCByZWdpc3RlcmVkIGV2ZXJ5IHBhZ2UgYW5kIHJvdXRlIGludG8gKmVhY2gqIHRlc3QgZmlsZSB0aGF0XG4gKiBpbXBvcnRlZCB0aGUgc2hhcmVkIGluZGV4LCBhbmQgdGhlIG9ubHkgc3ltcHRvbSB3YXMgY29sbGVjdCB0aW1lLiBBIHNvdXJjZVxuICogZ3VhcmQgY2FuIHBpbiB0aGUgb25lIHNoYXBlIGl0IGtub3dzIGFib3V0OyB0aGlzIGlzIHRoZSBiYWNrc3RvcCBmb3IgdGhlIG9uZXNcbiAqIGl0IGRvZXMgbm90LlxuICpcbiAqIEl0IGlzIGEgcmVwb3J0ZXIgcmF0aGVyIHRoYW4gYSB0ZXN0IGJlY2F1c2UgVml0ZXN0IGV4cG9zZXMgYGNvbGxlY3REdXJhdGlvbmBcbiAqIG9ubHkgb24gYSBtb2R1bGUncyBgZGlhZ25vc3RpYygpYCwgd2hpY2ggYSB0ZXN0IGNhbm5vdCByZWFjaCwgYW5kIGJlY2F1c2UgaXRcbiAqIGhhcyB0byBydW4gb25jZSBmb3IgdGhlIHdob2xlIHJ1biByYXRoZXIgdGhhbiBvbmNlIHBlciBmaWxlLiBgb25UZXN0UnVuRW5kYFxuICogaGFuZHMgb3ZlciBldmVyeSBtb2R1bGUgYW5kIGEgcGxhY2UgdG8gZmFpbCB0aGUgcHJvY2Vzcy5cbiAqXG4gKiBUaGUgcGVyLWZpbGUgY2VpbGluZyBpcyAqbG9hZC1hd2FyZSo6IGl0IGlzIGEgbXVsdGlwbGUgb2YgdGhlIHJ1bidzIG93biBtZWRpYW5cbiAqIGNvbGxlY3QsIG5vdCBhIGZpeGVkIG51bWJlciBvZiBtaWxsaXNlY29uZHMuIENvbGxlY3Rpb24gaXMgd2FsbC1jbG9jayBvbiBhXG4gKiBzaGFyZWQgY2hlY2tvdXQgYW5kIG1vdmVzIHdpdGggd2hhdGV2ZXIgZWxzZSBpcyBydW5uaW5nIOKAlCBhIHJ1biB3aG9zZSBtZWRpYW5cbiAqIGZpbGUgY29sbGVjdGVkIGluIH4xNjBtcyBvbiBhIHF1aWV0IG1hY2hpbmUgY29sbGVjdGVkIGluIH4yNDRtcyB3aXRoIHRoZSBib3hcbiAqIGxvYWRlZCwgYW5kIGluZGl2aWR1YWwgZmlsZXMgc3d1bmcgYnkgYW4gb3JkZXIgb2YgbWFnbml0dWRlIOKAlCBzbyBhIGZpeGVkXG4gKiBjZWlsaW5nIGhhcyB0byBiZSBzZXQgZm9yIHRoZSB3b3JzdCBsb2FkIGl0IG1pZ2h0IGV2ZXIgbWVldCwgbG9vc2UgZW5vdWdoIHRoYXRcbiAqIGl0IG5ldmVyIGZpcmVzIG9uIHRoZSBtYWNoaW5lIGl0IGlzIG1lYW50IHRvIHByb3RlY3QuIERpdmlkaW5nIGVhY2ggZmlsZSdzXG4gKiBjb2xsZWN0IGJ5IHRoZSBydW4ncyBtZWRpYW4gY2FuY2VscyBtb3N0IG9mIHRoYXQgc3dpbmcsIGJlY2F1c2UgdGhlICpyYXRpbyogb2ZcbiAqIGEgZmlsZSB0byB0aGUgbWVkaWFuIG9mIGFsbCBmaWxlcyBtb3ZlcyBmYXIgbGVzcyB0aGFuIGl0cyBtaWxsaXNlY29uZHMgZG8gKHRoZVxuICogaGVhdmllc3QgYXBwIGZpbGUgc2F0IGF0IDYuOcOXIHRoZSBtZWRpYW4gcXVpZXQgYW5kIDYuMcOXIGxvYWRlZCkuIEEgcmF0aW9cbiAqIGJ1ZGdldCBjYW4gdGhlcmVmb3JlIGJlIHRpZWQgdG8gdGhlIG1hY2hpbmUncyBvd24gcGFjZSBhbmQgc3RpbGwgbm90IGZsYWtlLlxuICpcbiAqIFRoZXJlIGFyZSB0d28gY29sbGVjdCBzaGFwZXMsIGNob3NlbiBieSB3aGVyZSBhIGZpbGUgbGl2ZXM6IGEgdGlnaHRlciBtdWx0aXBsZVxuICogZm9yIGBzcmMvdGVzdGAgZmlsZXMsIHdoaWNoIGFyZSBzbWFsbCBhbmQgd2hvc2UgY29sbGVjdCBpcyBkb21pbmF0ZWQgYnkgdGhlXG4gKiBzaGFyZWQgaW5kZXggdGhleSBpbXBvcnQsIGFuZCBhIGxvb3NlciBvbmUgZm9yIHRoZSBhcHAncyB0ZXN0cywgd2hvc2Ugcm91dGVcbiAqIGZpbGVzIGxlZ2l0aW1hdGVseSBwdWxsIGluIHRoZSByZWFsIGNsaWVudCBzdGFjay4gRWFjaCBoYXMgYSBmbG9vciwgc28gYSBydW5cbiAqIHRvbyBzbWFsbCBvciB0b28gZmFzdCB0byBwcm9kdWNlIGEgbWVhbmluZ2Z1bCBtZWRpYW4g4oCUIGEgZm9jdXNlZCBydW4gb2YgYVxuICogc2luZ2xlIGZpbGUg4oCUIHN0aWxsIGdldHMgYSBzZW5zaWJsZSBjZWlsaW5nIHJhdGhlciB0aGFuIG9uZSB0aGUgbWVkaWFuIHdvdWxkXG4gKiBjb2xsYXBzZSB0b3dhcmQgbm90aGluZy5cbiAqXG4gKiBUaGUgbXVsdGlwbGVzIHdlcmUgbWVhc3VyZWQsIG5vdCBndWVzc2VkLiBPdmVyIHNldmVyYWwgZnVsbCBydW5zIG9mIHRoaXMgc3VpdGVcbiAqIHRoZSBoZWF2aWVzdCBmaWxlIHdhcyBhIGBzcmMvdGVzdGAgZmlsZSBhdCBhYm91dCA2LjLDlyB0aGUgbWVkaWFuIGFuZCBhXG4gKiBgc3JjL2xpYi9kYmAgb25lIGF0IGFib3V0IDcuNsOXLCBzbyB0aGUgdHdvIG11bHRpcGxlcyBzaXQgYSBsaXR0bGUgYWJvdmUgdHdpY2VcbiAqIHRoZSB3b3JzdCByYXRpbyBhY3R1YWxseSBzZWVuIOKAlCBlbm91Z2ggdGhhdCBsb2FkIGFsb25lIGNhbm5vdCBjYXJyeSBhIGZpbGVcbiAqIG92ZXIsIHdoaWxlIHN0aWxsIHdlbGwgdW5kZXIgdGhlIGZpeGVkIGNlaWxpbmdzIHRoaXMgcmVwbGFjZXMsIHdoaWNoIG5ldmVyXG4gKiBmaXJlZC5cbiAqXG4gKiBUaGUgY2hlY2sgaGFzIHRocmVlIHBhcnRzOlxuICpcbiAqIDEuIHRoZSBwZXItZmlsZSBjb2xsZWN0IGNlaWxpbmcgYWJvdmUsIHNvIGEgZmlsZSB0aGF0IHN0YXJ0cyBlYWdlcmx5IGltcG9ydGluZ1xuICogICAgdGhlIHdvcmxkIGZhaWxzIGhlcmUgcmF0aGVyIHRoYW4gaW4gYSBjb2RlIHJldmlldztcbiAqIDIuIGEgY2VpbGluZyBvbiB0aGUgKmltcG9ydCogb2YgdGhlIHNoYXJlZCBzY2FubmVycyAoYG1vZHVsZS1pbmRleC50c2AsXG4gKiAgICBgc291cmNlLXNjYW4udHNgKSDigJQgdGhlIHNoYXJwIHNpZ25hbC4gVGhvc2UgbW9kdWxlcyBob2xkIG9ubHkgcGF0aFxuICogICAgYXJpdGhtZXRpYyBhbmQgYSBgcmVhZEZpbGVTeW5jYCBjYWNoZSwgc28gaW1wb3J0aW5nIG9uZSBpcyBtaWxsaXNlY29uZHNcbiAqICAgIGV2ZW4gdW5kZXIgbG9hZDsgYSByZXR1cm5pbmcgZ2xvYiBtYWtlcyBpdCB0aGUgc2xvd2VzdCBpbXBvcnQgdGhlIGZpbGUgaGFzO1xuICogICAgYW5kXG4gKiAzLiB0aGUgc2FtZSBjb21wYXJpc29uIGluIHRoZSBvdGhlciBkaXJlY3Rpb24sIGZvciAqYm90aCogcmVjb3JkZWQgdmFsdWVzOiBhXG4gKiAgICBiYXNlbGluZSDigJQgb3IgdGhlIHdhcm5pbmcgYmFuZCDigJQgdGhhdCBzaXRzICpmYXIgYWJvdmUqIHdoYXQgdGhlIHRyZWUgbWVhc3VyZXNcbiAqICAgIGlzIHJlcG9ydGVkIHRvby4gVGhlIHJhdGNoZXQgb25seSBldmVyIGxvd2Vycywgc28gYSBudW1iZXIgcmFpc2VkIGJ5IGhhbmQsIG9yXG4gKiAgICBmaXJzdCByZWNvcmRlZCBvbiBhIGRheSB0aGUgc2Nhbm5lciBoYXBwZW5lZCB0byBiZSBzbG93LCB3b3VsZCBzaXQgdGhlcmVcbiAqICAgIGtlZXBpbmcgdGhlIGdhdGUgbG9vc2UgZm9yZXZlciB3aXRoIG5vdGhpbmcgdG8gbm90aWNlIGl0LiBUaGlzIGlzIHdoYXRcbiAqICAgIG5vdGljZXMsIGFuZCBgbnBtIHJ1biBjb2xsZWN0OnJlY29yZGAgaXMgdGhlIGZpeC4gVGhlIGJhbmQgaXMganVkZ2VkIGJ5IGhvd1xuICogICAgZmFyIHRoZSByZWNvcmRlciB3b3VsZCBtb3ZlIGl0LCBhbmQgdGhlIGltcG9ydHMgYnkgaG93IGZhciB0aGUgcmVjb3JkZWQgY29zdFxuICogICAgc2l0cyBhYm92ZSB0aGUgbWVhc3VyZW1lbnQuIEJlY2F1c2Ugb25lIHJ1biBpcyBvbmUgbm9pc3kgc2FtcGxlLCB0aGlzXG4gKiAgICBkaXJlY3Rpb24gaXMgKndhcm5lZCogb24gYSBzaW5nbGUgcnVuIGFuZCBvbmx5ICpmYWlsZWQqIHdoZW4gYSByZXBlYXRlZFxuICogICAgc2Vzc2lvbiBjb25maXJtcyBpdCDigJQgdGhlIHNhbWUgcmVwZWF0ZWQtc2FtcGxlIHRyZWF0bWVudCB0aGUgcHJvcG9zYWwgZ2l2ZXMgYVxuICogICAgdGlnaHRlbmluZywgYW5kIHRoZSBzYW1lIGFwcHJvdmUtYW5kLWFwcGx5IGZsb3cgY2xvc2VzIGl0LlxuICpcbiAqIEJvdGggdGhlIGltcG9ydCBjaGVjayBhbmQgdGhlIHdhcm5pbmcgYmFuZCAqcmF0Y2hldCouIFRoZWlyIG51bWJlcnMgYXJlIG5vdFxuICogaGFuZC1waWNrZWQ6IHRoZXkgYXJlIHJlY29yZGVkIGluIGAuZnJlZWJ1ZmYvY29sbGVjdC1idWRnZXQtYmFzZWxpbmVzLm1qc2AsIGFuZFxuICogYG5wbSBydW4gY29sbGVjdDpyZWNvcmRgIHJlLW1lYXN1cmVzIGEgZnVsbCBydW4gYW5kIGxvd2VycyBhbnkgdmFsdWUgdGhlIHJ1blxuICogYmVhdC4gVGhlIGltcG9ydCBiYXNlbGluZSBpcyBhIGxvdy13YXRlciBtYXJrIOKAlCB0aGUgcmVjb3JkZWQgY29zdCBvZiB0aGUgbW9kdWxlXG4gKiBwbHVzIGEgZml4ZWQgbWFyZ2luIHRoZSBnYXRlIGtlZXBzIG92ZXIgaXQg4oCUIHNvIGFzIHRoZSBzaGFyZWQgaW5kZXggZ2V0cyBjaGVhcGVyXG4gKiB0aGUgZ2F0ZSB0aWdodGVucyBvbiBpdHMgb3duLiBUaGUgc29mdCB0aHJlc2hvbGQgaXMgdGhlIHNhbWUgaWRlYSBvbmUgc3RlcFxuICogcmVtb3ZlZDogaXQgc2l0cyBhIGZpeGVkIG1hcmdpbiBhYm92ZSB0aGUgKnRpZ2h0ZXN0IGZpbGUgdGhlIHJlY29yZGluZyBydW4gc2F3KixcbiAqIHNvIGFzIHRoZSB0cmVlJ3MgY29sbGVjdHMgaW1wcm92ZSB0aGUgYmFuZCB0aGF0IHdhcm5zIG1vdmVzIGRvd24gd2l0aCB0aGVtLiBUaGVcbiAqIHJlY29yZGVyIG9ubHkgZXZlciBsb3dlcnMgdGhlc2UgdmFsdWVzLCBzbyBhIHJlZ3Jlc3Npb24gY2Fubm90IGJlIHJlY29yZGVkIGF3YXk6XG4gKiBpdCBoYXMgdG8gYmUgZml4ZWQsIG9yIHRoZSBudW1iZXIgcmFpc2VkIGJ5IGhhbmQgd2l0aCBhIHJlYXNvbi4gVGhpcyBtaXJyb3JzXG4gKiBgY292ZXJhZ2UtaGVhZHJvb20ubWpzYCwgd2hpY2ggZW5mb3JjZXMgYSBiYWNrc3RvcCBwbHVzIGEgbWFyZ2luOyBoZXJlIHRoZVxuICogcmVjb3JkZWQgbnVtYmVycyBhcmUgdGhlIGJhY2tzdG9wcy5cbiAqXG4gKiBUaGUgcmVjb3JkZXIgY2FuIGFsc28gKnByb3Bvc2UqIHJhdGhlciB0aGFuIGFwcGx5OiBgbnBtIHJ1biBjb2xsZWN0OnByb3Bvc2VgXG4gKiBtZWFzdXJlcyB0aGUgc2FtZSB3YXkgYnV0IHdyaXRlcyBhIE1hcmtkb3duIHByb3Bvc2FsIGluc3RlYWQgb2YgdGhlIGNoZWNrZWQtaW5cbiAqIGZpbGUsIHNvIGEgcHVsbCByZXF1ZXN0IGNhbiBiZSB0b2xkIHdoYXQgaXQgd291bGQgdGlnaHRlbiB3aXRob3V0IGFueXRoaW5nXG4gKiB1bmRlciB2ZXJzaW9uIGNvbnRyb2wgY2hhbmdpbmcuIEJlY2F1c2UgYSBwcm9wb3NhbCBpcyBhZHZpY2UgcmF0aGVyIHRoYW4gYVxuICogZ2F0ZSwgYW5kIGJlY2F1c2Ugb25lIHJ1bidzIGNvbGxlY3QgdGltZSBpcyBvbmUgc2FtcGxlIG9mIGEgbm9pc3kgcXVhbnRpdHksIHRoZVxuICogcHJvcG9zYWwgaXMgbWVhc3VyZWQgc2V2ZXJhbCB0aW1lcyBhbmQgb25seSBhIGRyb3AgdGhhdCBob2xkcyBhY3Jvc3MgKmV2ZXJ5KiBydW5cbiAqIGlzIHBvc3RlZCDigJQgdGhlIGFnZ3JlZ2F0ZSBpcyB0aGUgd29yc3QgY2FzZSBhbnkgb2YgdGhlbSBzYXcsIHNvIGEgc2luZ2xlIHF1aWV0bHlcbiAqIGZhc3QgbWFjaGluZSBjYW5ub3QgcHJvcG9zZSBhIHRpZ2h0ZW5pbmcgdGhlIG90aGVycyBkaWQgbm90IGNvbmZpcm0g4oCUIHRoZSBzYW1lIHByb3Bvc2UtZG9uJ3QtYXBwbHkgc2hhcGUgYXNcbiAqIGAuZnJlZWJ1ZmYvY292ZXJhZ2UtcHJvcG9zZS5tanNgLiBUaGUgcHJvcG9zYWwgY29tbWVudCBjYXJyaWVzIGEgaGlkZGVuIHBheWxvYWRcbiAqIG9mIHRoZSB2YWx1ZXMgdGhlIHJ1biBlYXJuZWQ7IGEgcmV2aWV3ZXIgcmVwbGllcyB3aXRoIHRoZSBhcHBseSBjb21tYW5kIGFuZFxuICogYC5naXRodWIvd29ya2Zsb3dzL2NvbGxlY3QtYXBwbHkueW1sYCB0dXJucyB0aGF0IHBheWxvYWQgaW50byBhIGZvbGxvdy11cCBwdWxsXG4gKiByZXF1ZXN0LCBzbyB0aGUgdGlnaHRlbmluZyBpcyBvbmUgZGVsaWJlcmF0ZSBtZXJnZSByYXRoZXIgdGhhbiBhIG51bWJlciBzb21lb25lXG4gKiBoYXMgdG8gdHJhbnNjcmliZS4gVGhlIHBheWxvYWQgYW5kIHRoZSBtZXJnZSBhcmUgYC5mcmVlYnVmZi9jb2xsZWN0LWFwcGx5Lm1qc2Anc1xuICogY29udHJhY3QsIGFuZCB0aGUgbWVyZ2UgaXMgdGlnaHRlbi1vbmx5LCBzbyB0aGUgY29tbWFuZCBjYW4gbmV2ZXIgbG9vc2VuIGEgZ2F0ZS5cbiAqXG4gKiBUaGUgcHJvcG9zYWwgYWxzbyBuYW1lcyB0aGUgZGlyZWN0aW9uIHRoZSBnYXRlIGZhaWxzIG9uLiBgbnBtIHJ1biBjb2xsZWN0OnJlY29yZGBcbiAqIGlzIHRoZSBkb2N1bWVudGVkIGZpeCBmb3IgYSAqc3RhbGUtaGlnaCogYmFzZWxpbmUsIGJ1dCBpdCBydW5zIG9uIHRoZSBkZXZlbG9wZXInc1xuICogbWFjaGluZTsgYSBwcm9wb3NhbCB0aGF0IG9ubHkgc2hvd2VkIGFuIG9yZGluYXJ5IGRyb3Agd291bGQgbGVhdmUgYSByZXZpZXdlciB0b1xuICogd29yayBvdXQgZnJvbSB0aGUgbnVtYmVycyBhbG9uZSB0aGF0IG9uZSBvZiB0aGVtIHdhcyBhIHJlZCBnYXRlIHJhdGhlciB0aGFuIGFcbiAqIHRpZHktdXAuIFNvIGEgc3RhbGUgYmFzZWxpbmUgaXMgY2FsbGVkIG91dCwgYW5kIHRoZSBzYW1lIGFwcHJvdmUtYW5kLWFwcGx5IHJlcGx5XG4gKiB0aGF0IGFwcGxpZXMgYSB0aWdodGVuaW5nIGlzIGFsc28gaG93IGEgbG9vc2UgZ2F0ZSBpcyBjbG9zZWQuXG4gKlxuICogQSBydW4gZG9lcyBub3QgaGF2ZSB0byBmYWlsIHRvIHNheSBzb21ldGhpbmcuIEV2ZXJ5IHJ1biBlbmRzIGJ5IG5hbWluZyB0aGUgZmV3XG4gKiBmaWxlcyBuZWFyZXN0IHRoZWlyIGNvbGxlY3QgYnVkZ2V0LCBhbmQgb25jZSBhbnkgZmlsZSBpcyBpbnNpZGUgdGhlIHNvZnQgYmFuZFxuICogdGhlIG5vdGljZSBiZWNvbWVzIGEgd2FybmluZzogc3RpbGwgZ3JlZW4sIGJ1dCBwcmludGVkIGxvdWRseSBhbmQgbGVmdCB3aGVyZSB0aGVcbiAqIENJIHJ1bm5lciB0dXJucyBpdCBpbnRvIGEgR2l0SHViIGFubm90YXRpb24sIHNvIGEgY3JlZXAgaXMgdmlzaWJsZSBvbiB0aGUgZ3JlZW5cbiAqIHJ1bnMgdGhhdCBjb21lIGJlZm9yZSBpdCBicmVhY2hlcyByYXRoZXIgdGhhbiBvbmx5IG9uIHRoZSByZWQgb25lIGFmdGVyLlxuICovXG5cbmltcG9ydCB7IG1rZGlyU3luYywgcmVhZEZpbGVTeW5jLCByZWFkZGlyU3luYywgcm1TeW5jLCB3cml0ZUZpbGVTeW5jIH0gZnJvbSBcIm5vZGU6ZnNcIjtcbmltcG9ydCB7IGpvaW4gfSBmcm9tIFwibm9kZTpwYXRoXCI7XG5pbXBvcnQgdHlwZSB7IFJlcG9ydGVyLCBUZXN0TW9kdWxlIH0gZnJvbSBcInZpdGVzdC9ub2RlXCI7XG5pbXBvcnQgeyBTT0ZUX0dBVEVfRklMRSB9IGZyb20gXCIuLi8uLi8uZnJlZWJ1ZmYvY29sbGVjdC1idWRnZXQtc29mdC5tanNcIjtcbmltcG9ydCB7IFJVTl9SRVBPUlRfRklMRSB9IGZyb20gXCIuLi8uLi8uZnJlZWJ1ZmYvY29sbGVjdC1ydW4ubWpzXCI7XG5pbXBvcnQge1xuICBBUFBMWV9DT01NQU5ELFxuICBQUk9QT1NBTF9NQVJLRVIsXG4gIHJlbmRlclByb3Bvc2FsU3RhdGUsXG59IGZyb20gXCIuLi8uLi8uZnJlZWJ1ZmYvY29sbGVjdC1hcHBseS5tanNcIjtcbmltcG9ydCB7XG4gIGltcG9ydEJhc2VsaW5lcyxcbiAgaW1wb3J0TWFyZ2luTXMsXG4gIHNvZnRUaHJlc2hvbGQsXG59IGZyb20gXCIuLi8uLi8uZnJlZWJ1ZmYvY29sbGVjdC1idWRnZXQtYmFzZWxpbmVzLm1qc1wiO1xuXG4vKipcbiAqIEEgVml0ZXN0IHBhdGggYXMgYSBgc3JjYC1yZWxhdGl2ZSBvbmUgKGBzcmMvdGVzdC9yZW5kZXIudGVzdC50c2ApLlxuICpcbiAqIFZpdGVzdCByZXBvcnRzIGEgbW9kdWxlIGlkIHRoYXQgbWF5IGJlIGJhcmUgKGBzcmMv4oCmYCkgb3IgYWJzb2x1dGUsIHdpdGggZWl0aGVyXG4gKiBwbGF0Zm9ybSdzIHNlcGFyYXRvcnMsIGFuZCB0aGUgcmVwb3J0ZXIgaXMgbmFtZWQgYnkgcGF0aCDigJQgZnJvbSB0aGUgY29uZmlnJ3NcbiAqIGByZXBvcnRlcnNgIGFuZCBmcm9tIGAtLXJlcG9ydGVyPeKApmAgaW4gQ0kg4oCUIHNvIG5vdGhpbmcgaGVyZSBzaG91bGQgZGVwZW5kIG9uXG4gKiB3aGVyZSB0aGUgbW9kdWxlIGl0c2VsZiBzaXRzLiBUaGUgYC9zcmMvYCBtYXJrZXIgaXMgYWxsIHRoZSBhcml0aG1ldGljIG5lZWRlZC5cbiAqL1xuZnVuY3Rpb24gcHJvamVjdFBhdGgoZmlsZTogc3RyaW5nKTogc3RyaW5nIHtcbiAgY29uc3Qgbm9ybWFsaXplZCA9IGZpbGUucmVwbGFjZSgvXFxcXC9nLCBcIi9cIik7XG4gIGNvbnN0IG1hcmtlciA9IG5vcm1hbGl6ZWQubGFzdEluZGV4T2YoXCIvc3JjL1wiKTtcbiAgcmV0dXJuIG1hcmtlciA9PT0gLTEgPyBub3JtYWxpemVkIDogbm9ybWFsaXplZC5zbGljZShtYXJrZXIgKyAxKTtcbn1cblxuLyoqXG4gKiBUaGUgY2VpbGluZyBmb3Igb25lIGNsYXNzIG9mIGZpbGU6IGhvdyBtYW55IHRpbWVzIHRoZSBydW4ncyBtZWRpYW4gY29sbGVjdCBpdFxuICogbWF5IGNvc3QsIGFuZCB0aGUgZmxvb3IgYmVsb3cgd2hpY2ggdGhlIGNlaWxpbmcgbmV2ZXIgZmFsbHMuXG4gKi9cbmludGVyZmFjZSBDZWlsaW5nU2hhcGUge1xuICAvKiogVGhlIG11bHRpcGxlIG9mIHRoZSBydW4ncyBtZWRpYW4gY29sbGVjdCBhIGZpbGUgaXMgYWxsb3dlZC4gKi9cbiAgbXVsdGlwbGU6IG51bWJlcjtcbiAgLyoqIFRoZSBsb3dlc3QgdGhlIGNlaWxpbmcgbWF5IGV2ZXIgZmFsbCwgaW4gbXMsIGhvd2V2ZXIgZmFzdCB0aGUgcnVuLiAqL1xuICBmbG9vcjogbnVtYmVyO1xufVxuXG4vKipcbiAqIFRoZSBzaGFwZSBmb3IgYSBgc3JjL3Rlc3RgIGZpbGUuIEZvdXJ0ZWVuIHRpbWVzIHRoZSBtZWRpYW4sIG1lYXN1cmVkIGFnYWluc3RcbiAqIHRoZSBoZWF2aWVzdCBzdWNoIGZpbGVzIOKAlCB0aGUgY29udmVudGlvbiBndWFyZHMgYGZha2UtZGJgIGFuZCBgZXhwZWN0LWdhdGVkYCxcbiAqIHdob3NlIGNvbGxlY3QgbGVnaXRpbWF0ZWx5IHJlYWNoZXMgcm91Z2hseSA2LjLDlyB0aGUgcnVuIG1lZGlhbiDigJQgc28gYSByZWFsIGZpbGVcbiAqIGtlZXBzIGFib3V0IGEgZmFjdG9yIG9mIHR3byBvZiBoZWFkcm9vbS4gVGhlIGZsb29yIGNvdmVycyB0aGUgZm9jdXNlZCBvclxuICogbW9zdGx5LWNhY2hlZCBydW4gd2hvc2UgbWVkaWFuIGlzIHRvbyBzbWFsbCBmb3IgdGhlIG11bHRpcGxlIHRvIG1lYW4gYW55dGhpbmcuXG4gKi9cbmNvbnN0IFRFU1RfRElSX1NIQVBFOiBDZWlsaW5nU2hhcGUgPSB7IG11bHRpcGxlOiAxNCwgZmxvb3I6IDIwMDAgfTtcblxuLyoqXG4gKiBUaGUgc2hhcGUgZm9yIGEgZmlsZSBlbHNld2hlcmUgaW4gdGhlIGFwcC4gTG9vc2VyLCBiZWNhdXNlIGEgcm91dGUgb3IgZGIgdGVzdFxuICogaW1wb3J0cyB0aGUgcmVhbCBoYW5kbGVyIGFuZCBpdHMgd2hvbGUgY2xpZW50IHN0YWNrOiB0aG9zZSBmaWxlcyByZWFjaGVkIGFib3V0XG4gKiA3LjbDlyB0aGUgbWVkaWFuLCBzbyBzZXZlbnRlZW4ga2VlcHMgcm91Z2hseSB0aGUgc2FtZSBoZWFkcm9vbSB0aGUgYHNyYy90ZXN0YFxuICogc2hhcGUgZG9lcy4gVGhlIGZsb29yIGtlZXBzIGEgcnVuIHRvbyBzbWFsbCB0byBwcm9kdWNlIGEgcmVhbCBtZWRpYW4gZnJvbVxuICogcGlubmluZyBhIHJvdXRlIHRlc3QgdG8gYSBjZWlsaW5nIGxvYWQgYWxvbmUgd291bGQgY3Jvc3MuXG4gKi9cbmNvbnN0IEFQUF9TSEFQRTogQ2VpbGluZ1NoYXBlID0geyBtdWx0aXBsZTogMTcsIGZsb29yOiAyNjAwIH07XG5cbi8qKiBUaGUgY2VpbGluZyBzaGFwZSB0aGF0IGFwcGxpZXMgdG8gYSB0ZXN0IGZpbGUsIGJ5IHdoZXJlIGl0IGxpdmVzLiAqL1xuZnVuY3Rpb24gc2hhcGVGb3IoZmlsZTogc3RyaW5nKTogQ2VpbGluZ1NoYXBlIHtcbiAgcmV0dXJuIHByb2plY3RQYXRoKGZpbGUpLnN0YXJ0c1dpdGgoXCJzcmMvdGVzdC9cIikgPyBURVNUX0RJUl9TSEFQRSA6IEFQUF9TSEFQRTtcbn1cblxuLyoqXG4gKiBUaGUgbW9kdWxlcyB3aG9zZSAqaW1wb3J0KiBtdXN0IHN0YXkgbmVhci1mcmVlLCBiZWNhdXNlIHRoZXkgYXJlIHRoZSBzaGFyZWRcbiAqIGluZGV4IGV2ZXJ5IGNvbnZlbnRpb24gZ3VhcmQgcmVhZHMgdGhyb3VnaC4gRWFjaCBpcyBtYXRjaGVkIGJ5IHRoZSB0YWlsIG9mIGFcbiAqIHByb2plY3QtcmVsYXRpdmUgcGF0aCwgc28gdGhlIGFic29sdXRlIHBhdGggVml0ZXN0IHJlcG9ydHMgZG9lcyBub3QgbWF0dGVyLCBhbmRcbiAqIGVhY2ggaXMgYSBrZXkgaW4gYC5mcmVlYnVmZi9jb2xsZWN0LWJ1ZGdldC1iYXNlbGluZXMubWpzYC5cbiAqL1xuZXhwb3J0IGNvbnN0IFRSQUNLRURfSU1QT1JUUyA9IFtcInNyYy90ZXN0L21vZHVsZS1pbmRleC50c1wiLCBcInNyYy90ZXN0L3NvdXJjZS1zY2FuLnRzXCJdO1xuXG4vKiogT25lIGltcG9ydCBvZiBhIHRlc3QgbW9kdWxlLCBhcyBWaXRlc3QgbWVhc3VyZWQgaXQuICovXG5leHBvcnQgaW50ZXJmYWNlIEltcG9ydFRpbWluZyB7XG4gIC8qKiBUaGUgcHJvamVjdC1yZWxhdGl2ZSwgZm9yd2FyZC1zbGFzaGVkIHBhdGggdGhhdCB3YXMgaW1wb3J0ZWQuICovXG4gIHBhdGg6IHN0cmluZztcbiAgLyoqIFRoZSB0aW1lIHRvIGltcG9ydCBpdCBhbmQgZXZlcnl0aGluZyBpdCBpbXBvcnRzLCBpbiBtcy4gKi9cbiAgdG90YWw6IG51bWJlcjtcbn1cblxuLyoqIE9uZSB0ZXN0IG1vZHVsZSdzIGNvbGxlY3Rpb24sIGFzIFZpdGVzdCBtZWFzdXJlZCBpdC4gKi9cbmV4cG9ydCBpbnRlcmZhY2UgTW9kdWxlVGltaW5nIHtcbiAgLyoqIFRoZSBwcm9qZWN0LXJlbGF0aXZlLCBmb3J3YXJkLXNsYXNoZWQgcGF0aCBvZiB0aGUgdGVzdCBmaWxlLiAqL1xuICBmaWxlOiBzdHJpbmc7XG4gIC8qKiBUaGUgdGltZSBWaXRlc3Qgc3BlbnQgY29sbGVjdGluZyB0aGUgZmlsZSwgaW4gbXMuICovXG4gIGNvbGxlY3Q6IG51bWJlcjtcbiAgLyoqIFRoZSBpbXBvcnRzIHRoYXQgY29sbGVjdGlvbiBtYWRlLiAqL1xuICBpbXBvcnRzOiBJbXBvcnRUaW1pbmdbXTtcbn1cblxuLyoqIEEgYnVkZ2V0IGEgbW9kdWxlIGNyb3NzZWQsIGFuZCBieSBob3cgbXVjaC4gKi9cbmV4cG9ydCBpbnRlcmZhY2UgQnVkZ2V0QnJlYWNoIHtcbiAgLyoqIFRoZSB0ZXN0IGZpbGUgdGhhdCBjcm9zc2VkIGl0LiAqL1xuICBmaWxlOiBzdHJpbmc7XG4gIC8qKiBXaGljaCBidWRnZXQgaXQgY3Jvc3NlZC4gKi9cbiAga2luZDogXCJjb2xsZWN0XCIgfCBcImltcG9ydFwiO1xuICAvKiogV2hhdCBpdCBjb3N0LCBpbiBtcy4gKi9cbiAgbXM6IG51bWJlcjtcbiAgLyoqIFRoZSBidWRnZXQgaXQgaGFkIHRvIHN0YXkgdW5kZXIsIGluIG1zLiAqL1xuICBidWRnZXQ6IG51bWJlcjtcbiAgLyoqIFdoYXQgd2FzIGJlaW5nIG1lYXN1cmVkLCBmb3IgdGhlIHJlcG9ydC4gKi9cbiAgZGV0YWlsOiBzdHJpbmc7XG59XG5cbi8qKlxuICogVGhlIGltcG9ydCBidWRnZXQgZm9yIHRoZSB0cmFja2VkIHNjYW5uZXJzOiBhIHJlY29yZGVkIGxvdy13YXRlciBjb3N0IHBlclxuICogbW9kdWxlIGFuZCB0aGUgbWFyZ2luIHRoZSBnYXRlIGtlZXBzIG92ZXIgaXQuXG4gKlxuICogU3BsaXQgb3V0IGZyb20gdGhlIG1vZHVsZSBjb25zdGFudHMgc28gYSB0ZXN0IGNhbiBkcml2ZSB0aGUgYXJpdGhtZXRpYyB3aXRoXG4gKiBmaXh0dXJlcywgdGhlIHdheSBgY29sbGVjdENlaWxpbmdGb3JgIHRha2VzIGl0cyBtZWRpYW4g4oCUIHRoZSBjb21taXR0ZWQgdmFsdWVzXG4gKiBhcmUgb25lIGluc3RhbmNlIG9mIHRoZSBzaGFwZSwgbm90IHRoZSBzaGFwZSBpdHNlbGYuXG4gKi9cbmV4cG9ydCBpbnRlcmZhY2UgSW1wb3J0QnVkZ2V0IHtcbiAgLyoqIEVhY2ggdHJhY2tlZCBtb2R1bGUncyByZWNvcmRlZCBpbXBvcnQgY29zdCwgaW4gbXMuICovXG4gIGJhc2VsaW5lczogUmVhZG9ubHk8UmVjb3JkPHN0cmluZywgbnVtYmVyPj47XG4gIC8qKiBUaGUgbWFyZ2luIHRoZSBidWRnZXQga2VlcHMgb3ZlciBlYWNoIGJhc2VsaW5lLCBpbiBtcy4gKi9cbiAgbWFyZ2luTXM6IG51bWJlcjtcbn1cblxuLyoqXG4gKiBUaGUgY29tbWl0dGVkIGJhc2VsaW5lczogdGhlIHR3byByZWNvcmRlZCBudW1iZXJzIGFuZCB0aGUgZml4ZWQgaW1wb3J0IG1hcmdpbixcbiAqIGV4YWN0bHkgYXMgYC5mcmVlYnVmZi9jb2xsZWN0LWJ1ZGdldC1iYXNlbGluZXMubWpzYCBob2xkcyB0aGVtLlxuICovXG5leHBvcnQgaW50ZXJmYWNlIENvbW1pdHRlZEJhc2VsaW5lcyB7XG4gIC8qKiBUaGUgZml4ZWQgbWFyZ2luIHRoZSBpbXBvcnQgZ2F0ZSBrZWVwcyBvdmVyIGVhY2ggYGltcG9ydEJhc2VsaW5lc2AgZW50cnkuICovXG4gIGltcG9ydE1hcmdpbk1zOiBudW1iZXI7XG4gIC8qKiBUaGUgcmVjb3JkZWQgZnJhY3Rpb24gb2YgYSBjb2xsZWN0IGJ1ZGdldCBhdCB3aGljaCBhIGZpbGUgd2FybnMuICovXG4gIHNvZnRUaHJlc2hvbGQ6IG51bWJlcjtcbiAgLyoqIEVhY2ggdHJhY2tlZCBtb2R1bGUncyByZWNvcmRlZCBsb3ctd2F0ZXIgaW1wb3J0IGNvc3QsIGluIG1zLiAqL1xuICBpbXBvcnRCYXNlbGluZXM6IFJlYWRvbmx5PFJlY29yZDxzdHJpbmcsIG51bWJlcj4+O1xufVxuXG4vKiogVGhlIGJhc2VsaW5lcyByZWFkIGZyb20gdGhlIGNoZWNrZWQtaW4gZmlsZSwgd2hpY2ggdGhlIHJlcG9ydGVyIGVuZm9yY2VzLiAqL1xuZXhwb3J0IGNvbnN0IENPTU1JVFRFRF9CQVNFTElORVM6IENvbW1pdHRlZEJhc2VsaW5lcyA9IHtcbiAgaW1wb3J0TWFyZ2luTXMsXG4gIHNvZnRUaHJlc2hvbGQsXG4gIGltcG9ydEJhc2VsaW5lcyxcbn07XG5cbi8qKiBUaGUgaW1wb3J0IGJ1ZGdldCByZWFkIGZyb20gdGhlIGNoZWNrZWQtaW4gYmFzZWxpbmUgZmlsZS4gKi9cbmV4cG9ydCBjb25zdCBDT01NSVRURURfSU1QT1JUX0JVREdFVDogSW1wb3J0QnVkZ2V0ID0ge1xuICBiYXNlbGluZXM6IENPTU1JVFRFRF9CQVNFTElORVMuaW1wb3J0QmFzZWxpbmVzLFxuICBtYXJnaW5NczogQ09NTUlUVEVEX0JBU0VMSU5FUy5pbXBvcnRNYXJnaW5Ncyxcbn07XG5cbi8qKlxuICogVGhlIGltcG9ydCBidWRnZXQgYSB0cmFja2VkIG1vZHVsZSBoYXMsIGluIG1zLlxuICpcbiAqIEEgbW9kdWxlIHRoZSBiYXNlbGluZSBmaWxlIGRvZXMgbm90IG5hbWUgZ2V0cyB0aGUgbWFyZ2luIGFsb25lOiBhIGJyYW5kLW5ld1xuICogdHJhY2tlZCBzY2FubmVyIHdvdWxkIHN0aWxsIGJlIGhlbGQgdG8gYSBzbWFsbCBudW1iZXIgcmF0aGVyIHRoYW4gbm9uZSwgYW5kIHRoZVxuICogcmVjb3JkZXIgaXMgd2hhdCBnaXZlcyBpdCBhIHJlYWwgYmFzZWxpbmUuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBpbXBvcnRCdWRnZXRGb3IoXG4gIHRyYWNrZWQ6IHN0cmluZyxcbiAgYnVkZ2V0OiBJbXBvcnRCdWRnZXQgPSBDT01NSVRURURfSU1QT1JUX0JVREdFVCxcbik6IG51bWJlciB7XG4gIHJldHVybiAoYnVkZ2V0LmJhc2VsaW5lc1t0cmFja2VkXSA/PyAwKSArIGJ1ZGdldC5tYXJnaW5Ncztcbn1cblxuLyoqXG4gKiBUaGUgcnVuJ3MgbWVkaWFuIGNvbGxlY3QsIGluIG1zIOKAlCB0aGUgbnVtYmVyIGV2ZXJ5IHBlci1maWxlIGNlaWxpbmcgc2NhbGVzXG4gKiBmcm9tLlxuICpcbiAqIFRoZSBtZWRpYW4gcmF0aGVyIHRoYW4gdGhlIG1lYW4gYmVjYXVzZSBpdCBpcyB0aGUgcG9pbnQgYSByZWdyZXNzaW9uIGluIG9uZVxuICogZmlsZSBjYW5ub3QgZHJhZzogYSBzaW5nbGUgZmlsZSB0aGF0IHN0YXJ0cyBlYWdlcmx5IGltcG9ydGluZyB0aGUgd29ybGQgaXMgb25lXG4gKiBzYW1wbGUgb3V0IG9mIG1vcmUgdGhhbiBhIGh1bmRyZWQsIHNvIGl0IG1vdmVzIHRoZSBtZWRpYW4gYnkgbm90aGluZyB3aGlsZSBpdFxuICogbW92ZXMgdGhlIG1lYW4gYnkgaG93ZXZlciBiaWcgaXQgZ290LiBUaGF0IGlzIHdoYXQgbGV0cyBhIGZpbGUgdHJpcCBpdHMgb3duXG4gKiByYXRpbyBidWRnZXQgaW5zdGVhZCBvZiBoaWRpbmcgYmVoaW5kIGEgcmFpc2VkIGF2ZXJhZ2UuXG4gKlxuICogQW4gZW1wdHkgcnVuIGhhcyBubyBtZWRpYW47IHplcm8gaXMgcmV0dXJuZWQgc28gdGhlIHNoYXBlcyBmYWxsIGJhY2sgdG8gdGhlaXJcbiAqIGZsb29ycy5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIG1lZGlhbkNvbGxlY3QobW9kdWxlczogTW9kdWxlVGltaW5nW10pOiBudW1iZXIge1xuICBpZiAobW9kdWxlcy5sZW5ndGggPT09IDApIHJldHVybiAwO1xuICBjb25zdCBzb3J0ZWQgPSBtb2R1bGVzLm1hcCgoZW50cnkpID0+IGVudHJ5LmNvbGxlY3QpLnNvcnQoKGEsIGIpID0+IGEgLSBiKTtcbiAgY29uc3QgbWlkID0gTWF0aC5mbG9vcihzb3J0ZWQubGVuZ3RoIC8gMik7XG4gIC8vIEFuIGV2ZW4gcnVuIGhhcyBubyBzaW5nbGUgbWlkZGxlOiB0aGUgYXZlcmFnZSBvZiB0aGUgdHdvIGlzIHRoZSBtZWRpYW4uXG4gIHJldHVybiBzb3J0ZWQubGVuZ3RoICUgMiA9PT0gMSA/IHNvcnRlZFttaWRdIDogKHNvcnRlZFttaWQgLSAxXSArIHNvcnRlZFttaWRdKSAvIDI7XG59XG5cbi8qKlxuICogVGhlIGNvbGxlY3QgY2VpbGluZyBhIHRlc3QgZmlsZSBoYXMsIGdpdmVuIHRoZSBydW4ncyBtZWRpYW4uXG4gKlxuICogUHVyZSBhbmQgc3luY2hyb25vdXMgc28gZml4dHVyZXMgY2FuIGRyaXZlIGl0OiB0aGUgbXVsdGlwbGUgaXMgY2hvc2VuIHNvIHRoYXRcbiAqIGEgcXVpZXQgcnVuIGFuZCBhIGxvYWRlZCBvbmUgcHV0IHRoZSBzYW1lIGZpbGUgb24gdGhlIHNhbWUgc2lkZSBvZiBpdHMgYnVkZ2V0LlxuICogYG1lZGlhbmAgaXMgdGhyZWFkZWQgaW4gcmF0aGVyIHRoYW4gY29tcHV0ZWQgaGVyZSBzbyB0aGUgcmVwb3J0ZXIgY2FuIGNvbXB1dGVcbiAqIGl0IG9uY2UgZm9yIHRoZSB3aG9sZSBydW4gYW5kIHNvIGEgdGVzdCBjYW4gcGluIHRoZSBhcml0aG1ldGljIHdpdGhvdXQgaGF2aW5nXG4gKiB0byBidWlsZCBhIHdob2xlIHJ1bidzIHdvcnRoIG9mIG1vZHVsZXMuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBjb2xsZWN0Q2VpbGluZ0ZvcihmaWxlOiBzdHJpbmcsIG1lZGlhbjogbnVtYmVyKTogbnVtYmVyIHtcbiAgY29uc3Qgc2hhcGUgPSBzaGFwZUZvcihmaWxlKTtcbiAgcmV0dXJuIE1hdGgubWF4KHNoYXBlLmZsb29yLCBzaGFwZS5tdWx0aXBsZSAqIG1lZGlhbik7XG59XG5cbi8qKlxuICogSG93IG1hbnkgZmlsZXMgdGhlIGVuZC1vZi1ydW4gbm90aWNlIG5hbWVzLiBGaXZlIGlzIGVub3VnaCB0byBzcG90IGEgZmlsZVxuICogdHJlbmRpbmcgdG93YXJkIGl0cyBidWRnZXQgd2l0aG91dCB0dXJuaW5nIGV2ZXJ5IGdyZWVuIHJ1biBpbnRvIGEgcmVwb3J0LlxuICovXG5jb25zdCBTTE9XRVNUX1NIT1dOID0gNTtcblxuLyoqXG4gKiBIb3cgZmFyIGFib3ZlIHRoZSB0aWdodGVzdCBmaWxlIGEgcmVjb3JkaW5nIHJ1biBzYXcgdGhlIHNvZnQgYmFuZCBpcyBrZXB0LCBhcyBhXG4gKiBmcmFjdGlvbiBvZiBhIGJ1ZGdldC5cbiAqXG4gKiBUaGUgcmVjb3JkZWQgYHNvZnRUaHJlc2hvbGRgIGlzIGB0aWdodGVzdCArIHRoaXMgbWFyZ2luYCwgc28gdGhlIGJhbmQgYWx3YXlzXG4gKiBjbGVhcnMgdGhlIHdvcnN0IGZpbGUgdGhlIHJ1biBtZWFzdXJlZCBieSBlbm91Z2ggdGhhdCB0aGUgb3JkaW5hcnkgd29iYmxlIG9mIGFcbiAqIHNoYXJlZCBtYWNoaW5lIGNhbm5vdCB0cmlwIGl0IOKAlCB3aGlsZSBzdGlsbCB0aWdodGVuaW5nIHdoZW5ldmVyIHRoZSB0cmVlJ3Mgb3duXG4gKiB3b3JzdCBjYXNlIGltcHJvdmVzLCBiZWNhdXNlIHRoZSByZWNvcmRlciBsb3dlcnMgdGhlIHRocmVzaG9sZCB3aXRoIGl0LlxuICovXG5jb25zdCBTT0ZUX1RIUkVTSE9MRF9NQVJHSU4gPSAwLjI7XG5cbi8qKlxuICogVGhlIHRpZ2h0ZXN0IHRoZSByZWNvcmRlZCBzb2Z0IGJhbmQgbWF5IGV2ZXIgYmVjb21lLlxuICpcbiAqIFdpdGhvdXQgYSBmbG9vciwgYSBydW4gdGhhdCBmb3VuZCBldmVyeSBmaWxlIGNvbWZvcnRhYmxlIHdvdWxkIGRyaXZlIHRoZVxuICogdGhyZXNob2xkIHRvd2FyZCB6ZXJvIGFuZCB0aGUgd2FybmluZyB3b3VsZCBmaXJlIG9uIG5vaXNlIHJhdGhlciB0aGFuIG9uIGFcbiAqIGNyZWVwLiBBIHRoaXJkIG9mIHRoZSBidWRnZXQgaXMgc3RpbGwgZmFyIGZyb20gdGhlIGhhcmQgZ2F0ZSwgc28gaXQgd2FybnMgd2VsbFxuICogYmVmb3JlIGEgZmlsZSBpcyBpbiBkYW5nZXIuXG4gKlxuICogSXQgaXMgYWxzbyB0aGUgZmxvb3IgdGhlIGJhbmQgaXMgKmp1ZGdlZCogYWdhaW5zdDogYSBydW4gd2hvc2UgdGlnaHRlc3QgZmlsZVxuICogbmV2ZXIgcmVhY2hlZCBpdCBpcyBub3QgY29tcGFyZWQgdG8gdGhlIGJhbmQgYXQgYWxsLCBhbmQgcHVibGlzaGVkIGluIHRoZSBydW5cbiAqIHJlcG9ydCBzbyB0aGUgc3VtbWFyeSBjYW4gc2hvdyB0aGF0IGFzIGEgd29yZCByYXRoZXIgdGhhbiBhIGJvdW5kYXJ5IHRoZSBydW4gaGFkXG4gKiBubyBjaGFuY2UgdG8gY3Jvc3MuXG4gKi9cbmV4cG9ydCBjb25zdCBNSU5fU09GVF9USFJFU0hPTEQgPSAwLjM7XG5cbi8qKiBPbmUgZmlsZSdzIGNvbGxlY3QsIGFnYWluc3QgdGhlIGNlaWxpbmcgaXQgaGFkIHRvIHN0YXkgdW5kZXIuICovXG5leHBvcnQgaW50ZXJmYWNlIENvbGxlY3RSb3cge1xuICAvKiogVGhlIHByb2plY3QtcmVsYXRpdmUgcGF0aCBvZiB0aGUgdGVzdCBmaWxlLiAqL1xuICBmaWxlOiBzdHJpbmc7XG4gIC8qKiBUaGUgdGltZSBWaXRlc3Qgc3BlbnQgY29sbGVjdGluZyBpdCwgaW4gbXMuICovXG4gIGNvbGxlY3Q6IG51bWJlcjtcbiAgLyoqIFRoZSBjZWlsaW5nIGl0IGhhZCB0byBzdGF5IHVuZGVyLCBpbiBtcy4gKi9cbiAgY2VpbGluZzogbnVtYmVyO1xuICAvKiogYGNvbGxlY3QgLyBjZWlsaW5nYCDigJQgd2hlcmUgMS4wIGlzIGEgYnJlYWNoLiAqL1xuICB1c2VkOiBudW1iZXI7XG59XG5cbi8qKiBFdmVyeSBmaWxlJ3MgY29sbGVjdCBhZ2FpbnN0IGl0cyBjZWlsaW5nLCB1bnNvcnRlZC4gKi9cbmZ1bmN0aW9uIGNvbGxlY3RSb3dzKG1vZHVsZXM6IE1vZHVsZVRpbWluZ1tdLCBtZWRpYW46IG51bWJlcik6IENvbGxlY3RSb3dbXSB7XG4gIHJldHVybiBtb2R1bGVzLm1hcCgoZW50cnkpID0+IHtcbiAgICBjb25zdCBjZWlsaW5nID0gY29sbGVjdENlaWxpbmdGb3IoZW50cnkuZmlsZSwgbWVkaWFuKTtcbiAgICByZXR1cm4ge1xuICAgICAgZmlsZTogZW50cnkuZmlsZSxcbiAgICAgIGNvbGxlY3Q6IGVudHJ5LmNvbGxlY3QsXG4gICAgICBjZWlsaW5nLFxuICAgICAgdXNlZDogZW50cnkuY29sbGVjdCAvIGNlaWxpbmcsXG4gICAgfTtcbiAgfSk7XG59XG5cbi8qKiBUaWdodGVzdCBmaXJzdDsgcmF3IG1pbGxpc2Vjb25kcyBicmVhayB0aWVzIHNvIHRoZSBvcmRlciBpcyBzdGFibGUuICovXG5jb25zdCBieVVzZWQgPSAoYTogQ29sbGVjdFJvdywgYjogQ29sbGVjdFJvdyk6IG51bWJlciA9PiBiLnVzZWQgLSBhLnVzZWQgfHwgYi5jb2xsZWN0IC0gYS5jb2xsZWN0O1xuXG4vKipcbiAqIFRoZSB0ZXN0IGZpbGVzIGNsb3Nlc3QgdG8gdGhlaXIgY29sbGVjdCBidWRnZXQsIHRpZ2h0ZXN0IGZpcnN0LlxuICpcbiAqIE9yZGVyZWQgYnkgdGhlIGZyYWN0aW9uIG9mIGl0cyBidWRnZXQgYSBmaWxlIHVzZWQsIG5vdCBieSByYXcgbWlsbGlzZWNvbmRzLFxuICogYmVjYXVzZSB0aGF0IGlzIHRoZSBmb3JtIGEgY3JlZXAgYmVjb21lcyB2aXNpYmxlIGluICpiZWZvcmUqIGl0IGJyZWFjaGVzOiBhXG4gKiBmaWxlIHRoYXQgaGFzIHF1aWV0bHkgZG91YmxlZCBidXQgaXMgc3RpbGwgYSB0aGlyZCBvZiBhIGxvb3NlIGNlaWxpbmcgc2hvd3MgdXBcbiAqIGJlc2lkZSBvbmUgdGhhdCBpcyBuZWFybHkgb3Zlciwgd2hpbGUgYSBmaXhlZCBtaWxsaXNlY29uZCBjdXQgd291bGQga2VlcCBuYW1pbmdcbiAqIHRoZSBzYW1lIGhlYXZ5IHJvdXRlIHRlc3RzIGFuZCBoaWRlIHRoZSBvbmUgdGhhdCBpcyBtb3ZpbmcuIEV4cG9ydGVkIHNvIGFcbiAqIGZpeHR1cmUgY2FuIHBpbiB0aGUgb3JkZXJpbmcgYW5kIHRoZSBhcml0aG1ldGljIOKAlCB0aGUgcmVwb3J0ZXIgY2Fubm90IGJlXG4gKiByZWFjaGVkIGZyb20gYSB0ZXN0LlxuICovXG5leHBvcnQgZnVuY3Rpb24gc2xvd2VzdENvbGxlY3RzKFxuICBtb2R1bGVzOiBNb2R1bGVUaW1pbmdbXSxcbiAgbWVkaWFuOiBudW1iZXIsXG4gIGxpbWl0OiBudW1iZXIgPSBTTE9XRVNUX1NIT1dOLFxuKTogQ29sbGVjdFJvd1tdIHtcbiAgcmV0dXJuIGNvbGxlY3RSb3dzKG1vZHVsZXMsIG1lZGlhbikuc29ydChieVVzZWQpLnNsaWNlKDAsIGxpbWl0KTtcbn1cblxuLyoqXG4gKiBUaGUgZmlsZXMgYXQgb3Igb3ZlciB0aGUgc29mdCB0aHJlc2hvbGQsIHRpZ2h0ZXN0IGZpcnN0IGFuZCBub3QgdHJ1bmNhdGVkLlxuICpcbiAqIFRoZSBzb2Z0IGdhdGUncyBpbnB1dC4gU2VwYXJhdGUgZnJvbSBgY29sbGVjdEJ1ZGdldEJyZWFjaGVzYCBvbiBwdXJwb3NlOlxuICogY3Jvc3NpbmcgaXQgZG9lcyBub3QgZmFpbCB0aGUgcnVuLCBpdCB3YXJucyDigJQgYW5kIHRoZSByZXBvcnRlciBsZWF2ZXMgdGhlIHNhbWVcbiAqIGxpc3Qgd2hlcmUgdGhlIENJIHJ1bm5lciByZWFkcyBpdCwgc28gdGhlIHdhcm5pbmcgYmVjb21lcyBhIEdpdEh1YiBhbm5vdGF0aW9uXG4gKiByYXRoZXIgdGhhbiBhIGxpbmUgbm9ib2R5IHNlZXMuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBzb2Z0V2FybmluZ3MoXG4gIG1vZHVsZXM6IE1vZHVsZVRpbWluZ1tdLFxuICBtZWRpYW46IG51bWJlcixcbiAgdGhyZXNob2xkOiBudW1iZXIgPSBDT01NSVRURURfQkFTRUxJTkVTLnNvZnRUaHJlc2hvbGQsXG4pOiBDb2xsZWN0Um93W10ge1xuICByZXR1cm4gY29sbGVjdFJvd3MobW9kdWxlcywgbWVkaWFuKVxuICAgIC5maWx0ZXIoKHJvdykgPT4gcm93LnVzZWQgPj0gdGhyZXNob2xkKVxuICAgIC5zb3J0KGJ5VXNlZCk7XG59XG5cbi8qKlxuICogVGhlIHRpZ2h0ZXN0IGZpbGUgaW4gYSBydW4sIGFzIGEgZnJhY3Rpb24gb2YgaXRzIGJ1ZGdldC5cbiAqXG4gKiBUaGUgcXVhbnRpdHkgdGhlIHJlY29yZGVyIGxvd2VycyB0aGUgc29mdCB0aHJlc2hvbGQgZnJvbTogdGhlIGxhcmdlc3QgYHVzZWRgXG4gKiBhbnkgZmlsZSByZWFjaGVkLiBaZXJvIGZvciBhbiBlbXB0eSBydW4sIHNvIHRoZSB0aHJlc2hvbGQgY2Fubm90IG1vdmUgb24gb25lLlxuICovXG5leHBvcnQgZnVuY3Rpb24gd29yc3RVc2VkKG1vZHVsZXM6IE1vZHVsZVRpbWluZ1tdLCBtZWRpYW46IG51bWJlcik6IG51bWJlciB7XG4gIHJldHVybiBjb2xsZWN0Um93cyhtb2R1bGVzLCBtZWRpYW4pLnJlZHVjZSgod29yc3QsIHJvdykgPT4gTWF0aC5tYXgod29yc3QsIHJvdy51c2VkKSwgMCk7XG59XG5cbi8qKlxuICogVGhlIHNvZnQgdGhyZXNob2xkIGEgcnVuJ3MgaGVhZHJvb20gZWFybnM6IG5ldmVyIGFib3ZlIHRoZSBjdXJyZW50IG9uZSwgYW5kXG4gKiBuZXZlciBiZWxvdyB0aGUgZmxvb3IuXG4gKlxuICogVGhpcyBpcyB3aGF0IGxldHMgdGhlIGJhbmQgdGlnaHRlbiBvbiBpdHMgb3duLiBBIHJlY29yZGluZyBydW4gbWVhc3VyZXMgaXRzIG93blxuICogdGlnaHRlc3QgZmlsZSBhbmQgcHJvcG9zZXMgYSBiYW5kIGEgbWFyZ2luIGFib3ZlIGl0OyBgTWF0aC5taW5gIGtlZXBzIHRoYXRcbiAqIHByb3Bvc2FsIGZyb20gZXZlciAqcmFpc2luZyogdGhlIHRocmVzaG9sZCwgc28gYSBidXN5IHJ1biBjYW5ub3QgbG9vc2VuIGEgYmFuZCBhXG4gKiBxdWlldCBvbmUgYWxyZWFkeSB0aWdodGVuZWQsIGFuZCBgTWF0aC5tYXhgIGtlZXBzIGl0IGZyb20gY29sbGFwc2luZyB0byB6ZXJvLlxuICpcbiAqIFRoZSBwcm9wb3NhbCBpcyByb3VuZGVkIHRvIHR3byBkZWNpbWFscyDigJQgYSBmcmFjdGlvbiBvZiBhIGJ1ZGdldCBpcyBub3Qgd29ydGhcbiAqIG1vcmUsIGFuZCBhbiB1bnJvdW5kZWQgYHRpZ2h0ZXN0ICsgbWFyZ2luYCB3b3VsZCB3cml0ZSBhIGRpZmZlcmVudCBub2lzZSB0YWlsXG4gKiBpbnRvIHRoZSBjb21taXR0ZWQgZmlsZSBvbiBldmVyeSBydW4uXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBuZXh0U29mdFRocmVzaG9sZChcbiAgY3VycmVudDogbnVtYmVyLFxuICB0aWdodGVzdDogbnVtYmVyLFxuICBtYXJnaW46IG51bWJlciA9IFNPRlRfVEhSRVNIT0xEX01BUkdJTixcbik6IG51bWJlciB7XG4gIGNvbnN0IHByb3Bvc2VkID0gTWF0aC5yb3VuZCgodGlnaHRlc3QgKyBtYXJnaW4pICogMTAwKSAvIDEwMDtcbiAgcmV0dXJuIE1hdGgubWF4KE1JTl9TT0ZUX1RIUkVTSE9MRCwgTWF0aC5taW4oY3VycmVudCwgcHJvcG9zZWQpKTtcbn1cblxuLyoqXG4gKiBUaGUgZGVhcmVzdCBpbXBvcnQgb2Ygb25lIHRyYWNrZWQgbW9kdWxlIGluIGEgZmlsZSwgaW4gbXMuXG4gKlxuICogQSBmaWxlIGNhbiBpbXBvcnQgYSB0cmFja2VkIHNjYW5uZXIgdGhyb3VnaCBzZXZlcmFsIHNwZWNpZmllcnMsIHNvIHRoZSBkZWFyZXN0XG4gKiBvbmUgaXMgd2hhdCBpdCBhY3R1YWxseSBwYWlkOyB6ZXJvIG1lYW5zIHRoZSBmaWxlIG5ldmVyIGltcG9ydGVkIGl0LlxuICovXG5mdW5jdGlvbiBkZWFyZXN0SW1wb3J0KGVudHJ5OiBNb2R1bGVUaW1pbmcsIHRyYWNrZWQ6IHN0cmluZyk6IG51bWJlciB7XG4gIGxldCBjb3N0ID0gMDtcbiAgZm9yIChjb25zdCBpbXBvcnRlZCBvZiBlbnRyeS5pbXBvcnRzKSB7XG4gICAgaWYgKGltcG9ydGVkLnBhdGggIT09IHRyYWNrZWQgJiYgIWltcG9ydGVkLnBhdGguZW5kc1dpdGgoYC8ke3RyYWNrZWR9YCkpIGNvbnRpbnVlO1xuICAgIGNvc3QgPSBNYXRoLm1heChjb3N0LCBpbXBvcnRlZC50b3RhbCk7XG4gIH1cbiAgcmV0dXJuIGNvc3Q7XG59XG5cbi8qKlxuICogRXZlcnkgYnVkZ2V0IHRoZSBtb2R1bGVzIGNyb3NzZWQsIGluIG5vIHBhcnRpY3VsYXIgb3JkZXIuXG4gKlxuICogU3BsaXQgb3V0IGZyb20gdGhlIHJlcG9ydGVyIHNvIGl0IGNhbiBiZSBkcml2ZW4gYnkgZml4dHVyZXM6IGEgYnVkZ2V0IGNoZWNrXG4gKiB0aGF0IGhhcyBvbmx5IGV2ZXIgc2VlbiBhIGdyZWVuIHRyZWUgaGFzIG5vdCBiZWVuIHNob3duIHRvIGRvIGFueXRoaW5nLCBhbmRcbiAqIHRoZSByZXBvcnRlciBpdHNlbGYgY2Fubm90IGJlIHJlYWNoZWQgZnJvbSBhIHRlc3QuIEJvdGggdGhlIG1lZGlhbiBhbmQgdGhlXG4gKiBpbXBvcnQgYnVkZ2V0IGRlZmF1bHQgdG8gdGhlIHJ1bidzIG93biBhbmQgdGhlIGNvbW1pdHRlZCBmaWxlLCBzbyBhIGNhbGxlciB3aXRoXG4gKiBubyByZWFzb24gdG8gY29tcHV0ZSB0aGVtIHNlcGFyYXRlbHkgY2FuIHBhc3MganVzdCB0aGUgbW9kdWxlcy5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGNvbGxlY3RCdWRnZXRCcmVhY2hlcyhcbiAgbW9kdWxlczogTW9kdWxlVGltaW5nW10sXG4gIG1lZGlhbjogbnVtYmVyID0gbWVkaWFuQ29sbGVjdChtb2R1bGVzKSxcbiAgaW1wb3J0QnVkZ2V0OiBJbXBvcnRCdWRnZXQgPSBDT01NSVRURURfSU1QT1JUX0JVREdFVCxcbik6IEJ1ZGdldEJyZWFjaFtdIHtcbiAgY29uc3QgYnJlYWNoZXM6IEJ1ZGdldEJyZWFjaFtdID0gW107XG4gIGZvciAoY29uc3QgZW50cnkgb2YgbW9kdWxlcykge1xuICAgIGNvbnN0IGNlaWxpbmcgPSBjb2xsZWN0Q2VpbGluZ0ZvcihlbnRyeS5maWxlLCBtZWRpYW4pO1xuICAgIGlmIChlbnRyeS5jb2xsZWN0ID4gY2VpbGluZykge1xuICAgICAgYnJlYWNoZXMucHVzaCh7XG4gICAgICAgIGZpbGU6IGVudHJ5LmZpbGUsXG4gICAgICAgIGtpbmQ6IFwiY29sbGVjdFwiLFxuICAgICAgICBtczogZW50cnkuY29sbGVjdCxcbiAgICAgICAgYnVkZ2V0OiBjZWlsaW5nLFxuICAgICAgICBkZXRhaWw6IFwiY29sbGVjdGluZyB0aGUgZmlsZVwiLFxuICAgICAgfSk7XG4gICAgfVxuXG4gICAgZm9yIChjb25zdCB0cmFja2VkIG9mIFRSQUNLRURfSU1QT1JUUykge1xuICAgICAgY29uc3QgY29zdCA9IGRlYXJlc3RJbXBvcnQoZW50cnksIHRyYWNrZWQpO1xuICAgICAgY29uc3QgYnVkZ2V0ID0gaW1wb3J0QnVkZ2V0Rm9yKHRyYWNrZWQsIGltcG9ydEJ1ZGdldCk7XG4gICAgICBpZiAoY29zdCA+IGJ1ZGdldCkge1xuICAgICAgICBicmVhY2hlcy5wdXNoKHtcbiAgICAgICAgICBmaWxlOiBlbnRyeS5maWxlLFxuICAgICAgICAgIGtpbmQ6IFwiaW1wb3J0XCIsXG4gICAgICAgICAgbXM6IGNvc3QsXG4gICAgICAgICAgYnVkZ2V0LFxuICAgICAgICAgIGRldGFpbDogYGltcG9ydGluZyAke3RyYWNrZWR9YCxcbiAgICAgICAgfSk7XG4gICAgICB9XG4gICAgfVxuICB9XG5cbiAgLy8gQSBzdGFsZS1oaWdoIGJhc2VsaW5lIGlzIGRlbGliZXJhdGVseSAqbm90KiBhIGJyZWFjaC4gSXQgaXMgdGhlIHJldmVyc2Ugb2YgYVxuICAvLyBidWRnZXQgYmVpbmcgY3Jvc3NlZCDigJQgdGhlIGdhdGUgaXMgbG9vc2VyIHRoYW4gdGhlIHRyZWUgbmVlZHMsIG5vdCB0aWdodGVyIOKAlFxuICAvLyBhbmQgb25lIHJ1biBpcyBvbmUgbm9pc3kgc2FtcGxlIG9mIGEgd2FsbC1jbG9jayBxdWFudGl0eSwgc28gYSBzaW5nbGUgcmVhZGluZ1xuICAvLyBpcyBub3QgZXZpZGVuY2UgZW5vdWdoIHRvIGZhaWwgYSBidWlsZCBvbi4gV2hhdCBub3RpY2VzIGl0IGlzXG4gIC8vIGBzdGFsZUhpZ2hCYXNlbGluZXNgIGJlbG93LCByZXBvcnRlZCBhcyBhIHdhcm5pbmcgaGVyZSBhbmQganVkZ2VkIGFjcm9zcyBhXG4gIC8vIHJlcGVhdGVkIHNlc3Npb24gYnkgYG5wbSBydW4gY29sbGVjdDpzdGFsZWAuXG4gIHJldHVybiBicmVhY2hlcztcbn1cblxuLyoqXG4gKiBUaGUgZGVhcmVzdCBpbXBvcnQgb2YgZWFjaCB0cmFja2VkIG1vZHVsZSBhY3Jvc3MgdGhlIHJ1biwgaW4gbXMuXG4gKlxuICogVGhlIHF1YW50aXR5IHRoZSByZWNvcmRlciBsb3dlcnMgYSBiYXNlbGluZSB0bzogdGhlIHdvcnN0IGEgZmlsZSBhY3R1YWxseSBwYWlkXG4gKiB0byBpbXBvcnQgdGhlIG1vZHVsZSwgbWF4aW1pemVkIGFjcm9zcyBmaWxlcyBzbyBvbmUgZmFzdCBpbXBvcnQgY2Fubm90IGhpZGUgYVxuICogc2xvdyBvbmUuIEEgbW9kdWxlIG5vIGZpbGUgaW1wb3J0ZWQgaXMgbGVmdCBvdXQgcmF0aGVyIHRoYW4gcmVjb3JkZWQgYXQgemVybyxcbiAqIHNvIGEgcmVuYW1lIGNhbm5vdCBxdWlldGx5IGRyb3AgaXQgZnJvbSB0aGUgYmFzZWxpbmUuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBtZWFzdXJlZEltcG9ydENvc3RzKG1vZHVsZXM6IE1vZHVsZVRpbWluZ1tdKTogUmVjb3JkPHN0cmluZywgbnVtYmVyPiB7XG4gIGNvbnN0IGNvc3RzOiBSZWNvcmQ8c3RyaW5nLCBudW1iZXI+ID0ge307XG4gIGZvciAoY29uc3QgZW50cnkgb2YgbW9kdWxlcykge1xuICAgIGZvciAoY29uc3QgdHJhY2tlZCBvZiBUUkFDS0VEX0lNUE9SVFMpIHtcbiAgICAgIGNvbnN0IGNvc3QgPSBkZWFyZXN0SW1wb3J0KGVudHJ5LCB0cmFja2VkKTtcbiAgICAgIGlmIChjb3N0ID4gMCkgY29zdHNbdHJhY2tlZF0gPSBNYXRoLm1heChjb3N0c1t0cmFja2VkXSA/PyAwLCBjb3N0KTtcbiAgICB9XG4gIH1cbiAgcmV0dXJuIGNvc3RzO1xufVxuXG4vKipcbiAqIEhvdyBtYW55IHRpbWVzIHRoZSBtZWFzdXJlZCBjb3N0IGEgcmVjb3JkZWQgYmFzZWxpbmUgbWF5IHNpdCBhYm92ZSBiZWZvcmUgaXQgaXNcbiAqIGNhbGxlZCBzdGFsZS5cbiAqXG4gKiBBIHJhdGlvIHJhdGhlciB0aGFuIGEgZml4ZWQgbnVtYmVyIHNvIHRoZSBjaGVjayBtZWFucyB0aGUgc2FtZSB0aGluZyB3aGVuIGFcbiAqIHNjYW5uZXIgZ2V0cyBzbG93ZXI6IHRoZSBiYXNlbGluZSBzaG91bGQgYmUgKm5lYXIqIHdoYXQgdGhlIHRyZWUgcGF5cywgbm90IGFcbiAqIG11bHRpcGxlIG9mIGl0LlxuICovXG5jb25zdCBTVEFMRV9CQVNFTElORV9GQUNUT1IgPSA0O1xuXG4vKipcbiAqIFRoZSBhYnNvbHV0ZSBjbGVhcmFuY2UgYmVsb3cgd2hpY2ggYSBiYXNlbGluZSBpcyBuZXZlciBjYWxsZWQgc3RhbGUsIGluIG1zLlxuICpcbiAqIFRoaXMgaXMgdGhlIHBhcnQgdGhhdCBrZWVwcyB0aGUgY2hlY2sgZnJvbSBmbGFraW5nLiBBIGJhc2VsaW5lIGlzIGNvbXBhcmVkXG4gKiBhZ2FpbnN0IG9uZSBydW4ncyBtZWFzdXJlbWVudCwgYW5kIG9uZSBydW4gaXMgb25lIG5vaXN5IHNhbXBsZSBvbiBhIHNoYXJlZFxuICogbWFjaGluZSDigJQgYSBmb2N1c2VkIHJ1biBvciBhIHdhcm0gY2FjaGUgY2FuIHB1dCBhbiBpbXBvcnQgYXQgYSBmcmFjdGlvbiBvZiBhXG4gKiBtaWxsaXNlY29uZC4gVGVuIG1pbGxpc2Vjb25kcyBpcyB3ZWxsIHBhc3QgYW55dGhpbmcgdGhhdCB3b2JibGUgcHJvZHVjZXMgYXRcbiAqIHRoZXNlIG1hZ25pdHVkZXMsIHNvIHRoZSBjaGVjayBmaXJlcyBvbiBhICpncm9zcyogbG9vc2VuaW5nIGFuZCBzdGF5cyBxdWlldFxuICogYWJvdXQgdGhlIGZldyBtaWxsaXNlY29uZHMgdGhhdCBhcmUgZ2VudWluZWx5IGltbWF0ZXJpYWwgYWdhaW5zdCBhIDUwbXMgbWFyZ2luLlxuICogTWljcm8tZHJpZnQgaXMgYG5wbSBydW4gY29sbGVjdDpwcm9wb3NlYCdzIGJ1c2luZXNzLCBub3QgdGhpcyBnYXRlJ3MuXG4gKi9cbmNvbnN0IFNUQUxFX0JBU0VMSU5FX0ZMT09SX01TID0gMTA7XG5cbi8qKiBUaGUgc2l6ZSBhIHJlY29yZGVkIGJhc2VsaW5lIHdvdWxkIGhhdmUgdG8gZXhjZWVkIHRvIGJlIHN0YWxlLCBpbiBtcy4gKi9cbmZ1bmN0aW9uIHN0YWxlVGhyZXNob2xkKG1lYXN1cmVkOiBudW1iZXIpOiBudW1iZXIge1xuICByZXR1cm4gTWF0aC5tYXgobWVhc3VyZWQgKiBTVEFMRV9CQVNFTElORV9GQUNUT1IsIFNUQUxFX0JBU0VMSU5FX0ZMT09SX01TKTtcbn1cblxuLyoqXG4gKiBXaGV0aGVyIGEgcmVjb3JkZWQgYmFzZWxpbmUgaGFzIGdvbmUgc3RhbGUgYWdhaW5zdCB3aGF0IHRoaXMgcnVuIG1lYXN1cmVkLlxuICpcbiAqIFRoZSByYXRjaGV0IGxvd2VycyBhIGJhc2VsaW5lIGEgcnVuIGJlYXRzIGFuZCBuZXZlciByYWlzZXMgb25lLCB3aGljaCBpcyB3aGF0XG4gKiBtYWtlcyBpdCBzYWZlIHRvIHJ1biB1bmF0dGVuZGVkIOKAlCBidXQgaXQgYWxzbyBtZWFucyBhIG51bWJlciB0aGF0IGlzIHRvbyAqaGlnaCpcbiAqIGhhcyBub3RoaW5nIHB1c2hpbmcgaXQgZG93bi4gQSBiYXNlbGluZSByYWlzZWQgYnkgaGFuZCB0byBzaWxlbmNlIGEgYnJlYWNoLCBvclxuICogcmVjb3JkZWQgb24gdGhlIG9uZSBkYXkgYSBzY2FubmVyIHdhcyBzbG93LCB3b3VsZCBrZWVwIHRoZSBnYXRlIGxvb3NlciB0aGFuIHRoZVxuICogdHJlZSBuZWVkcyBmb3IgYXMgbG9uZyBhcyBub2JvZHkgbG9va3MuIFRoaXMgaXMgdGhlIGRpcmVjdGlvbiB0aGUgcmVjb3JkZXJcbiAqIGNhbm5vdCBjb3JyZWN0IG9uIGl0cyBvd24sIHNvIGl0IGlzIHRoZSBkaXJlY3Rpb24gdGhhdCBoYXMgdG8gYmUgKnJlcG9ydGVkKi5cbiAqXG4gKiBBIG1vZHVsZSB0aGUgcnVuIG5ldmVyIGltcG9ydGVkIGlzIG5vdCBqdWRnZWQ6IG5vIG1lYXN1cmVtZW50IGlzIG5vdCBhXG4gKiBtZWFzdXJlbWVudCBvZiB6ZXJvLlxuICovXG5leHBvcnQgZnVuY3Rpb24gc3RhbGVCYXNlbGluZShyZWNvcmRlZDogbnVtYmVyLCBtZWFzdXJlZDogbnVtYmVyKTogYm9vbGVhbiB7XG4gIHJldHVybiByZWNvcmRlZCA+IHN0YWxlVGhyZXNob2xkKG1lYXN1cmVkKTtcbn1cblxuLyoqXG4gKiBUaGUgY29zdCBlYWNoIHJlY29yZGVkIGJhc2VsaW5lIHdvdWxkIGJlIGNhbGxlZCBsb29zZSBwYXN0LCBrZXllZCBieSB0cmFja2VkIG1vZHVsZS5cbiAqXG4gKiBUaGUgcGVyLWltcG9ydCBoYWxmIG9mIHRoZSBib3VuZGFyaWVzIHRoZSBydW4gcmVwb3J0IHB1Ymxpc2hlcywgYnVpbHQgd2l0aCB0aGUgdmVyeVxuICogYHN0YWxlVGhyZXNob2xkYCB0aGUgY2hlY2sgY2FsbHM6IGEgYmFzZWxpbmUgaXMgc3RhbGUgb25jZSB0aGUgcmVjb3JkZWQgdmFsdWUgc2l0c1xuICogYWJvdmUgdGhlIHJldHVybmVkIG51bWJlciwgc28gdGhlIHJ1biBzdW1tYXJ5IGNhbiBwcmludCB0aGUgYm91bmRhcnkgdGhhdCBqdWRnZWQgYVxuICogYmFzZWxpbmUgaW5zdGVhZCBvZiBhIHNjcmlwdCByZXN0YXRpbmcgdGhlIHJ1bGUuIEl0IGlzIGEgZnVuY3Rpb24gb2YgdGhlICptZWFzdXJlbWVudCpcbiAqIHJhdGhlciB0aGFuIG9mIHRoZSByZWNvcmRlZCB2YWx1ZSwgd2hpY2ggaXMgd2h5IGl0IGlzIGJ1aWx0IHBlciBtb2R1bGUgaGVyZSByYXRoZXJcbiAqIHRoYW4gYXMgb25lIG51bWJlci4gQSBtb2R1bGUgdGhlIHJ1biBkaWQgbm90IGltcG9ydCBpcyBhYnNlbnQsIGFzIGl0IGlzIGZyb21cbiAqIGBtZWFzdXJlZGAg4oCUIG5vIG1lYXN1cmVtZW50IGlzIG5vdCBhIG1lYXN1cmVtZW50IG9mIHplcm8uXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBpbXBvcnRTdGFsZVRocmVzaG9sZHMoXG4gIG1lYXN1cmVkOiBSZWFkb25seTxSZWNvcmQ8c3RyaW5nLCBudW1iZXI+Pixcbik6IFJlY29yZDxzdHJpbmcsIG51bWJlcj4ge1xuICByZXR1cm4gT2JqZWN0LmZyb21FbnRyaWVzKFxuICAgIE9iamVjdC5lbnRyaWVzKG1lYXN1cmVkKS5tYXAoKFt0cmFja2VkLCBjb3N0XSkgPT4gW3RyYWNrZWQsIHN0YWxlVGhyZXNob2xkKGNvc3QpXSksXG4gICk7XG59XG5cbi8qKiBBIHJlY29yZGVkIGdhdGUgdGhhdCBzaXRzIGZhciBhYm92ZSB3aGF0IGEgcnVuIOKAlCBvciBhIHNlc3Npb24g4oCUIG1lYXN1cmVkLiAqL1xuZXhwb3J0IGludGVyZmFjZSBTdGFsZUdhdGUge1xuICAvKiogV2hpY2ggcmVjb3JkZWQgdmFsdWUgaXQgaXM6IGEgc2Nhbm5lcidzIGltcG9ydCBjb3N0LCBvciB0aGUgd2FybmluZyBiYW5kLiAqL1xuICBraW5kOiBcImltcG9ydFwiIHwgXCJiYW5kXCI7XG4gIC8qKiBUaGUgdmFsdWUncyBuYW1lOiBhIHRyYWNrZWQgbW9kdWxlJ3MgcGF0aCwgb3IgYHNvZnRUaHJlc2hvbGRgLiAqL1xuICBuYW1lOiBzdHJpbmc7XG4gIC8qKlxuICAgKiBXaGF0IHRoZSBjb21taXR0ZWQgZmlsZSByZWNvcmRzLCBpbiB0aGlzIGdhdGUncyBvd24gdW5pdCDigJQgbXMgZm9yIGFuIGltcG9ydCxcbiAgICogYSBmcmFjdGlvbiBvZiBhIGNvbGxlY3QgYnVkZ2V0IGZvciB0aGUgYmFuZC5cbiAgICovXG4gIHJlY29yZGVkOiBudW1iZXI7XG4gIC8qKiBXaGF0IHRoZSBtZWFzdXJlbWVudCBzYXcsIGluIHRoZSBzYW1lIHVuaXQuICovXG4gIG1lYXN1cmVkOiBudW1iZXI7XG59XG5cbi8qKlxuICogVGhlIHJlY29yZGVkIGltcG9ydCBiYXNlbGluZXMgdGhhdCBhcmUgc3RhbGUtaGlnaCBhZ2FpbnN0IGEgbWVhc3VyZW1lbnQuXG4gKlxuICogVGhlIG9uZSBwbGFjZSB0aGUgaW1wb3J0IHByZWRpY2F0ZSBpcyBhcHBsaWVkIHRvIGEgd2hvbGUgc2V0IG9mIGJhc2VsaW5lcywgc28gdGhlXG4gKiB3YXJuaW5nIGEgc2luZ2xlIHJ1biBsZWF2ZXMsIHRoZSByZXBlYXRlZCBzZXNzaW9uJ3MgcmVwb3J0IGFuZCB0aGUgc3RhbGUgY2FsbG91dFxuICogaW4gYSBwcm9wb3NhbCBjYW5ub3QgY29tZSB0byBkaXNhZ3JlZSBhYm91dCB3aGljaCBtb2R1bGUgaXMgbG9vc2UuXG4gKlxuICogYG1lYXN1cmVkYCBpcyB0aGUgZGVhcmVzdCByZWFkaW5nIGVhY2ggdHJhY2tlZCBtb2R1bGUgcHJvZHVjZWQg4oCUIGFjcm9zcyB0aGUgcnVuJ3NcbiAqIGZpbGVzLCBvciBhY3Jvc3MgYSBzZXNzaW9uJ3Mgc2FtcGxlcy4gSnVkZ2luZyBhZ2FpbnN0IHRoZSBkZWFyZXN0IGlzIHdoYXQgbWFrZXNcbiAqIHRoZSBhbnN3ZXIgXCJldmVyeSBtZWFzdXJlbWVudCBhZ3JlZWRcIjogdGhlIHRocmVzaG9sZCByaXNlcyB3aXRoIHRoZSBtZWFzdXJlbWVudCxcbiAqIHNvIGEgYmFzZWxpbmUgdGhhdCBpcyBzdGFsZSBhZ2FpbnN0IHRoZSBsYXJnZXN0IHJlYWRpbmcgaXMgc3RhbGUgYWdhaW5zdCBhbGwgb2ZcbiAqIHRoZW0sIGFuZCBvbmUgY2hlYXAgc2FtcGxlIGNhbiBuZXZlciBiZSB3aGF0IGNvbmRlbW5zIGEgZ2F0ZS5cbiAqXG4gKiBBIG1vZHVsZSB0aGUgbWVhc3VyZW1lbnQgbmV2ZXIgbWVudGlvbnMgaXMgbm90IGp1ZGdlZDogbm8gbWVhc3VyZW1lbnQgaXMgbm90IGFcbiAqIG1lYXN1cmVtZW50IG9mIHplcm8sIGFuZCBhIHJlbmFtZSBtdXN0IG5vdCBxdWlldGx5IGRyb3AgYSBiYXNlbGluZSBmcm9tIHRoZVxuICogY2hlY2suXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBzdGFsZUhpZ2hCYXNlbGluZXMoXG4gIHJlY29yZGVkOiBSZWFkb25seTxSZWNvcmQ8c3RyaW5nLCBudW1iZXI+PixcbiAgbWVhc3VyZWQ6IFJlYWRvbmx5PFJlY29yZDxzdHJpbmcsIG51bWJlcj4+LFxuKTogU3RhbGVHYXRlW10ge1xuICBjb25zdCBzdGFsZTogU3RhbGVHYXRlW10gPSBbXTtcbiAgZm9yIChjb25zdCB0cmFja2VkIG9mIFRSQUNLRURfSU1QT1JUUykge1xuICAgIGNvbnN0IHdhcyA9IHJlY29yZGVkW3RyYWNrZWRdO1xuICAgIGNvbnN0IGNvc3QgPSBtZWFzdXJlZFt0cmFja2VkXTtcbiAgICBpZiAod2FzID09PSB1bmRlZmluZWQgfHwgY29zdCA9PT0gdW5kZWZpbmVkKSBjb250aW51ZTtcbiAgICBpZiAoIXN0YWxlQmFzZWxpbmUod2FzLCBjb3N0KSkgY29udGludWU7XG4gICAgc3RhbGUucHVzaCh7IGtpbmQ6IFwiaW1wb3J0XCIsIG5hbWU6IHRyYWNrZWQsIHJlY29yZGVkOiB3YXMsIG1lYXN1cmVkOiBjb3N0IH0pO1xuICB9XG4gIHJldHVybiBzdGFsZTtcbn1cblxuLyoqXG4gKiBUaGUgY2xlYXJhbmNlIGJlbG93IHdoaWNoIHRoZSB3YXJuaW5nIGJhbmQgaXMgbmV2ZXIgY2FsbGVkIHRvbyBsb29zZSwgYXMgYVxuICogZnJhY3Rpb24gb2YgYSBjb2xsZWN0IGJ1ZGdldC5cbiAqXG4gKiBBZGRpdGl2ZSB3aGVyZSB0aGUgaW1wb3J0IGNoZWNrJ3MgaXMgYSBmYWN0b3IsIGJlY2F1c2UgYSBmcmFjdGlvbiBpcyBib3VuZGVkOlxuICogZm91ciB0aW1lcyBhIHRpZ2h0ZXN0IGZpbGUgb2YgMC4zIGlzIG1vcmUgdGhhbiB0aGUgd2hvbGUgYnVkZ2V0LCBzbyBhIHJhdGlvIGhlcmVcbiAqIHdvdWxkIG5ldmVyIGZpcmUgYXQgYWxsLiBXaGF0IG1hdHRlcnMgaXMgaG93IG11Y2ggb2YgYSBidWRnZXQgdGhlIGJhbmQgc2l0cyBhYm92ZVxuICogdGhlIHRpZ2h0ZXN0IGZpbGUgYSBydW4gc2F3IOKAlCBhIGJhbmQgdGhhdCB3YXJucyBhdCA5MCUgb2YgYSBidWRnZXQgd2hpbGUgdGhlXG4gKiB0cmVlJ3Mgd29yc3QgZmlsZSB1c2VzIGEgdGhpcmQgaXMgbm90IHdhcm5pbmcgYW55b25lIG9mIGFueXRoaW5nLlxuICpcbiAqIENhbGlicmF0ZWQgYWdhaW5zdCByZWFsIGZ1bGwtc3VpdGUgcnVucywgd2hvc2UgdGlnaHRlc3QgZmlsZSBsYW5kcyBhbnl3aGVyZSBmcm9tXG4gKiAwLjM0IHRvIDAuNTIgb2YgaXRzIGJ1ZGdldCBkZXBlbmRpbmcgb24gaG93IGxvYWRlZCB0aGUgbWFjaGluZSBpczogdGhlIGNvbW1pdHRlZFxuICogYmFuZCBpcyB0aGVuIDAgdG8gMC4wOCBhYm92ZSB3aGF0IHRoZSByZWNvcmRlciB3b3VsZCBzZXQgaXQgdG8sIHdoaWxlIGEgYmFuZFxuICogcmFpc2VkIGJ5IGhhbmQgdG8gMC45IGlzIDAuMTggdG8gMC4zNiBhYm92ZSBpdC4gRmlmdGVlbiBwb2ludHMgb2YgYSBidWRnZXQgY2xlYXJzXG4gKiB0aGF0IGdhcCwgYW5kIOKAlCBiZWNhdXNlIHRoZSBiYW5kIGlzIG9ubHkganVkZ2VkIGFnYWluc3QgYSBydW4gdGhhdCBnb3Qgd2l0aGluXG4gKiBgTUlOX1NPRlRfVEhSRVNIT0xEYCBvZiBhIGJ1ZGdldCDigJQgaXQgaXMgYWxzbyBtb3JlIHRoYW4gdGhlIGNvbW1pdHRlZCBiYW5kIGNhblxuICogZXZlciBiZSBtb3ZlZCwgc28gbWFjaGluZSBzcGVlZCBhbmQgbG9hZCBhbG9uZSBjYW4gbmV2ZXIgZmFpbCBpdC5cbiAqL1xuY29uc3QgU1RBTEVfQkFORF9DTEVBUkFOQ0UgPSAwLjE1O1xuXG4vKipcbiAqIFRoZSBoZWFkcm9vbSBvdmVyIHRoZSB0aWdodGVzdCBmaWxlIHBhc3Qgd2hpY2ggdGhlIHdhcm5pbmcgYmFuZCBpcyBjYWxsZWQgc3RhbGUsXG4gKiBhcyBhIGZyYWN0aW9uIG9mIGEgYnVkZ2V0LlxuICpcbiAqIFRoZSBib3VuZGFyeSB0aGUgY2hlY2sgYmVsb3cgYWN0dWFsbHkgZHJhd3MsIGluIHRoZSB1bml0cyB0aGUgcnVuIHN1bW1hcnkgc2hvd3M6XG4gKiBgc3RhbGVTb2Z0QmFuZGAganVkZ2VzIHRoZSBkcm9wIHRoZSByZWNvcmRlciB3b3VsZCBtYWtlLCBhbmQgYG5leHRTb2Z0VGhyZXNob2xkYFxuICoga2VlcHMgdGhlIGJhbmQgYFNPRlRfVEhSRVNIT0xEX01BUkdJTmAgYWJvdmUgdGhlIHJ1bidzIHRpZ2h0ZXN0IGZpbGUsIHNvIHRoZVxuICogaGVhZHJvb20gYXQgd2hpY2ggdGhlIGJhbmQgaXMgY2FsbGVkIGxvb3NlIGlzIHRoZSB0d28gY29uc3RhbnRzIGFkZGVkIHVwLiBFeHBvcnRlZFxuICogYW5kIHB1Ymxpc2hlZCBpbiB0aGUgcnVuIHJlcG9ydCBmb3Igb25lIHJlYXNvbjogdGhlIHN1bW1hcnkgY2FuIHRoZW4gc2hvdyBob3cgbXVjaFxuICogaGVhZHJvb20gY291bnRzIGFzIHRvbyBtdWNoLCByYXRoZXIgdGhhbiBhIE5vZGUgc2NyaXB0IGNvcHlpbmcgZWl0aGVyIGNvbnN0YW50IG91dFxuICogb2YgdGhpcyBtb2R1bGUgYW5kIGRyaWZ0aW5nIGZyb20gdGhlIGdhdGUgaXQgaXMgZGVzY3JpYmluZy5cbiAqL1xuZXhwb3J0IGNvbnN0IFNUQUxFX0JBTkRfSEVBRFJPT00gPSBTVEFMRV9CQU5EX0NMRUFSQU5DRSArIFNPRlRfVEhSRVNIT0xEX01BUkdJTjtcblxuLyoqXG4gKiBXaGV0aGVyIHRoZSByZWNvcmRlZCB3YXJuaW5nIGJhbmQgc2l0cyBmYXIgYWJvdmUgdGhlIHRpZ2h0ZXN0IGZpbGUgYSBtZWFzdXJlbWVudCBzYXcuXG4gKlxuICogVGhlIGJhbmQncyBqb2IgaXMgdG8gd2FybiAqYmVmb3JlKiBhIGZpbGUgYnJlYWNoZXMsIHNvIG9uZSB0aGF0IHdhcm5zIGZhciBsYXRlclxuICogdGhhbiB0aGUgdHJlZSBuZWVkcyBpcyBhcyB1c2VsZXNzIGFzIG9uZSB0aGF0IGlzIHRvbyB0aWdodCDigJQgYW5kIGl0IGlzIHRoZVxuICogZGlyZWN0aW9uIHRoZSByYXRjaGV0IG1vdmVzIG9ubHkgd2hlbiBzb21lb25lIGhhcHBlbnMgdG8gcnVuIHRoZSByZWNvcmRlciwgc2luY2VcbiAqIGBuZXh0U29mdFRocmVzaG9sZGAgbG93ZXJzIGl0IGFuZCBuZXZlciByYWlzZXMgaXQuIFRoZSBkcm9wIHRoZSByZWNvcmRlciAqd291bGQqXG4gKiBtYWtlIGFnYWluc3QgdGhpcyBtZWFzdXJlbWVudCBpcyB0aGUgaG9uZXN0IHNpemUgb2YgdGhlIGxvb3NlbmVzcywgc28gdGhhdCBpc1xuICogd2hhdCBpcyBtZWFzdXJlZDogYSBiYW5kIHRoZSByZWNvcmRlciB3b3VsZCBub3QgbW92ZSBpcyBuZXZlciBjYWxsZWQgbG9vc2UsIGJ5XG4gKiBjb25zdHJ1Y3Rpb24gcmF0aGVyIHRoYW4gYnkgYSBzZWNvbmQgb3Bpbmlvbi5cbiAqXG4gKiBBIHJ1biB3aG9zZSB0aWdodGVzdCBmaWxlIG5ldmVyIHJlYWNoZWQgYE1JTl9TT0ZUX1RIUkVTSE9MRGAgaXMgbm90IGp1ZGdlZCBhdCBhbGwuXG4gKiBUaGUgcmVjb3JkZXIgd291bGQgY2xhbXAgaXRzIHRhcmdldCB0byB0aGF0IGZsb29yIHJhdGhlciB0aGFuIHRvIHRoZSB0cmVlLCBzbyB0aGVcbiAqIGNvbXBhcmlzb24gd291bGQgYmUgYWdhaW5zdCB0aGUgZmxvb3Ig4oCUIGFuZCBldmVyeSBmb2N1c2VkIHJ1biwgd2hvc2Ugb25lIGZpbGUgaXNcbiAqIG5vd2hlcmUgbmVhciBpdHMgY2VpbGluZywgd291bGQgdGhlbiBcInByb3ZlXCIgdGhlIGNvbW1pdHRlZCBiYW5kIGxvb3NlLlxuICovXG5leHBvcnQgZnVuY3Rpb24gc3RhbGVTb2Z0QmFuZCh0aHJlc2hvbGQ6IG51bWJlciwgd29yc3Q6IG51bWJlcik6IGJvb2xlYW4ge1xuICBpZiAod29yc3QgPCBNSU5fU09GVF9USFJFU0hPTEQpIHJldHVybiBmYWxzZTtcbiAgcmV0dXJuIHRocmVzaG9sZCAtIG5leHRTb2Z0VGhyZXNob2xkKHRocmVzaG9sZCwgd29yc3QpID4gU1RBTEVfQkFORF9DTEVBUkFOQ0U7XG59XG5cbi8qKlxuICogRXZlcnkgcmVjb3JkZWQgZ2F0ZSBhIG1lYXN1cmVtZW50IGZvdW5kIHRvbyBsb29zZSDigJQgdGhlIGltcG9ydHMgYW5kIHRoZSBiYW5kLlxuICpcbiAqIFRoZSBvbmUgcGxhY2UgdGhlIGRlY2lzaW9uIGlzIG1hZGUsIHNvIHRoZSB3YXJuaW5nIGEgc2luZ2xlIHJ1biBwcmludHMsIHRoZSBydW5cbiAqIHJlcG9ydCB0aGUgcmVwZWF0ZWQgc2Vzc2lvbidzIGdhdGUgcmVhZHMgYW5kIHRoZSBzdGFsZSBjYWxsb3V0IGluIGEgcHJvcG9zYWwgYWxsXG4gKiBuYW1lIHRoZSBzYW1lIGxvb3NlIGdhdGVzLlxuICpcbiAqIGBzYW1wbGVgIGlzIGEgcnVuJ3MgbWVhc3VyZW1lbnQ6IGVhY2ggdHJhY2tlZCBtb2R1bGUncyBkZWFyZXN0IGltcG9ydCwgYW5kXG4gKiBgdGlnaHRlc3RgLCB0aGUgZnJhY3Rpb24gb2YgaXRzIGJ1ZGdldCB0aGUgd29yc3QgZmlsZSB1c2VkLiBBIHNlc3Npb24gcGFzc2VzIHRoZVxuICogd29yc3QgY2FzZSBvZiBpdHMgc2FtcGxlcywgd2hpY2ggaXMgd2hhdCBtYWtlcyB0aGUgYW5zd2VyIFwiZXZlcnkgbWVhc3VyZW1lbnRcbiAqIGFncmVlZFwiIOKAlCB0aGUgaW1wb3J0IHRocmVzaG9sZCByaXNlcyB3aXRoIHRoZSBtZWFzdXJlbWVudCwgYW5kIHRoZSBiYW5kIG9ubHlcbiAqIGxvb2tzIGxvb3NlciBhcyB0aGUgdGlnaHRlc3QgZmlsZSBmYWxscywgc28gYSBnYXRlIHRoYXQgaXMgbG9vc2UgYWdhaW5zdCB0aGVcbiAqIHdvcnN0IGNhc2UgaXMgbG9vc2UgYWdhaW5zdCBldmVyeSByZWFkaW5nIHRoYXQgd2VudCBpbnRvIGl0LlxuICovXG5leHBvcnQgZnVuY3Rpb24gc3RhbGVHYXRlcyhiYXNlbGluZXM6IENvbW1pdHRlZEJhc2VsaW5lcywgc2FtcGxlOiBDb2xsZWN0U2FtcGxlKTogU3RhbGVHYXRlW10ge1xuICBjb25zdCBzdGFsZSA9IHN0YWxlSGlnaEJhc2VsaW5lcyhiYXNlbGluZXMuaW1wb3J0QmFzZWxpbmVzLCBzYW1wbGUubWVhc3VyZWQpO1xuICBpZiAoc3RhbGVTb2Z0QmFuZChiYXNlbGluZXMuc29mdFRocmVzaG9sZCwgc2FtcGxlLnRpZ2h0ZXN0KSkge1xuICAgIHN0YWxlLnB1c2goe1xuICAgICAga2luZDogXCJiYW5kXCIsXG4gICAgICBuYW1lOiBcInNvZnRUaHJlc2hvbGRcIixcbiAgICAgIHJlY29yZGVkOiBiYXNlbGluZXMuc29mdFRocmVzaG9sZCxcbiAgICAgIG1lYXN1cmVkOiBzYW1wbGUudGlnaHRlc3QsXG4gICAgfSk7XG4gIH1cbiAgcmV0dXJuIHN0YWxlO1xufVxuXG4vKipcbiAqIFRoZSByYXRjaGV0OiB0aGUgYmFzZWxpbmVzIHdpdGggZWFjaCBtZWFzdXJlZCBtb2R1bGUgbG93ZXJlZCB0byB0aGUgcnVuJ3NcbiAqIGNvc3QsIG5ldmVyIHJhaXNlZC5cbiAqXG4gKiBBIHJlY29yZGVkIGNvc3QgaXMgcm91bmRlZCB0byB3aG9sZSBtaWxsaXNlY29uZHMsIHdoaWNoIHRoZSBtYXJnaW4gZHdhcmZzLiBBXG4gKiBtb2R1bGUgdGhlIHJ1biBkaWQgbm90IGltcG9ydCBrZWVwcyBpdHMgYmFzZWxpbmU7IGEgbW9kdWxlIHRoZSBiYXNlbGluZSBmaWxlXG4gKiBkb2VzIG5vdCB5ZXQgbmFtZSBpcyBhZGRlZC4gUmFpc2luZyBhIGJhc2VsaW5lIGlzIGRlbGliZXJhdGVseSBub3QgcG9zc2libGVcbiAqIGhlcmUg4oCUIGEgcmVncmVzc2lvbiBoYXMgdG8gYmUgZml4ZWQsIG9yIHRoZSBudW1iZXIgbGlmdGVkIGJ5IGhhbmQg4oCUIHNvIHRoZVxuICogcmVjb3JkZXIgY2FuIG9ubHkgZXZlciB0aWdodGVuIHRoZSBnYXRlLlxuICovXG5leHBvcnQgZnVuY3Rpb24gbG93ZXJJbXBvcnRCYXNlbGluZXMoXG4gIGV4aXN0aW5nOiBSZWFkb25seTxSZWNvcmQ8c3RyaW5nLCBudW1iZXI+PixcbiAgbWVhc3VyZWQ6IFJlYWRvbmx5PFJlY29yZDxzdHJpbmcsIG51bWJlcj4+LFxuKTogUmVjb3JkPHN0cmluZywgbnVtYmVyPiB7XG4gIGNvbnN0IG5leHQ6IFJlY29yZDxzdHJpbmcsIG51bWJlcj4gPSB7IC4uLmV4aXN0aW5nIH07XG4gIGZvciAoY29uc3QgW21vZHVsZSwgY29zdF0gb2YgT2JqZWN0LmVudHJpZXMobWVhc3VyZWQpKSB7XG4gICAgY29uc3QgcmVjb3JkZWQgPSBNYXRoLnJvdW5kKGNvc3QpO1xuICAgIGNvbnN0IGN1cnJlbnQgPSBuZXh0W21vZHVsZV07XG4gICAgaWYgKGN1cnJlbnQgPT09IHVuZGVmaW5lZCB8fCByZWNvcmRlZCA8IGN1cnJlbnQpIG5leHRbbW9kdWxlXSA9IHJlY29yZGVkO1xuICB9XG4gIHJldHVybiBuZXh0O1xufVxuXG4vKipcbiAqIE9uZSBwcm9wb3NlLW1vZGUgbWVhc3VyZW1lbnQ6IHdoYXQgYSBzaW5nbGUgZnVsbCBydW4gc2F3LlxuICpcbiAqIFRoZSByYXcgcXVhbnRpdHkgYSByZXBlYXRlZCBwcm9wb3NhbCBpcyBhZ2dyZWdhdGVkIGZyb20sIHJhdGhlciB0aGFuIHRoZVxuICogcHJvcG9zYWwgaXRzZWxmIOKAlCB0aGUgYWdncmVnYXRpb24gdGFrZXMgdGhlIHdvcnN0IGNhc2UsIGFuZCB0aGUgd29yc3QgY2FzZSBvZlxuICogXCJ0aGUgZGVhcmVzdCBpbXBvcnQgd2FzIDhtc1wiIGlzIGEgbnVtYmVyIHRoYXQgY2FuIHN0aWxsIGJlIGZlZCB0byB0aGUgc2FtZVxuICogcmF0Y2hldCBhIHNpbmdsZSBydW4gdXNlcy5cbiAqL1xuZXhwb3J0IGludGVyZmFjZSBDb2xsZWN0U2FtcGxlIHtcbiAgLyoqIEVhY2ggdHJhY2tlZCBtb2R1bGUncyBkZWFyZXN0IGltcG9ydCBjb3N0IHRoaXMgcnVuLCBpbiBtcy4gKi9cbiAgbWVhc3VyZWQ6IFJlY29yZDxzdHJpbmcsIG51bWJlcj47XG4gIC8qKiBUaGUgcnVuJ3MgdGlnaHRlc3QgZmlsZSwgYXMgYSBmcmFjdGlvbiBvZiB0aGUgY29sbGVjdCBidWRnZXQgaXQgaGFkLiAqL1xuICB0aWdodGVzdDogbnVtYmVyO1xufVxuXG4vKipcbiAqIFRoZSBhZ2dyZWdhdGlvbiB0aGF0IG1ha2VzIGEgcHJvcG9zYWwgbm9pc2UtcHJvb2Y6IHRoZSB3b3JzdCBjYXNlIGFueSBzYW1wbGVcbiAqIHNhdy5cbiAqXG4gKiBBIGRyb3AgaXMgb25seSBwb3N0ZWQgd2hlbiAqZXZlcnkqIHJ1biBtZWFzdXJlZCBpdCwgd2hpY2ggaXMgdGhlIG1heGltdW0gb2YgdGhlXG4gKiBzYW1wbGVzIOKAlCB0YWtpbmcgdGhlIGxhcmdlc3QgaXMgdGFraW5nIHRoZSBsZWFzdCBhZ2dyZXNzaXZlIHByb3Bvc2FsLiBBIHNpbmdsZVxuICogcnVuIHdob3NlIG1hY2hpbmUgd2FzIGJyaWVmbHkgaWRsZSBpcyBleGFjdGx5IHRoZSBub2lzZSB0aGlzIGFic29yYnMsIGFuZCB0aGVcbiAqIGNvc3Qgb2YgaW5zaXN0aW5nIG9uIGEgY29uZmlybWVkIG51bWJlciBpcyBvbmx5IHRoYXQgdGhlIHJhdGNoZXQgdHVybnMgYSBsaXR0bGVcbiAqIGxhdGVyIHRoYW4gdGhlIGx1Y2tpZXN0IHJ1biBhbG9uZSB3b3VsZCBoYXZlIHR1cm5lZCBpdC5cbiAqXG4gKiBBIG1vZHVsZSBubyBzYW1wbGUgaW1wb3J0ZWQgaXMgbGVmdCBvdXQsIHNvIHRoZSByYXRjaGV0IGtlZXBzIGl0cyByZWNvcmRlZFxuICogdmFsdWUgcmF0aGVyIHRoYW4gYmVpbmcgaGFuZGVkIGEgemVybyB0byBmYWxsIHRvLlxuICovXG5leHBvcnQgZnVuY3Rpb24gYWdncmVnYXRlU2FtcGxlcyhzYW1wbGVzOiBDb2xsZWN0U2FtcGxlW10pOiBDb2xsZWN0U2FtcGxlIHtcbiAgY29uc3QgbWVhc3VyZWQ6IFJlY29yZDxzdHJpbmcsIG51bWJlcj4gPSB7fTtcbiAgbGV0IHRpZ2h0ZXN0ID0gMDtcbiAgZm9yIChjb25zdCBzYW1wbGUgb2Ygc2FtcGxlcykge1xuICAgIGZvciAoY29uc3QgW3RyYWNrZWQsIGNvc3RdIG9mIE9iamVjdC5lbnRyaWVzKHNhbXBsZS5tZWFzdXJlZCkpIHtcbiAgICAgIG1lYXN1cmVkW3RyYWNrZWRdID0gTWF0aC5tYXgobWVhc3VyZWRbdHJhY2tlZF0gPz8gMCwgY29zdCk7XG4gICAgfVxuICAgIHRpZ2h0ZXN0ID0gTWF0aC5tYXgodGlnaHRlc3QsIHNhbXBsZS50aWdodGVzdCk7XG4gIH1cbiAgcmV0dXJuIHsgbWVhc3VyZWQsIHRpZ2h0ZXN0IH07XG59XG5cbi8qKlxuICogVGhlIGJhc2VsaW5lcyBhIG1lYXN1cmVkIHNhbXBsZSBlYXJucywgYmVmb3JlIGFueSBvZiBpdCBpcyB3cml0dGVuLlxuICpcbiAqIFRoZSB3aG9sZSByYXRjaGV0IGluIG9uZSBwbGFjZTogZWFjaCB0cmFja2VkIGltcG9ydCB0byBpdHMgbWVhc3VyZWQgY29zdCwgbmV2ZXJcbiAqIHJhaXNlZCwgYW5kIHRoZSBzb2Z0IHRocmVzaG9sZCB0byBhIG1hcmdpbiBhYm92ZSB0aGUgcnVuJ3MgdGlnaHRlc3QgZmlsZSwgbmV2ZXJcbiAqIHJhaXNlZC4gU2hhcmVkIGJ5IHRoZSByZWNvcmRlciwgdGhlIHNpbmdsZS1zYW1wbGUgcHJvcG9zZXIgYW5kIHRoZSByZXBlYXRlZCBvbmVcbiAqIHNvIG5vbmUgb2YgdGhlbSBjYW4gZGlzYWdyZWUgYWJvdXQgdGhlIGRpcmVjdGlvbi5cbiAqL1xuZnVuY3Rpb24gbG93ZXJlZEZyb20oYmVmb3JlOiBDb21taXR0ZWRCYXNlbGluZXMsIHNhbXBsZTogQ29sbGVjdFNhbXBsZSk6IENvbW1pdHRlZEJhc2VsaW5lcyB7XG4gIHJldHVybiB7XG4gICAgaW1wb3J0TWFyZ2luTXM6IGJlZm9yZS5pbXBvcnRNYXJnaW5NcyxcbiAgICBzb2Z0VGhyZXNob2xkOiBuZXh0U29mdFRocmVzaG9sZChiZWZvcmUuc29mdFRocmVzaG9sZCwgc2FtcGxlLnRpZ2h0ZXN0KSxcbiAgICBpbXBvcnRCYXNlbGluZXM6IGxvd2VySW1wb3J0QmFzZWxpbmVzKGJlZm9yZS5pbXBvcnRCYXNlbGluZXMsIHNhbXBsZS5tZWFzdXJlZCksXG4gIH07XG59XG5cbi8qKlxuICogV2hlcmUgdGhlIHJlcGVhdGVkIHByb3Bvc2UgcnVucyBsZWF2ZSB0aGUgc2FtcGxlcyB0aGUgcmVwb3J0ZXIgcmVhZHMgYmFjay5cbiAqXG4gKiBBIGRpcmVjdG9yeSB0aGUgbGF1bmNoZXIgY2xlYXJzIGJlZm9yZSBpdHMgZmlyc3QgcnVuLCBzbyB0aGUgc2FtcGxlcyBwcmVzZW50IGFyZVxuICogZXhhY3RseSB0aGF0IHNlc3Npb24ncyDigJQgYSBzdGFsZSBmaWxlIGZyb20gYW4gZWFybGllciBwcm9wb3NlIHJ1biB3b3VsZCBiZVxuICogZm9sZGVkIGludG8gdGhpcyBvbmUncyB3b3JzdCBjYXNlIGFuZCBxdWlldGx5IGhvbGQgYSByZWFsIGRyb3AgYmFjay5cbiAqL1xuY29uc3QgU0FNUExFX0RJUiA9IFwiLmNvbGxlY3QtYnVkZ2V0LXNhbXBsZXNcIjtcblxuLyoqIFRoZSBwYXRoIG9mIHRoZSBzYW1wbGUgZGlyZWN0b3J5LCByZXNvbHZlZCBmcm9tIHRoZSBydW4ncyBkaXJlY3RvcnkuICovXG5mdW5jdGlvbiBzYW1wbGVEaXJQYXRoKCk6IHN0cmluZyB7XG4gIHJldHVybiBqb2luKHByb2Nlc3MuY3dkKCksIFwiLmZyZWVidWZmXCIsIFNBTVBMRV9ESVIpO1xufVxuXG4vKipcbiAqIExlYXZlIHRoaXMgcnVuJ3Mgc2FtcGxlIGFuZCByZWFkIGJhY2sgZXZlcnkgc2FtcGxlIHRoZSBzZXNzaW9uIGhhcyB3cml0dGVuLlxuICpcbiAqIFRoZSBhZ2dyZWdhdGlvbiBoYXBwZW5zIGluIHRoZSByZXBvcnRlciByYXRoZXIgdGhhbiBpbiB0aGUgbGF1bmNoZXIgYmVjYXVzZSB0aGVcbiAqIHJhdGNoZXQgaXMgaGVyZSwgYW5kIHJlLWltcGxlbWVudGluZyBpdCBpbiBwbGFpbiBOb2RlIGlzIGhvdyB0aGUgdHdvIHdvdWxkIGNvbWVcbiAqIHRvIGRpc2FncmVlLiBTbyBlYWNoIHJ1biBvZiB0aGUgc2Vzc2lvbiBmb2xkcyBpdHMgb3duIHNhbXBsZSBpbiBhbmQgcmV3cml0ZXNcbiAqIHRoZSBwcm9wb3NhbDsgYWZ0ZXIgdGhlIGxhdW5jaGVyJ3MgbGFzdCBydW4gdGhlIHByb3Bvc2FsIG9uIGRpc2sgaXMgdGhlIG9uZVxuICogYWdncmVnYXRlIG92ZXIgYWxsIG9mIHRoZW0sIGFuZCB0aGUgbGF1bmNoZXIgb25seSBoYXMgdG8gcmVhZCBpdC5cbiAqL1xuZnVuY3Rpb24gYWNjdW11bGF0ZVNhbXBsZShpbmRleDogbnVtYmVyLCBzYW1wbGU6IENvbGxlY3RTYW1wbGUpOiBDb2xsZWN0U2FtcGxlW10ge1xuICBjb25zdCBkaXIgPSBzYW1wbGVEaXJQYXRoKCk7XG4gIG1rZGlyU3luYyhkaXIsIHsgcmVjdXJzaXZlOiB0cnVlIH0pO1xuICB3cml0ZUZpbGVTeW5jKGpvaW4oZGlyLCBgJHtpbmRleH0uanNvbmApLCBgJHtKU09OLnN0cmluZ2lmeShzYW1wbGUpfVxcbmApO1xuICByZXR1cm4gcmVhZGRpclN5bmMoZGlyKVxuICAgIC5maWx0ZXIoKGVudHJ5KSA9PiAvXlxcZCtcXC5qc29uJC8udGVzdChlbnRyeSkpXG4gICAgLnNvcnQoKGEsIGIpID0+IE51bWJlci5wYXJzZUludChhLCAxMCkgLSBOdW1iZXIucGFyc2VJbnQoYiwgMTApKVxuICAgIC5tYXAoKGVudHJ5KSA9PiBKU09OLnBhcnNlKHJlYWRGaWxlU3luYyhqb2luKGRpciwgZW50cnkpLCBcInV0ZjhcIikpIGFzIENvbGxlY3RTYW1wbGUpO1xufVxuXG4vKipcbiAqIEhvdyBtYW55IHJ1bnMgdGhlIHByb3Bvc2Ugc2Vzc2lvbiBzZXQgb3V0IHRvIHRha2UsIGZvciB0aGUgcnVuIHJlcG9ydC5cbiAqXG4gKiBUaGUgbGF1bmNoZXIgZGVjbGFyZXMgaXRzIHRhcmdldCBhcyBpdCBzdGFydHMgZWFjaCBydW4sIHNvIGEgc2Vzc2lvbiB0aGF0IGNhbWUgdXBcbiAqIHNob3J0IGNhbiBiZSB0b2xkIGFwYXJ0IGZyb20gYSBjb21wbGV0ZSBvbmUg4oCUIGBucG0gcnVuIGNvbGxlY3Q6c3RhbGVgIGZhaWxzXG4gKiBjbG9zZWQgb24gYSBwYXJ0aWFsIHNlc3Npb24gcmF0aGVyIHRoYW4ganVkZ2luZyBhIGJhc2VsaW5lIHRoZSBtaXNzaW5nIHJ1bnMgbWlnaHRcbiAqIGhhdmUgY29udHJhZGljdGVkLiBBIHBsYWluIGBucG0gcnVuIGNvbGxlY3Q6cHJvcG9zZWAgZGVjbGFyZXMgbm90aGluZyBhbmQgaXMgaXRzXG4gKiBvd24gc2luZ2xlIHJ1biwgd2hpY2ggaXMgZXhhY3RseSB3aGF0IGl0IGlzLlxuICovXG5mdW5jdGlvbiBwcm9wb3NhbFJ1blRhcmdldChzYW1wbGVzOiBudW1iZXIpOiBudW1iZXIge1xuICBjb25zdCBkZWNsYXJlZCA9IE51bWJlci5wYXJzZUludChwcm9jZXNzLmVudi5DT0xMRUNUX1BST1BPU0FMX1JVTlMgPz8gXCJcIiwgMTApO1xuICByZXR1cm4gTnVtYmVyLmlzRmluaXRlKGRlY2xhcmVkKSAmJiBkZWNsYXJlZCA+IDAgPyBkZWNsYXJlZCA6IHNhbXBsZXM7XG59XG5cbi8qKiBUaGUgZG9jIGNvbW1lbnQgYXQgdGhlIHRvcCBvZiB0aGUgZ2VuZXJhdGVkIGJhc2VsaW5lIGZpbGUuICovXG5jb25zdCBCQVNFTElORV9IRUFERVIgPSBgLyoqXG4gKiBUaGUgY29sbGVjdC1idWRnZXQgYmFzZWxpbmVzOiB0aGUgcmVjb3JkZWQgaW5wdXRzIHRoZSBjb2xsZWN0LXRpbWUgcmVwb3J0ZXJcbiAqIGVuZm9yY2VzLCBpbiBvbmUgcGxhY2UuXG4gKlxuICogXFxgaW1wb3J0QmFzZWxpbmVzXFxgIGFuZCBcXGBzb2Z0VGhyZXNob2xkXFxgIGFyZSByZWNvcmRlZCDigJQgXFxgbnBtIHJ1biBjb2xsZWN0OnJlY29yZFxcYFxuICogbWVhc3VyZXMgYSBydW4gYW5kIGxvd2VycyBlaXRoZXIgb25lIHRoZSBydW4gYmVhdCwgbmV2ZXIgcmFpc2VzIGl0LCBzbyBib3RoXG4gKiBnYXRlcyBvbmx5IGV2ZXIgdGlnaHRlbjpcbiAqXG4gKiAgIC0gXFxgaW1wb3J0QmFzZWxpbmVzXFxgIOKAlCBlYWNoIHRyYWNrZWQgc2Nhbm5lcidzIGxvdy13YXRlciBpbXBvcnQgY29zdC4gQSBmaWxlJ3NcbiAqICAgICBpbXBvcnQgb2YgdGhhdCBzY2FubmVyIG11c3Qgc3RheSB3aXRoaW4gXFxgaW1wb3J0TWFyZ2luTXNcXGAgb2YgaXQuXG4gKiAgIC0gXFxgc29mdFRocmVzaG9sZFxcYCDigJQgdGhlIGZyYWN0aW9uIG9mIGl0cyBjb2xsZWN0IGJ1ZGdldCBhdCB3aGljaCBhIGZpbGUgc3RvcHNcbiAqICAgICBiZWluZyBtZXJlbHkgaW50ZXJlc3RpbmcgYW5kIHN0YXJ0cyBiZWluZyBhIHdhcm5pbmcsIGtlcHQgYSBtYXJnaW4gYWJvdmVcbiAqICAgICB0aGUgdGlnaHRlc3QgZmlsZSB0aGUgcmVjb3JkaW5nIHJ1biBzYXcuXG4gKlxuICogXFxgaW1wb3J0TWFyZ2luTXNcXGAgaXMgdGhlIGZpeGVkIG1hcmdpbiB0aGUgaW1wb3J0IGdhdGUga2VlcHMgb3ZlciBlYWNoXG4gKiBcXGBpbXBvcnRCYXNlbGluZXNcXGAgZW50cnkuIEl0IGlzIGhhbmQtc2V0IG9uIHB1cnBvc2U6IGl0IGlzIGFib3V0IGhvdyBtdWNoIG5vaXNlXG4gKiBhIHNpbmdsZSBpbXBvcnQgY2FuIGFic29yYiwgbm90IGFib3V0IHdoYXQgdGhlIG1hY2hpbmUgbWVhc3VyZWQuXG4gKlxuICogR2VuZXJhdGVkIOKAlCBkbyBub3QgZWRpdCBcXGBpbXBvcnRCYXNlbGluZXNcXGAgb3IgXFxgc29mdFRocmVzaG9sZFxcYCBieSBoYW5kLiBcXGBucG1cbiAqIHJ1biBjb2xsZWN0OnJlY29yZFxcYCByZXdyaXRlcyB0aGVtLCBhbmQgYSBoYW5kLWVkaXQgZmFpbHMgdGhlIGZyZXNobmVzcyB0ZXN0IGluXG4gKiBcXGBzcmMvdGVzdC9jb2xsZWN0LWJ1ZGdldC50ZXN0LnRzXFxgLiBUbyBsb29zZW4gYSBnYXRlIGRlbGliZXJhdGVseSwgZWRpdCB0aGlzXG4gKiBmaWxlIGFuZCBzYXkgd2h5IGluIHRoZSBjb21taXQuXG4gKlxuICogTWlycm9ycyB0aGUgY292ZXJhZ2UgcGFpciB3aG9zZSBzaGFwZSBpdCBib3Jyb3dzOiBcXGBjb3ZlcmFnZS10aHJlc2hvbGRzLm1qc1xcYFxuICogaG9sZHMgdGhlIGJhY2tzdG9wIGFuZCBcXGBjb3ZlcmFnZS1oZWFkcm9vbS5tanNcXGAgZmFpbHMgdGhlIGJ1aWxkIHdoZW4gdGhlIG1hcmdpblxuICogb3ZlciBpdCBpcyB0b28gdGhpbi4gSGVyZSB0aGUgcmVjb3JkZWQgdmFsdWVzIGFyZSB0aGUgYmFja3N0b3BzLlxuICovYDtcblxuLyoqXG4gKiBUaGUgZXhhY3Qgc291cmNlIG9mIGAuZnJlZWJ1ZmYvY29sbGVjdC1idWRnZXQtYmFzZWxpbmVzLm1qc2AgZm9yIGEgc2V0IG9mXG4gKiBiYXNlbGluZXMuXG4gKlxuICogVGhlIHJlY29yZGVyIHdyaXRlcyB0aGlzLCBhbmQgYSB0ZXN0IGNvbXBhcmVzIGl0IHRvIHRoZSBjb21taXR0ZWQgZmlsZSwgc28gdGhlXG4gKiBjaGVja2VkLWluIGJhc2VsaW5lcyBjYW5ub3QgZHJpZnQgZnJvbSB3aGF0IHRoZSByZWNvcmRlciB3b3VsZCB3cml0ZSDigJQgdGhlIHNhbWVcbiAqIGNvbnRyYWN0IGBucG0gcnVuIHNraWxsOmluZGV4YCBrZWVwcyBmb3IgaXRzIGdlbmVyYXRlZCBpbmRleC5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHJlbmRlckJhc2VsaW5lcyhjb21taXR0ZWQ6IENvbW1pdHRlZEJhc2VsaW5lcyA9IENPTU1JVFRFRF9CQVNFTElORVMpOiBzdHJpbmcge1xuICBjb25zdCByb3dzID0gT2JqZWN0LmtleXMoY29tbWl0dGVkLmltcG9ydEJhc2VsaW5lcylcbiAgICAuc29ydCgpXG4gICAgLm1hcCgobW9kdWxlKSA9PiBgICAke0pTT04uc3RyaW5naWZ5KG1vZHVsZSl9OiAke2NvbW1pdHRlZC5pbXBvcnRCYXNlbGluZXNbbW9kdWxlXX0sYClcbiAgICAuam9pbihcIlxcblwiKTtcbiAgcmV0dXJuIChcbiAgICBgJHtCQVNFTElORV9IRUFERVJ9XFxuXFxuYCArXG4gICAgYGV4cG9ydCBjb25zdCBpbXBvcnRNYXJnaW5NcyA9ICR7Y29tbWl0dGVkLmltcG9ydE1hcmdpbk1zfTtcXG5cXG5gICtcbiAgICBgZXhwb3J0IGNvbnN0IHNvZnRUaHJlc2hvbGQgPSAke2NvbW1pdHRlZC5zb2Z0VGhyZXNob2xkfTtcXG5cXG5gICtcbiAgICBgZXhwb3J0IGNvbnN0IGltcG9ydEJhc2VsaW5lcyA9IHtcXG4ke3Jvd3N9XFxufTtcXG5gXG4gICk7XG59XG5cbi8qKiBPbmUgdmFsdWUgdGhlIHJlY29yZGVyIHdvdWxkIGxvd2VyLCBmb3IgdGhlIHByb3Bvc2FsLiAqL1xuZXhwb3J0IGludGVyZmFjZSBQcm9wb3NlZENoYW5nZSB7XG4gIC8qKiBXaGljaCByZWNvcmRlZCB2YWx1ZSBpdCBpczogYSBzY2FubmVyJ3MgaW1wb3J0IGNvc3QsIG9yIHRoZSB3YXJuaW5nIGJhbmQuICovXG4gIGtpbmQ6IFwiaW1wb3J0XCIgfCBcImJhbmRcIjtcbiAgLyoqIFRoZSB2YWx1ZSdzIG5hbWU6IGBzb2Z0VGhyZXNob2xkYCwgb3IgYSB0cmFja2VkIG1vZHVsZSdzIHBhdGguICovXG4gIG5hbWU6IHN0cmluZztcbiAgLyoqIFdoYXQgdGhlIGNvbW1pdHRlZCBmaWxlIGhvbGRzLCBvciB1bmRlZmluZWQgd2hlbiB0aGUgdmFsdWUgaXMgbmV3LiAqL1xuICBmcm9tOiBudW1iZXIgfCB1bmRlZmluZWQ7XG4gIC8qKiBXaGF0IHRoZSByZWNvcmRlciB3b3VsZCBsb3dlciBpdCB0by4gKi9cbiAgdG86IG51bWJlcjtcbiAgLyoqXG4gICAqIFdoZXRoZXIgdGhlIGNvbW1pdHRlZCB2YWx1ZSB3YXMgKnN0YWxlLWhpZ2gqOiBzbyBmYXIgYWJvdmUgd2hhdCB0aGUgcnVuXG4gICAqIG1lYXN1cmVkIHRoYXQgdGhlIGNvbGxlY3QtYnVkZ2V0IGdhdGUgaXMgZmFpbGluZyBvbiBpdCByaWdodCBub3csIHJhdGhlclxuICAgKiB0aGFuIGFuIGhvbmVzdCB2YWx1ZSBiZWluZyBudWRnZWQgZG93bi5cbiAgICpcbiAgICogVGhlIHR3byBsb29rIGlkZW50aWNhbCBpbiBhIGRpZmYg4oCUIHRoZSByYXRjaGV0IGxvd2VycyBhIHN0YWxlIGJhc2VsaW5lIGxpa2VcbiAgICogYW55IG90aGVyIOKAlCBidXQgdGhleSBtZWFuIG9wcG9zaXRlIHRoaW5ncyB0byBhIHJldmlld2VyLiBBbiBvcmRpbmFyeSBkcm9wIGlzXG4gICAqIG9wdGlvbmFsIGhvdXNla2VlcGluZzsgYSBzdGFsZSBiYXNlbGluZSBpcyBhIGdhdGUgdGhhdCBpcyBjdXJyZW50bHkgcmVkLCBhbmRcbiAgICogYXBwbHlpbmcgaXQgaXMgd2hhdCB0dXJucyB0aGUgcnVuIGdyZWVuIGFnYWluLlxuICAgKi9cbiAgc3RhbGU6IGJvb2xlYW47XG59XG5cbi8qKlxuICogVGhlIGxvd2VyaW5ncyBiZXR3ZWVuIHR3byBzZXRzIG9mIGJhc2VsaW5lcywgYSB0cmFja2VkIG1vZHVsZSBuYW1lIGFwYXJ0LlxuICpcbiAqIEEgdmFsdWUgb25seSBhcHBlYXJzIHdoZW4gdGhlIHJ1biBiZWF0IHRoZSBjb21taXR0ZWQgb25lLCBzbyBhbiBlbXB0eSBsaXN0IGlzXG4gKiB0aGUgaG9uZXN0IFwibm90aGluZyB0byBwcm9wb3NlXCIg4oCUIHRoZSBzYW1lIGRpcmVjdGlvbiBgbG93ZXJJbXBvcnRCYXNlbGluZXNgXG4gKiBhbmQgYG5leHRTb2Z0VGhyZXNob2xkYCBlbmZvcmNlLCByZWFkIGJhY2sgb3V0IGFzIGEgZGlmZi5cbiAqXG4gKiBgbWVhc3VyZWRgIGFuZCBgdGlnaHRlc3RgIGFyZSB3aGF0IHRoZSBydW4gc2F3IOKAlCBlYWNoIHRyYWNrZWQgbW9kdWxlJ3MgZGVhcmVzdFxuICogaW1wb3J0LCBhbmQgdGhlIGZyYWN0aW9uIG9mIGl0cyBidWRnZXQgdGhlIHdvcnN0IGZpbGUgdXNlZC4gVGhleSBhcmUgdGhlXG4gKiBxdWFudGl0aWVzIHRoZSBzdGFsZW5lc3MgY2hlY2tzIGp1ZGdlIGFnYWluc3QsIHNvIHRoZSBwcm9wb3NhbCBjYW4gdGVsbCBhIGxvb3NlXG4gKiBnYXRlIGZyb20gYSB0aWR5LXVwLiBCb3RoIGFyZSBvcHRpb25hbDogYSBjYWxsZXIgdGhhdCBvbmx5IHdhbnRzIHRoZSBkaWZmIGxlYXZlc1xuICogdGhlbSBvdXQgYW5kIG5vdGhpbmcgaXMgbWFya2VkIHN0YWxlLCB3aGljaCBpcyB0aGUgY29uc2VydmF0aXZlIHJlYWRpbmcg4oCUIGFcbiAqIGNoYW5nZSB0aGVuIGNsYWltcyBubyBtb3JlIHRoYW4gXCJ0aGlzIGNvdWxkIGJlIHRpZ2h0ZXJcIi4gV2hpY2ggZ2F0ZXMgYXJlIGxvb3NlIGlzXG4gKiBgc3RhbGVHYXRlc2AncyBhbnN3ZXIsIHNvIHRoZSBjYWxsb3V0IGFuZCB0aGUgcnVuIHJlcG9ydCBhZ3JlZS5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHByb3Bvc2FsQ2hhbmdlcyhcbiAgYmVmb3JlOiBDb21taXR0ZWRCYXNlbGluZXMsXG4gIGFmdGVyOiBDb21taXR0ZWRCYXNlbGluZXMsXG4gIG1lYXN1cmVkOiBSZWFkb25seTxSZWNvcmQ8c3RyaW5nLCBudW1iZXI+PiA9IHt9LFxuICB0aWdodGVzdD86IG51bWJlcixcbik6IFByb3Bvc2VkQ2hhbmdlW10ge1xuICBjb25zdCBjaGFuZ2VzOiBQcm9wb3NlZENoYW5nZVtdID0gW107XG4gIGlmIChhZnRlci5zb2Z0VGhyZXNob2xkIDwgYmVmb3JlLnNvZnRUaHJlc2hvbGQpIHtcbiAgICBjaGFuZ2VzLnB1c2goe1xuICAgICAga2luZDogXCJiYW5kXCIsXG4gICAgICBuYW1lOiBcInNvZnRUaHJlc2hvbGRcIixcbiAgICAgIGZyb206IGJlZm9yZS5zb2Z0VGhyZXNob2xkLFxuICAgICAgdG86IGFmdGVyLnNvZnRUaHJlc2hvbGQsXG4gICAgICBzdGFsZTogdGlnaHRlc3QgPT09IHVuZGVmaW5lZCA/IGZhbHNlIDogc3RhbGVTb2Z0QmFuZChiZWZvcmUuc29mdFRocmVzaG9sZCwgdGlnaHRlc3QpLFxuICAgIH0pO1xuICB9XG4gIGNvbnN0IGxvb3NlID0gbmV3IFNldChzdGFsZUhpZ2hCYXNlbGluZXMoYmVmb3JlLmltcG9ydEJhc2VsaW5lcywgbWVhc3VyZWQpLm1hcCgoZSkgPT4gZS5uYW1lKSk7XG4gIGZvciAoY29uc3QgdHJhY2tlZCBvZiBPYmplY3Qua2V5cyhhZnRlci5pbXBvcnRCYXNlbGluZXMpLnNvcnQoKSkge1xuICAgIGNvbnN0IGZyb20gPSBiZWZvcmUuaW1wb3J0QmFzZWxpbmVzW3RyYWNrZWRdO1xuICAgIGNvbnN0IHRvID0gYWZ0ZXIuaW1wb3J0QmFzZWxpbmVzW3RyYWNrZWRdO1xuICAgIGlmIChmcm9tID09PSB1bmRlZmluZWQgfHwgdG8gPCBmcm9tKSB7XG4gICAgICBjaGFuZ2VzLnB1c2goeyBraW5kOiBcImltcG9ydFwiLCBuYW1lOiB0cmFja2VkLCBmcm9tLCB0bywgc3RhbGU6IGxvb3NlLmhhcyh0cmFja2VkKSB9KTtcbiAgICB9XG4gIH1cbiAgcmV0dXJuIGNoYW5nZXM7XG59XG5cbi8qKlxuICogVGhlIHByb3Bvc2FsIG1hcmtkb3duIOKAlCB0aGUgYm9keSBvZiB0aGUgc3RpY2t5IHB1bGwtcmVxdWVzdCBjb21tZW50LlxuICpcbiAqIE1pcnJvcnMgYC5mcmVlYnVmZi9jb3ZlcmFnZS1wcm9wb3NlLm1qc2AncyBvdXRwdXQ6IGEgbWFya2VyIGxpbmUgc28gdGhlIHdvcmtmbG93XG4gKiBjYW4gZmluZCBhbmQgdXBkYXRlIHRoZSBwcmV2aW91cyBjb21tZW50LCBhIHRhYmxlIG9mIHdoYXQgd291bGQgbW92ZSwgYW5kIGFcbiAqIGNsb3NpbmcgbGluZSB0aGF0IHNheXMgbm90aGluZyBpcyBhcHBsaWVkIHVudGlsIGEgcGVyc29uIHJ1bnMgdGhlIHJlY29yZGVyLiBJdFxuICogaXMgd3JpdHRlbiBldmVuIHdoZW4gdGhlcmUgaXMgbm90aGluZyB0byBwcm9wb3NlLCBzbyB0aGUgYXJ0aWZhY3QgYSB3b3JrZmxvd1xuICogdXBsb2FkcyBzdGlsbCByZWNvcmRzIHRoYXQgdGhlIGNoZWNrIHJhbi5cbiAqXG4gKiBBIHN0YWxlLWhpZ2ggYmFzZWxpbmUgZ2V0cyBhIGNhbGxvdXQgb2YgaXRzIG93biBhYm92ZSB0aGUgdGFibGUuIEl0IGlzIHRoZSBvbmVcbiAqIHJvdyBhIHJldmlld2VyIG11c3Qgbm90IHJlYWQgYXMgaG91c2VrZWVwaW5nOiB0aGUgZ2F0ZSBpcyBmYWlsaW5nIG9uIGl0LCBhbmRcbiAqIGFwcGx5aW5nIHRoZSBwcm9wb3NhbCBpcyB0aGUgZml4IOKAlCBzbyBpdCBpcyBuYW1lZCByYXRoZXIgdGhhbiBsZWZ0IHRvIGJlXG4gKiBpbmZlcnJlZCBmcm9tIGEgY29tbWl0dGVkIG51bWJlciBzb21lb25lIHdvdWxkIGhhdmUgdG8ga25vdyB3YXMgdG9vIGJpZy5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHJlbmRlclByb3Bvc2FsKFxuICBjaGFuZ2VzOiBQcm9wb3NlZENoYW5nZVtdLFxuICBhcHBsaWVkOiBDb21taXR0ZWRCYXNlbGluZXMsXG4gIHNhbXBsZXM6IG51bWJlciA9IDEsXG4pOiBzdHJpbmcge1xuICBpZiAoY2hhbmdlcy5sZW5ndGggPT09IDApIHtcbiAgICByZXR1cm4gKFxuICAgICAgYCR7UFJPUE9TQUxfTUFSS0VSfVxcbiMjIENvbGxlY3QtYnVkZ2V0IHByb3Bvc2FsXFxuXFxuYCArXG4gICAgICBcIk5vdGhpbmcgdG8gcmVjb3JkIOKAlCBubyBtZWFzdXJlZCB2YWx1ZSBiZWF0IGl0cyBjb21taXR0ZWQgb25lLiBUaGUgZ2F0ZXMgXCIgK1xuICAgICAgXCJhbHJlYWR5IHNpdCBhdCBvciBiZWxvdyB0aGlzIHJ1bidzIG51bWJlcnMuXFxuXCJcbiAgICApO1xuICB9XG4gIGNvbnN0IHN0YWxlID0gY2hhbmdlcy5maWx0ZXIoKGNoYW5nZSkgPT4gY2hhbmdlLnN0YWxlKTtcbiAgY29uc3Qgcm93cyA9IGNoYW5nZXNcbiAgICAubWFwKFxuICAgICAgKGNoYW5nZSkgPT5cbiAgICAgICAgYHwgXFxgJHtjaGFuZ2UubmFtZX1cXGAke2NoYW5nZS5zdGFsZSA/IFwiICoqKHN0YWxlKSoqXCIgOiBcIlwifSB8IGAgK1xuICAgICAgICBgJHtjaGFuZ2UuZnJvbSA/PyBcIuKAlFwifSB8ICR7Y2hhbmdlLnRvfSB8YCxcbiAgICApXG4gICAgLmpvaW4oXCJcXG5cIik7XG4gIHJldHVybiAoXG4gICAgYCR7UFJPUE9TQUxfTUFSS0VSfVxcbiMjIENvbGxlY3QtYnVkZ2V0IHByb3Bvc2FsXFxuXFxuYCArXG4gICAgKHN0YWxlLmxlbmd0aCA+IDAgPyBzdGFsZU5vdGUoc3RhbGUpIDogXCJcIikgK1xuICAgIFwiYG5wbSBydW4gY29sbGVjdDpyZWNvcmRgIHJhbiBhZ2FpbnN0IHRoaXMgY2hhbmdlJ3MgbWVhc3VyZWQgY29sbGVjdCB0aW1lcyBhbmQgd291bGQgbG93ZXI6XFxuXFxuXCIgK1xuICAgIFwifCB2YWx1ZSB8IGNvbW1pdHRlZCB8IHRoaXMgcnVuIHxcXG58IC0tLSB8IC0tOiB8IC0tOiB8XFxuXCIgK1xuICAgIGAke3Jvd3N9XFxuXFxuYCArXG4gICAgKHNhbXBsZXMgPiAxXG4gICAgICA/IGBFdmVyeSB2YWx1ZSBoZXJlIGhlbGQgYWNyb3NzICR7c2FtcGxlc30gcnVuczogdGhlIHByb3Bvc2FsIGlzIHRoZSB3b3JzdCBgICtcbiAgICAgICAgXCJjYXNlIGFueSBvZiB0aGVtIG1lYXN1cmVkLCBzbyBvbmUgcXVpZXRseSBmYXN0IG1hY2hpbmUgY2Fubm90IHBvc3QgYSBcIiArXG4gICAgICAgIFwidGlnaHRlbmluZyB0aGUgb3RoZXJzIGRpZCBub3QgY29uZmlybS5cXG5cXG5cIlxuICAgICAgOiBcIlwiKSArXG4gICAgXCJOb3RoaW5nIGhlcmUgaXMgYXBwbGllZCDigJQgYSBsb3dlciBudW1iZXIgb25seSAqdGlnaHRlbnMqIGEgZ2F0ZS4gUnVuIFwiICtcbiAgICBcImBucG0gcnVuIGNvbGxlY3Q6cmVjb3JkYCBsb2NhbGx5IGFuZCBjb21taXQgdGhlIHJlc3VsdCwgb3IgcmVwbHkgXCIgK1xuICAgIGBcXGAke0FQUExZX0NPTU1BTkR9XFxgIHRvIG9wZW4gYSBwdWxsIHJlcXVlc3QgdGhhdCBhcHBsaWVzIGV4YWN0bHkgdGhlc2UgdmFsdWVzLlxcblxcbmAgK1xuICAgIC8vIFRoZSBtYWNoaW5lLXJlYWRhYmxlIGhhbGY6IHRoZSBhcHBseSBzdGVwIHJlYWRzIHRoZXNlIHZhbHVlcyBvdXQgb2YgdGhlXG4gICAgLy8gY29tbWVudCByYXRoZXIgdGhhbiByZS1tZWFzdXJpbmcsIHNvIHdoYXQgd2FzIGFwcHJvdmVkIGlzIHdoYXQgaXMgYXBwbGllZC5cbiAgICBgJHtyZW5kZXJQcm9wb3NhbFN0YXRlKGFwcGxpZWQpfVxcbmBcbiAgKTtcbn1cblxuLyoqXG4gKiBUaGUgY2FsbG91dCBmb3IgYSBwcm9wb3NhbCdzIHN0YWxlLWhpZ2ggYmFzZWxpbmVzLCBvciBub3RoaW5nIHdoZW4gdGhlcmUgYXJlIG5vbmUuXG4gKlxuICogQ2FsbGVkIG91dCBhYm92ZSB0aGUgdGFibGUgcmF0aGVyIHRoYW4gZm9sZGVkIGludG8gaXQgYmVjYXVzZSBhIHN0YWxlIGJhc2VsaW5lXG4gKiBpcyB0aGUgb25lIHJvdyB0aGF0IGlzIG5vdCBvcHRpb25hbDogdGhlIGNvbW1pdHRlZCBudW1iZXIgaXMgc28gZmFyIGFib3ZlIHdoYXRcbiAqIHRoZSBydW4gbWVhc3VyZWQgdGhhdCB0aGUgZ2F0ZSBpcyBmYWlsaW5nIG9uIGl0LCBhbmQgdGhlIHNhbWUgYXBwcm92ZS1hbmQtYXBwbHlcbiAqIHJlcGx5IHRoYXQgYXBwbGllcyBhbiBvcmRpbmFyeSB0aWdodGVuaW5nIGlzIHdoYXQgY2xlYXJzIHRoZSBmYWlsdXJlLiBBIHJldmlld2VyXG4gKiB3aG8gcmVhZCBvbmx5IHRoZSB0YWJsZSB3b3VsZCB0YWtlIGEgcmVkIGdhdGUgZm9yIGEgaG91c2VrZWVwaW5nIG5pdC5cbiAqL1xuLyoqIEEgZnJhY3Rpb24gb2YgYSBjb2xsZWN0IGJ1ZGdldCwgYXMgdGhlIHBlcmNlbnRhZ2UgYSBwZXJzb24gcmVhZHMgaXQgYXMuICovXG5mdW5jdGlvbiBwZXJjZW50KHZhbHVlOiBudW1iZXIgfCB1bmRlZmluZWQpOiBzdHJpbmcge1xuICByZXR1cm4gYCR7TWF0aC5yb3VuZCgodmFsdWUgPz8gMCkgKiAxMDApfSVgO1xufVxuXG4vKipcbiAqIE9uZSBzdGFsZSBjaGFuZ2UgYXMgYSBsaW5lIG9mIHRoZSBjYWxsb3V0LCBpbiB0aGUgdW5pdHMgaXRzIHZhbHVlIGlzIHJlY29yZGVkIGluLlxuICpcbiAqIEEgYmFuZCBpcyBhIGZyYWN0aW9uIG9mIGEgYnVkZ2V0IGFuZCBhbiBpbXBvcnQgaXMgbWlsbGlzZWNvbmRzLCBzbyB0aGUgdHdvIGNhbm5vdFxuICogc2hhcmUgYSBzZW50ZW5jZTogYHJlY29yZGVkIGF0IDAuNThtc2AgaXMgYSBkaWZmZXJlbnQgY2xhaW0gZnJvbSBgcmVjb3JkZWQgYXRcbiAqIDU4JWAuIFRoZSBraW5kIGlzIHdoYXQgcGlja3MgdGhlIHJlYWRpbmcuXG4gKi9cbmZ1bmN0aW9uIHN0YWxlQ2hhbmdlTGluZShjaGFuZ2U6IFByb3Bvc2VkQ2hhbmdlKTogc3RyaW5nIHtcbiAgaWYgKGNoYW5nZS5raW5kID09PSBcImJhbmRcIikge1xuICAgIC8vIGB0b2AgaXMgdGhlIGJhbmQgdGhlIHJlY29yZGVyIHdvdWxkICpzZXQqIOKAlCBvbmUgbWFyZ2luIGFib3ZlIHRoZSB0aWdodGVzdFxuICAgIC8vIGZpbGUg4oCUIG5vdCB0aGUgdGlnaHRlc3QgZmlsZSBpdHNlbGYsIHNvIHRoZSBsaW5lIHNheXMgdGhhdCByYXRoZXIgdGhhblxuICAgIC8vIGNsYWltaW5nIGEgbWVhc3VyZW1lbnQgaXQgZG9lcyBub3QgaG9sZC5cbiAgICByZXR1cm4gKFxuICAgICAgYD4gLSB0aGUgd2FybmluZyBiYW5kIGlzIHJlY29yZGVkIGF0ICR7cGVyY2VudChjaGFuZ2UuZnJvbSl9IG9mIGEgYnVkZ2V0OyB0aGUgYCArXG4gICAgICBgcmVjb3JkZXIgd291bGQgc2V0IGl0IHRvICR7cGVyY2VudChjaGFuZ2UudG8pfWBcbiAgICApO1xuICB9XG4gIHJldHVybiBgPiAtIFxcYCR7Y2hhbmdlLm5hbWV9XFxgIOKAlCByZWNvcmRlZCBhdCAke2NoYW5nZS5mcm9tfW1zLCB0aGlzIHJ1biBtZWFzdXJlZCAke2NoYW5nZS50b31tc2A7XG59XG5cbmZ1bmN0aW9uIHN0YWxlTm90ZShzdGFsZTogUHJvcG9zZWRDaGFuZ2VbXSk6IHN0cmluZyB7XG4gIGNvbnN0IHJvd3MgPSBzdGFsZS5tYXAoc3RhbGVDaGFuZ2VMaW5lKS5qb2luKFwiXFxuXCIpO1xuICByZXR1cm4gKFxuICAgIFwiPiAqKkEgbG9vc2UgZ2F0ZSwgbm90IGEgdGlkeS11cC4qKiBcIiArXG4gICAgKHN0YWxlLmxlbmd0aCA9PT0gMSA/IFwiVGhpcyByZWNvcmRlZCB2YWx1ZSBpc1wiIDogXCJUaGVzZSByZWNvcmRlZCB2YWx1ZXMgYXJlXCIpICtcbiAgICBcIiAqc3RhbGUtaGlnaCo6IHRoZSBjb21taXR0ZWQgbnVtYmVyIHNpdHMgZmFyIGFib3ZlIHdoYXQgdGhlIHJ1biBtZWFzdXJlZCwgXCIgK1xuICAgIFwid2hpY2ggaXMgdGhlIGRpcmVjdGlvbiB0aGUgY29sbGVjdC1idWRnZXQgZ2F0ZSBmYWlscyBhIHJ1biBvbi4gQXBwbHlpbmcgXCIgK1xuICAgIFwidGhlIHZhbHVlcyBiZWxvdyBpcyBub3Qgb3B0aW9uYWwgaG91c2VrZWVwaW5nIOKAlCBpdCBpcyB3aGF0IHR1cm5zIHRoZSBidWlsZCBcIiArXG4gICAgXCJncmVlbiBhZ2Fpbi5cXG4+XFxuXCIgK1xuICAgIGAke3Jvd3N9XFxuXFxuYFxuICApO1xufVxuXG4vKiogV2hlcmUgdGhlIGNoZWNrZWQtaW4gYmFzZWxpbmUgZmlsZSBsaXZlcywgcmVzb2x2ZWQgZnJvbSB0aGUgcnVuJ3MgZGlyZWN0b3J5LiAqL1xuZnVuY3Rpb24gYmFzZWxpbmVGaWxlUGF0aCgpOiBzdHJpbmcge1xuICByZXR1cm4gam9pbihwcm9jZXNzLmN3ZCgpLCBcIi5mcmVlYnVmZlwiLCBcImNvbGxlY3QtYnVkZ2V0LWJhc2VsaW5lcy5tanNcIik7XG59XG5cbi8qKiBXaGVyZSB0aGUgcHJvcG9zYWwgbWFya2Rvd24gaXMgd3JpdHRlbiwgcmVzb2x2ZWQgZnJvbSB0aGUgcnVuJ3MgZGlyZWN0b3J5LiAqL1xuZnVuY3Rpb24gcHJvcG9zYWxGaWxlUGF0aCgpOiBzdHJpbmcge1xuICByZXR1cm4gam9pbihwcm9jZXNzLmN3ZCgpLCBcIi5mcmVlYnVmZlwiLCBcImNvbGxlY3QtYnVkZ2V0LXByb3Bvc2FsLm1kXCIpO1xufVxuXG4vKiogVGhlIG9uZS1maWVsZCBzdGF0ZSBmaWxlIHRoZSBsYXVuY2hlciByZWFkcyB0byBzZXQgaXRzIGBlYXJuZWRgIG91dHB1dC4gKi9cbmZ1bmN0aW9uIHByb3Bvc2FsU3RhdGVQYXRoKCk6IHN0cmluZyB7XG4gIHJldHVybiBqb2luKHByb2Nlc3MuY3dkKCksIFwiLmZyZWVidWZmXCIsIFwiLmNvbGxlY3QtYnVkZ2V0LXByb3Bvc2FsLmpzb25cIik7XG59XG5cbi8qKiBUaGUgbGluZXMgdGhlIHJlcG9ydCBwcmludHMsIHdvcnN0IG92ZXJydW4gZmlyc3QuICovXG5mdW5jdGlvbiBmb3JtYXRCcmVhY2hlcyhicmVhY2hlczogQnVkZ2V0QnJlYWNoW10sIG1lZGlhbjogbnVtYmVyKTogc3RyaW5nIHtcbiAgY29uc3Qgcm93cyA9IFsuLi5icmVhY2hlc11cbiAgICAuc29ydCgoYSwgYikgPT4gYi5tcyAvIGIuYnVkZ2V0IC0gYS5tcyAvIGEuYnVkZ2V0KVxuICAgIC5tYXAoXG4gICAgICAoYnJlYWNoKSA9PlxuICAgICAgICBgICAke2JyZWFjaC5tcy50b0ZpeGVkKDApLnBhZFN0YXJ0KDYpfW1zICBgICtcbiAgICAgICAgYG92ZXIgJHtTdHJpbmcoTWF0aC5yb3VuZChicmVhY2guYnVkZ2V0KSkucGFkU3RhcnQoNSl9bXMgIGAgK1xuICAgICAgICBgJHticmVhY2gua2luZC5wYWRFbmQoNyl9ICAke2JyZWFjaC5maWxlfSAgKCR7YnJlYWNoLmRldGFpbH0pYCxcbiAgICApXG4gICAgLmpvaW4oXCJcXG5cIik7XG4gIHJldHVybiAoXG4gICAgYGNvbGxlY3QtYnVkZ2V0OiAke2JyZWFjaGVzLmxlbmd0aH0gYnJlYWNoKGVzKSBhdCBhIHJ1biBtZWRpYW4gb2YgYCArXG4gICAgYCR7bWVkaWFuLnRvRml4ZWQoMCl9bXMg4oCUIGEgYnVkZ2V0IHdhcyBjcm9zc2VkXFxuYCArXG4gICAgYCR7cm93c31cXG5gICtcbiAgICBcIkEgZmlsZSB0aGF0IHN1ZGRlbmx5IGNvc3RzIG11Y2ggbW9yZSB0byBjb2xsZWN0IHVzdWFsbHkgbWVhbnMgYW4gZWFnZXIgaW1wb3J0IFwiICtcbiAgICBcIm9yIGEgYD9yYXdgIGdsb2IgY2FtZSBiYWNrLiBSZWFkIHRoZSBzaGFyZWQgaW5kZXggb24gZGVtYW5kIGluc3RlYWQuIEEgYGNvbGxlY3RgIFwiICtcbiAgICBcImJyZWFjaCB3YW50cyB0aGUgbXVsdGlwbGUgaW4gYHNyYy90ZXN0L2NvbGxlY3QtYnVkZ2V0LnRzYCByYWlzZWQgZGVsaWJlcmF0ZWx5OyBhbiBcIiArXG4gICAgXCJgaW1wb3J0YCBicmVhY2ggaXMgYSB0cmFja2VkIHNjYW5uZXIgYmVpbmcgcmVhZCBlYWdlcmx5IGFnYWluLlxcblwiXG4gICk7XG59XG5cbi8qKiBUaGUgb25lLWxpbmUgc3VtbWFyeSB0aGUgcmVjb3JkZXIgcHJpbnRzIGZvciBlYWNoIHRyYWNrZWQgbW9kdWxlLiAqL1xuZnVuY3Rpb24gcmVjb3JkTGluZShcbiAgdHJhY2tlZDogc3RyaW5nLFxuICBiZWZvcmU6IFJlYWRvbmx5PFJlY29yZDxzdHJpbmcsIG51bWJlcj4+LFxuICBhZnRlcjogUmVhZG9ubHk8UmVjb3JkPHN0cmluZywgbnVtYmVyPj4sXG4gIG1lYXN1cmVkOiBSZWFkb25seTxSZWNvcmQ8c3RyaW5nLCBudW1iZXI+Pixcbik6IHN0cmluZyB7XG4gIGNvbnN0IHNhdyA9IG1lYXN1cmVkW3RyYWNrZWRdO1xuICBjb25zdCB3YXMgPSBiZWZvcmVbdHJhY2tlZF07XG4gIGNvbnN0IG5vdyA9IGFmdGVyW3RyYWNrZWRdO1xuICBjb25zdCBjaGFuZ2UgPVxuICAgIG5vdyA9PT0gdW5kZWZpbmVkXG4gICAgICA/IFwibGVmdCB1bm5hbWVkIChub3QgaW1wb3J0ZWQgdGhpcyBydW4pXCJcbiAgICAgIDogd2FzID09PSB1bmRlZmluZWRcbiAgICAgICAgPyBgYWRkZWQgJHtub3d9bXNgXG4gICAgICAgIDogbm93IDwgd2FzXG4gICAgICAgICAgPyBgbG93ZXJlZCAke3dhc31tcyAtPiAke25vd31tc2BcbiAgICAgICAgICA6IGBrZXB0ICR7bm93fW1zYDtcbiAgcmV0dXJuIGAgICR7dHJhY2tlZH06ICR7Y2hhbmdlfSR7c2F3ID09PSB1bmRlZmluZWQgPyBcIlwiIDogYCAobWVhc3VyZWQgJHtzYXcudG9GaXhlZCgxKX1tcylgfWA7XG59XG5cbi8qKiBUaGUgb25lLWxpbmUgc3VtbWFyeSB0aGUgcmVjb3JkZXIgcHJpbnRzIGZvciB0aGUgc29mdCB0aHJlc2hvbGQuICovXG5mdW5jdGlvbiByZWNvcmRUaHJlc2hvbGRMaW5lKGJlZm9yZTogbnVtYmVyLCBhZnRlcjogbnVtYmVyLCB0aWdodGVzdDogbnVtYmVyKTogc3RyaW5nIHtcbiAgY29uc3QgY2hhbmdlID0gYWZ0ZXIgPCBiZWZvcmUgPyBgbG93ZXJlZCAke2JlZm9yZX0gLT4gJHthZnRlcn1gIDogYGtlcHQgJHthZnRlcn1gO1xuICByZXR1cm4gYCAgc29mdFRocmVzaG9sZDogJHtjaGFuZ2V9ICh0aWdodGVzdCBmaWxlICR7dGlnaHRlc3QudG9GaXhlZCgyKX0gb2YgaXRzIGJ1ZGdldClgO1xufVxuXG4vKipcbiAqIFRoZSBlbmQtb2YtcnVuIG5vdGljZTogdGhlIGZpbGVzIG5lYXJlc3QgdGhlaXIgYnVkZ2V0LCBvbiBldmVyeSBydW4gc28gYSBjcmVlcFxuICogaXMgdmlzaWJsZSBiZWZvcmUgaXQgYnJlYWNoZXMuXG4gKlxuICogV3JpdHRlbiB0byBzdGRlcnI6IHRoZSBDSSBydW5uZXIgZ2l2ZXMgVml0ZXN0J3MgSlNPTiByZXBvcnRlciBzdGRvdXQgYW5kIHBhcnNlc1xuICogaXQsIHNvIGEgc3RyYXkgbGluZSB0aGVyZSB3b3VsZCBjb3JydXB0IHRoZSByZXBvcnQuXG4gKi9cbmZ1bmN0aW9uIGZvcm1hdFRpZ2h0ZXN0KHJvd3M6IENvbGxlY3RSb3dbXSwgbWVkaWFuOiBudW1iZXIsIHRvdGFsOiBudW1iZXIpOiBzdHJpbmcge1xuICBpZiAocm93cy5sZW5ndGggPT09IDApIHJldHVybiBcIlwiO1xuICBjb25zdCBsaW5lcyA9IHJvd3NcbiAgICAubWFwKFxuICAgICAgKHJvdykgPT5cbiAgICAgICAgYCAgJHtgJHtNYXRoLnJvdW5kKHJvdy51c2VkICogMTAwKX0lYC5wYWRTdGFydCg0KX0gb2YgYCArXG4gICAgICAgIGAke1N0cmluZyhNYXRoLnJvdW5kKHJvdy5jZWlsaW5nKSkucGFkU3RhcnQoNSl9bXMgIGAgK1xuICAgICAgICBgJHtyb3cuY29sbGVjdC50b0ZpeGVkKDApLnBhZFN0YXJ0KDYpfW1zICAke3Jvdy5maWxlfWAsXG4gICAgKVxuICAgIC5qb2luKFwiXFxuXCIpO1xuICByZXR1cm4gKFxuICAgIGBjb2xsZWN0LWJ1ZGdldDogdGhlIGZpbGVzIG5lYXJlc3QgdGhlaXIgY29sbGVjdCBidWRnZXQgb3V0IG9mICR7dG90YWx9IGAgK1xuICAgIGAocnVuIG1lZGlhbiAke21lZGlhbi50b0ZpeGVkKDApfW1zKSDigJQgd2F0Y2ggdGhlc2UgZm9yIGEgY3JlZXBpbmcgcmVncmVzc2lvblxcbmAgK1xuICAgIGAke2xpbmVzfVxcbmBcbiAgKTtcbn1cblxuLyoqXG4gKiBUaGUgc29mdC1nYXRlIGJsb2NrOiB0aGUgZmlsZXMgbmVhciB0aGVpciBidWRnZXQsIHdoaWNoIGRvIG5vdCBmYWlsIHRoZSBydW4gYnV0XG4gKiBhcmUgd2hhdCB0byBsb29rIGF0IGJlZm9yZSB0aGUgbmV4dCBjaGFuZ2UgdHJpcHMgdGhlIGhhcmQgZ2F0ZS5cbiAqL1xuZnVuY3Rpb24gZm9ybWF0U29mdEdhdGUoXG4gIHdhcm5pbmdzOiBDb2xsZWN0Um93W10sXG4gIHRocmVzaG9sZDogbnVtYmVyLFxuICBtZWRpYW46IG51bWJlcixcbiAgdG90YWw6IG51bWJlcixcbik6IHN0cmluZyB7XG4gIGNvbnN0IGxpbmVzID0gd2FybmluZ3NcbiAgICAubWFwKFxuICAgICAgKHJvdykgPT5cbiAgICAgICAgYCAgJHtgJHtNYXRoLnJvdW5kKHJvdy51c2VkICogMTAwKX0lYC5wYWRTdGFydCg0KX0gb2YgYCArXG4gICAgICAgIGAke1N0cmluZyhNYXRoLnJvdW5kKHJvdy5jZWlsaW5nKSkucGFkU3RhcnQoNSl9bXMgIGAgK1xuICAgICAgICBgJHtyb3cuY29sbGVjdC50b0ZpeGVkKDApLnBhZFN0YXJ0KDYpfW1zICAke3Jvdy5maWxlfWAsXG4gICAgKVxuICAgIC5qb2luKFwiXFxuXCIpO1xuICByZXR1cm4gKFxuICAgIGBjb2xsZWN0LWJ1ZGdldDogJHt3YXJuaW5ncy5sZW5ndGh9IG9mICR7dG90YWx9IGZpbGUocykgYXQgb3Igb3ZlciBgICtcbiAgICBgJHtNYXRoLnJvdW5kKHRocmVzaG9sZCAqIDEwMCl9JSBvZiB0aGVpciBjb2xsZWN0IGJ1ZGdldCBgICtcbiAgICBgKHJ1biBtZWRpYW4gJHttZWRpYW4udG9GaXhlZCgwKX1tcykg4oCUIHN0aWxsIGdyZWVuLCBidXQgY2xvc2UgdG8gdGhlIGhhcmQgZ2F0ZVxcbmAgK1xuICAgIGAke2xpbmVzfVxcbmBcbiAgKTtcbn1cblxuLyoqIFdoZXJlIHRoZSBzb2Z0LWdhdGUgc2lkZWNhciBsaXZlcywgcmVzb2x2ZWQgZnJvbSB0aGUgcnVuJ3MgZGlyZWN0b3J5LiAqL1xuZnVuY3Rpb24gc29mdEdhdGVGaWxlUGF0aCgpOiBzdHJpbmcge1xuICByZXR1cm4gam9pbihwcm9jZXNzLmN3ZCgpLCBcIi5mcmVlYnVmZlwiLCBTT0ZUX0dBVEVfRklMRSk7XG59XG5cbi8qKlxuICogTGVhdmUgdGhlIHNvZnQtZ2F0ZSB3YXJuaW5ncyB3aGVyZSB0aGUgQ0kgcnVubmVyIGNhbiBmaW5kIHRoZW0uXG4gKlxuICogQSBwbGFpbiBKU09OIHNpZGVjYXIgcmF0aGVyIHRoYW4gYSBsaW5lIG9mIHN0ZGVyciB0byBwYXJzZTogdGhlIHJ1bm5lciBhbHJlYWR5XG4gKiByZWFkcyBpdHMgVml0ZXN0IHJlcG9ydCB0aGUgc2FtZSB3YXksIGFuZCBhIHdhcm5pbmcgbmFtaW5nIGEgZmlsZSB3aXRoIGEgc3BhY2VcbiAqIG9yIGEgY29sb24gaW4gaXQgd291bGQgYnJlYWsgYSB0ZXh0IHBhcnNlIGJ1dCBub3QgdGhpcy5cbiAqL1xuZnVuY3Rpb24gd3JpdGVTb2Z0R2F0ZSh3YXJuaW5nczogQ29sbGVjdFJvd1tdLCB0aHJlc2hvbGQ6IG51bWJlcik6IHZvaWQge1xuICB3cml0ZUZpbGVTeW5jKHNvZnRHYXRlRmlsZVBhdGgoKSwgYCR7SlNPTi5zdHJpbmdpZnkoeyB0aHJlc2hvbGQsIHdhcm5pbmdzIH0sIG51bGwsIDIpfVxcbmApO1xufVxuXG4vKiogRHJvcCBhIHN0YWxlIHNpZGVjYXIsIHNvIGEgd2FybmluZyBmcm9tIGFuIGVhcmxpZXIgcnVuIGNhbm5vdCBiZSByZS1yZXBvcnRlZC4gKi9cbmZ1bmN0aW9uIGNsZWFyU29mdEdhdGUoKTogdm9pZCB7XG4gIHJtU3luYyhzb2Z0R2F0ZUZpbGVQYXRoKCksIHsgZm9yY2U6IHRydWUgfSk7XG59XG5cbi8qKiBXaGVyZSB0aGUgcnVuIHJlcG9ydCBsaXZlcywgcmVzb2x2ZWQgZnJvbSB0aGUgcnVuJ3MgZGlyZWN0b3J5LiAqL1xuZnVuY3Rpb24gcnVuUmVwb3J0UGF0aCgpOiBzdHJpbmcge1xuICByZXR1cm4gam9pbihwcm9jZXNzLmN3ZCgpLCBcIi5mcmVlYnVmZlwiLCBSVU5fUkVQT1JUX0ZJTEUpO1xufVxuXG4vKipcbiAqIExlYXZlIHRoZSBydW4gcmVwb3J0IHdoZXJlIGl0cyB0aHJlZSByZWFkZXJzIGNhbiBmaW5kIGl0LlxuICpcbiAqIEEgcGxhaW4gSlNPTiBzaWRlY2FyIHJhdGhlciB0aGFuIGEgbGluZSBvZiBzdGRlcnIsIGZvciB0aGUgc2FtZSByZWFzb24gdGhlIHNvZnRcbiAqIGdhdGUgdXNlcyBvbmU6IHRoZSBDSSBydW5uZXIgY2FwdHVyZXMgYSBwYXNzaW5nIHJ1bidzIHN0ZGVyciBhbmQgbmV2ZXIgcHJpbnRzIGl0LlxuICogSXQgaXMgd3JpdHRlbiBvbiAqZXZlcnkqIHJ1biB0aGF0IGp1ZGdlZCB0aGUgYmFzZWxpbmVzIOKAlCBpbmNsdWRpbmcgdGhlIG9uZXMgdGhhdFxuICogZm91bmQgbm90aGluZyBsb29zZSDigJQgYmVjYXVzZSBgbnBtIHJ1biBjb2xsZWN0OnN0YWxlYCBoYXMgdG8gdGVsbCBcImp1ZGdlZCBhbmRcbiAqIGNsZWFuXCIgYXBhcnQgZnJvbSBcIm5ldmVyIGp1ZGdlZCBhdCBhbGxcIiwgYW5kIHRoZSBzZWNvbmQgbXVzdCBub3QgcGFzczsgYW5kXG4gKiBiZWNhdXNlIGBucG0gcnVuIGNvbGxlY3Q6Z2F0ZXNgIHB1Ymxpc2hlcyB0aGUgbWVhc3VyZW1lbnQsIHdoaWNoIGlzIHdvcnRoIHNlZWluZ1xuICogcHJlY2lzZWx5IG9uIHRoZSBncmVlbiBydW5zIHdoZXJlIG5vdGhpbmcgaXMgd3JvbmcgeWV0LlxuICpcbiAqIGB0aWdodGVzdGAgcmlkZXMgYWxvbmcgc28gdGhlIHN1bW1hcnkgY2FuIHNob3cgdGhlICpvdGhlciogaGFsZiBvZiB0aGUgZ2F0ZTogdGhlXG4gKiByZWNvcmRlZCB3YXJuaW5nIGJhbmQgYWdhaW5zdCB0aGUgZmlsZSBuZWFyZXN0IGl0cyBidWRnZXQsIHdoaWNoIG90aGVyd2lzZSBvbmx5XG4gKiBhcHBlYXJzIGluIHRoZSByZXBvcnQgd2hlbiB0aGUgYmFuZCBpcyBzdGFsZS4gVGhlIGltcG9ydHMgYXJlIGEgdGFibGUgaGVyZSBhbmQgdGhlXG4gKiBiYW5kIGlzIG9uZSBudW1iZXIsIHNvIGEgcnVuIHRoYXQgbmV2ZXIgY2FtZSBuZWFyIGVpdGhlciBpcyB0aGUgb25lIGEgcmVhZGVyIG1vc3RcbiAqIG5lZWRzIHRvIHNlZSBib3RoIGhhbHZlcyBvbi5cbiAqL1xuZnVuY3Rpb24gd3JpdGVSdW5SZXBvcnQoXG4gIHJ1bnM6IG51bWJlcixcbiAgc2FtcGxlczogbnVtYmVyLFxuICBtZWFzdXJlZDogUmVhZG9ubHk8UmVjb3JkPHN0cmluZywgbnVtYmVyPj4sXG4gIHRpZ2h0ZXN0OiBudW1iZXIsXG4gIHN0YWxlOiBTdGFsZUdhdGVbXSxcbik6IHZvaWQge1xuICAvLyBgaW1wb3J0U3RhbGVBYm92ZWAsIGBzdGFsZUJhbmRIZWFkcm9vbWAgYW5kIGBiYW5kSnVkZ2VkRnJvbWAgYXJlIHRoZSByZXBvcnRlcidzXG4gIC8vIG93biBydWxlIHJhdGhlciB0aGFuIG1lYXN1cmVtZW50czogdGhlIGNvc3QgYSByZWNvcmRlZCBiYXNlbGluZSBtYXkgc2l0IGF0IGJlZm9yZVxuICAvLyB0aGlzIHJ1biBjYWxscyBpdCBzdGFsZSwgdGhlIGhlYWRyb29tIHBhc3Qgd2hpY2ggdGhlIGJhbmQgaXMgY2FsbGVkIGxvb3NlLCBhbmQgdGhlXG4gIC8vIHRpZ2h0ZXN0IGZpbGUgYSBydW4gbXVzdCByZWFjaCBiZWZvcmUgdGhlIGJhbmQgaXMganVkZ2VkIGF0IGFsbC4gVGhleSByaWRlIGhlcmUgc29cbiAgLy8gdGhlIHJ1biBzdW1tYXJ5IGNhbiBwcmludCB0aGUgYm91bmRhcmllcyB0aGUgZ2F0ZSBlbmZvcmNlcyDigJQgYW5kIHRoZSB3b3JkIGZvciBhXG4gIC8vIHJ1biB0aGF0IG5ldmVyIHJlYWNoZWQgb25lIOKAlCByYXRoZXIgdGhhbiBhIHNlY29uZCBjb3B5IHRoYXQgY291bGQgZHJpZnQuIFRoZSBzYW1lXG4gIC8vIHJlYXNvbiB0aGUgbWVhc3VyZWQgY29sdW1ucyByZWFkIHRoaXMgZmlsZS5cbiAgLy9cbiAgLy8gVGhlIHBlci1pbXBvcnQgdGhyZXNob2xkIGlzIGJ1aWx0IHdpdGggdGhlIHNhbWUgYHN0YWxlVGhyZXNob2xkYCB0aGUgY2hlY2sgY2FsbHMsXG4gIC8vIHNvIHRoZSBudW1iZXIgYSByZWFkZXIgY29tcGFyZXMgYSBiYXNlbGluZSBhZ2FpbnN0IGlzIHRoZSBvbmUgdGhhdCBqdWRnZWQgaXQuXG4gIGNvbnN0IGltcG9ydFN0YWxlQWJvdmUgPSBpbXBvcnRTdGFsZVRocmVzaG9sZHMobWVhc3VyZWQpO1xuICB3cml0ZUZpbGVTeW5jKFxuICAgIHJ1blJlcG9ydFBhdGgoKSxcbiAgICBgJHtKU09OLnN0cmluZ2lmeShcbiAgICAgIHtcbiAgICAgICAgcnVucyxcbiAgICAgICAgc2FtcGxlcyxcbiAgICAgICAgbWVhc3VyZWQsXG4gICAgICAgIGltcG9ydFN0YWxlQWJvdmUsXG4gICAgICAgIHRpZ2h0ZXN0LFxuICAgICAgICBzdGFsZUJhbmRIZWFkcm9vbTogU1RBTEVfQkFORF9IRUFEUk9PTSxcbiAgICAgICAgYmFuZEp1ZGdlZEZyb206IE1JTl9TT0ZUX1RIUkVTSE9MRCxcbiAgICAgICAgc3RhbGUsXG4gICAgICB9LFxuICAgICAgbnVsbCxcbiAgICAgIDIsXG4gICAgKX1cXG5gLFxuICApO1xufVxuXG4vKiogRHJvcCB0aGUgcmVwb3J0LCBzbyBhIHJ1biB0aGF0IGRvZXMgbm90IGp1ZGdlIGNhbm5vdCBsZWF2ZSBhbiBlYXJsaWVyIG9uZSdzLiAqL1xuZnVuY3Rpb24gY2xlYXJSdW5SZXBvcnQoKTogdm9pZCB7XG4gIHJtU3luYyhydW5SZXBvcnRQYXRoKCksIHsgZm9yY2U6IHRydWUgfSk7XG59XG5cbi8qKlxuICogVGhlIHN0YWxlbmVzcyB3YXJuaW5nOiB0aGUgcmVjb3JkZWQgYmFzZWxpbmVzIGxvb3NlciB0aGFuIHRoaXMgcnVuIG1lYXN1cmVkLlxuICpcbiAqIEEgd2FybmluZyByYXRoZXIgdGhhbiBhIGZhaWx1cmUgb24gcHVycG9zZS4gT25lIHJ1biBpcyBvbmUgc2FtcGxlIG9mIGFcbiAqIHdhbGwtY2xvY2sgcXVhbnRpdHksIHNvIGEgbG9vc2UgZ2F0ZSBpcyBvbmx5ICpjb25maXJtZWQqIHdoZW4gYSByZXBlYXRlZCBzZXNzaW9uXG4gKiBhZ3JlZXMgb24gaXQ7IGEgbG9uZSByZWFkaW5nIGlzIHByaW50ZWQgbG91ZGx5IGFuZCBhbm5vdGF0ZWQsIGFuZFxuICogYG5wbSBydW4gY29sbGVjdDpzdGFsZWAgaXMgd2hhdCBmYWlscyBvbiBpdC5cbiAqL1xuLyoqIE9uZSByZWNvcmRlZCBnYXRlJ3MgdHdvIG51bWJlcnMsIGluIHRoZSB1bml0cyB0aGF0IGdhdGUgaXMgcmVjb3JkZWQgaW4uICovXG5mdW5jdGlvbiBzdGFsZU51bWJlcnMoZW50cnk6IFN0YWxlR2F0ZSk6IHsgd2FzOiBzdHJpbmc7IG5vdzogc3RyaW5nIH0ge1xuICByZXR1cm4gZW50cnkua2luZCA9PT0gXCJiYW5kXCJcbiAgICA/IHsgd2FzOiBwZXJjZW50KGVudHJ5LnJlY29yZGVkKSwgbm93OiBwZXJjZW50KGVudHJ5Lm1lYXN1cmVkKSB9XG4gICAgOiB7IHdhczogYCR7ZW50cnkucmVjb3JkZWR9bXNgLCBub3c6IGAke2VudHJ5Lm1lYXN1cmVkLnRvRml4ZWQoMSl9bXNgIH07XG59XG5cbmZ1bmN0aW9uIGZvcm1hdFN0YWxlKHN0YWxlOiBTdGFsZUdhdGVbXSk6IHN0cmluZyB7XG4gIGNvbnN0IHJvd3MgPSBzdGFsZVxuICAgIC5tYXAoKGVudHJ5KSA9PiB7XG4gICAgICBjb25zdCB7IHdhcywgbm93IH0gPSBzdGFsZU51bWJlcnMoZW50cnkpO1xuICAgICAgY29uc3QgbGFiZWwgPSBlbnRyeS5raW5kID09PSBcImJhbmRcIiA/IFwid29yc3QgZmlsZVwiIDogXCJtZWFzdXJlZFwiO1xuICAgICAgcmV0dXJuIGAgIHJlY29yZGVkICR7d2FzLnBhZFN0YXJ0KDcpfSAgJHtsYWJlbH0gJHtub3cucGFkU3RhcnQoNyl9ICAke2VudHJ5Lm5hbWV9YDtcbiAgICB9KVxuICAgIC5qb2luKFwiXFxuXCIpO1xuICByZXR1cm4gKFxuICAgIGBjb2xsZWN0LWJ1ZGdldDogJHtzdGFsZS5sZW5ndGh9IHJlY29yZGVkIGdhdGUocykgYXJlIGxvb3NlciB0aGFuIHRoaXMgcnVuIGAgK1xuICAgIFwibWVhc3VyZWQg4oCUIGEgd2FybmluZywgbm90IGEgZmFpbHVyZVxcblwiICtcbiAgICBgJHtyb3dzfVxcbmAgK1xuICAgIFwiT25lIHJ1biBpcyBub3QgZXZpZGVuY2UgZW5vdWdoIHRvIGZhaWwgb24uIGBucG0gcnVuIGNvbGxlY3Q6cHJvcG9zZWAgcnVucyB0aGUgXCIgK1xuICAgIFwic3VpdGUgcmVwZWF0ZWRseSBhbmQgZmFpbHMgd2hlbiBldmVyeSBydW4gYWdyZWVzOyBgbnBtIHJ1biBjb2xsZWN0OnJlY29yZGAgXCIgK1xuICAgIFwibG93ZXJzIHRoZSByZWNvcmRlZCB2YWx1ZSBub3cuXFxuXCJcbiAgKTtcbn1cblxuLyoqXG4gKiBUaGUgcmVwb3J0ZXIgaXRzZWxmOiB0dXJucyBlYWNoIG1vZHVsZSdzIGBkaWFnbm9zdGljKClgIGludG8gYSBgTW9kdWxlVGltaW5nYCxcbiAqIGFza3MgYGNvbGxlY3RCdWRnZXRCcmVhY2hlc2AsIGFuZCBmYWlscyB0aGUgcHJvY2VzcyB3aGVuIGFueXRoaW5nIGlzIG92ZXIuXG4gKlxuICogVHdvIG1vZGVzLCBjaG9zZW4gYnkgYENPTExFQ1RfQkFTRUxJTkVfUkVDT1JEYCwgd2hpY2ggb25seVxuICogYG5wbSBydW4gY29sbGVjdDpyZWNvcmRgIHNldHM6IG5vcm1hbGx5IGl0IGlzIGEgcmVhZC1vbmx5IGdhdGUgYW5kIG5ldmVyIHdyaXRlc1xuICogYSBmaWxlOyBpbiByZWNvcmQgbW9kZSBpdCBsb3dlcnMgdGhlIHRyYWNrZWQtaW1wb3J0IGJhc2VsaW5lcyBhbmQgcmV0dXJuc1xuICogd2l0aG91dCBmYWlsaW5nLiBLZWVwaW5nIHRoZSByZWNvcmRlciBiZWhpbmQgYW4gZW52aXJvbm1lbnQgdmFyaWFibGUgcmF0aGVyXG4gKiB0aGFuIGEgbm9ybWFsLXJ1biBzaWRlIGVmZmVjdCBpcyB3aGF0IGxldHMgZXZlcnkgb3RoZXIgcnVuIOKAlCBpbmNsdWRpbmcgQ0kg4oCUXG4gKiB0cmVhdCB0aGUgY2hlY2tlZC1pbiBiYXNlbGluZSBhcyByZWFkLW9ubHkuXG4gKlxuICogQSAqbG9vc2UqIGdhdGUgaXMgdGhlIG9uZSB0aGluZyBubyBzaW5nbGUgcnVuIGZhaWxzIG9uLiBJdCBpcyBqdWRnZWQgYXBhcnQgZnJvbVxuICogdGhlIGJyZWFjaGVzLCByZXBvcnRlZCBhcyBhIHdhcm5pbmcsIGFuZCBsZWZ0IGluIGEgc2lkZWNhcjsgdGhlIHJlcGVhdGVkXG4gKiBgY29sbGVjdDpwcm9wb3NlYCBzZXNzaW9uIGlzIHdoYXQgY29uZmlybXMgaXQsIGFuZCBgbnBtIHJ1biBjb2xsZWN0OnN0YWxlYCBpc1xuICogd2hhdCBmYWlscyBvbiBhIGNvbmZpcm1hdGlvbi4gVGhhdCBpcyB0aGUgc2FtZSBzaGFwZSB0aGUgcHJvcG9zYWwgYWxyZWFkeSB1c2VzXG4gKiBmb3IgYSBkcm9wIOKAlCBtZWFzdXJlIHNldmVyYWwgdGltZXMsIGFjdCBvbmx5IG9uIHdoYXQgZXZlcnkgcnVuIGFncmVlcyB0by5cbiAqXG4gKiBgcHJvY2Vzcy5leGl0Q29kZSA9IDFgIGlzIHRoZSBzYW1lIGxldmVyIFZpdGVzdCBwdWxscyBmb3IgYSBmYWlsZWQgdGVzdCwgYW5kXG4gKiBpdCBpcyBzZXQgaGVyZSByYXRoZXIgdGhhbiB0aHJvd2luZyBiZWNhdXNlIGEgcmVwb3J0ZXIgZXJyb3IgaXMgc3dhbGxvd2VkIGludG9cbiAqIGFuIFwidW5oYW5kbGVkIHJlcG9ydGVyIGVycm9yXCIgd2FybmluZyB0aGF0IGRvZXMgbm90IGZhaWwgdGhlIHJ1bi5cbiAqL1xuZXhwb3J0IGNsYXNzIENvbGxlY3RCdWRnZXRSZXBvcnRlciBpbXBsZW1lbnRzIFJlcG9ydGVyIHtcbiAgb25UZXN0UnVuRW5kKG1vZHVsZXM6IFJlYWRvbmx5QXJyYXk8VGVzdE1vZHVsZT4pOiB2b2lkIHtcbiAgICBjb25zdCB0aW1pbmdzOiBNb2R1bGVUaW1pbmdbXSA9IG1vZHVsZXMubWFwKChlbnRyeSkgPT4ge1xuICAgICAgY29uc3QgZGlhZ25vc3RpYyA9IGVudHJ5LmRpYWdub3N0aWMoKTtcbiAgICAgIHJldHVybiB7XG4gICAgICAgIGZpbGU6IHByb2plY3RQYXRoKGVudHJ5Lm1vZHVsZUlkKSxcbiAgICAgICAgY29sbGVjdDogZGlhZ25vc3RpYy5jb2xsZWN0RHVyYXRpb24sXG4gICAgICAgIGltcG9ydHM6IE9iamVjdC5lbnRyaWVzKGRpYWdub3N0aWMuaW1wb3J0RHVyYXRpb25zID8/IHt9KS5tYXAoKFtmaWxlLCBkdXJhdGlvbl0pID0+ICh7XG4gICAgICAgICAgcGF0aDogcHJvamVjdFBhdGgoZmlsZSksXG4gICAgICAgICAgdG90YWw6IGR1cmF0aW9uLnRvdGFsVGltZSxcbiAgICAgICAgfSkpLFxuICAgICAgfTtcbiAgICB9KTtcblxuICAgIC8vIENvbXB1dGVkIG9uY2UgYW5kIHBhc3NlZCB0byBldmVyeSBjb25zdW1lciwgc28gdGhlIG51bWJlciB0aGUgcmVwb3J0c1xuICAgIC8vIHByaW50IGlzIHRoZSBudW1iZXIgdGhlIGNlaWxpbmdzIHdlcmUgYnVpbHQgZnJvbS5cbiAgICBjb25zdCBtZWRpYW4gPSBtZWRpYW5Db2xsZWN0KHRpbWluZ3MpO1xuXG4gICAgaWYgKHByb2Nlc3MuZW52LkNPTExFQ1RfQkFTRUxJTkVfUkVDT1JEKSB7XG4gICAgICB0aGlzLnJlY29yZCh0aW1pbmdzLCBtZWRpYW4pO1xuICAgIH0gZWxzZSBpZiAocHJvY2Vzcy5lbnYuQ09MTEVDVF9CQVNFTElORV9QUk9QT1NFKSB7XG4gICAgICB0aGlzLnByb3Bvc2UodGltaW5ncywgbWVkaWFuKTtcbiAgICB9IGVsc2Uge1xuICAgICAgY29uc3QgYnJlYWNoZXMgPSBjb2xsZWN0QnVkZ2V0QnJlYWNoZXModGltaW5ncywgbWVkaWFuKTtcbiAgICAgIGlmIChicmVhY2hlcy5sZW5ndGggPiAwKSB7XG4gICAgICAgIHByb2Nlc3MuZXhpdENvZGUgPSAxO1xuICAgICAgICBwcm9jZXNzLnN0ZGVyci53cml0ZShmb3JtYXRCcmVhY2hlcyhicmVhY2hlcywgbWVkaWFuKSk7XG4gICAgICB9XG4gICAgICAvLyBKdWRnZWQgYXBhcnQgZnJvbSB0aGUgYnJlYWNoZXMgYW5kIG5ldmVyIGZhdGFsOiBhIHJlY29yZGVkIHZhbHVlIHRoYXQgaGFzXG4gICAgICAvLyBnb25lIHRvbyBsb29zZSBpcyB0aGUgb25lIGZpbmRpbmcgYSBzaW5nbGUgcnVuIG1heSBub3QgZmFpbCBvbi4gVGhlIHJlcG9ydCBpc1xuICAgICAgLy8gbGVmdCBmb3IgYG5wbSBydW4gY29sbGVjdDpzdGFsZWAsIHdoaWNoIGNvbmZpcm1zIGl0IGFjcm9zcyBhIHJlcGVhdGVkIHNlc3Npb25cbiAgICAgIC8vIOKAlCBzbyBgcnVuc2AgYW5kIGBzYW1wbGVzYCBhcmUgYm90aCBvbmUgaGVyZSwgYW5kIHRoYXQgc3RlcCByZWZ1c2VzIGEgcmVwb3J0XG4gICAgICAvLyB0aGlzIHRoaW4gcmF0aGVyIHRoYW4gcmVhZGluZyBpdCBhcyBhIGNsZWFuIGJpbGwuIEl0IGlzIHdyaXR0ZW4gZXZlbiB3aGVuXG4gICAgICAvLyBub3RoaW5nIGlzIGxvb3NlLCBiZWNhdXNlIHRoZSBzdW1tYXJ5IHB1Ymxpc2hlcyB0aGUgbWVhc3VyZW1lbnQgYW5kIHRoZSBnYXRlXG4gICAgICAvLyBzdGVwIHRlbGxzIFwianVkZ2VkIGNsZWFuXCIgZnJvbSBcIm5ldmVyIGp1ZGdlZFwiLlxuICAgICAgY29uc3Qgc2FtcGxlOiBDb2xsZWN0U2FtcGxlID0ge1xuICAgICAgICBtZWFzdXJlZDogbWVhc3VyZWRJbXBvcnRDb3N0cyh0aW1pbmdzKSxcbiAgICAgICAgdGlnaHRlc3Q6IHdvcnN0VXNlZCh0aW1pbmdzLCBtZWRpYW4pLFxuICAgICAgfTtcbiAgICAgIGNvbnN0IHN0YWxlID0gc3RhbGVHYXRlcyhDT01NSVRURURfQkFTRUxJTkVTLCBzYW1wbGUpO1xuICAgICAgd3JpdGVSdW5SZXBvcnQoMSwgMSwgc2FtcGxlLm1lYXN1cmVkLCBzYW1wbGUudGlnaHRlc3QsIHN0YWxlKTtcbiAgICAgIGlmIChzdGFsZS5sZW5ndGggPiAwKSBwcm9jZXNzLnN0ZGVyci53cml0ZShmb3JtYXRTdGFsZShzdGFsZSkpO1xuICAgIH1cblxuICAgIC8vIEFsd2F5cyBsYXN0OiB0aGUgZmlsZXMgbmVhcmVzdCB0aGVpciBidWRnZXQsIHNvIGEgY3JlZXAgc2hvd3MgdXAgb24gdGhlXG4gICAgLy8gZ3JlZW4gcnVucyB0aGF0IGNvbWUgYmVmb3JlIGl0IGJyZWFjaGVzLCBub3Qgb25seSBvbiB0aGUgcmVkIG9uZSBhZnRlci5cbiAgICAvLyBQYXN0IHRoZSBzb2Z0IHRocmVzaG9sZCB0aGUgbm90aWNlIGJlY29tZXMgYSB3YXJuaW5nIOKAlCBzdGlsbCBncmVlbiwgYnV0XG4gICAgLy8gbGVmdCB3aGVyZSB0aGUgQ0kgcnVubmVyIHR1cm5zIGl0IGludG8gYW4gYW5ub3RhdGlvbi5cbiAgICBjb25zdCB3YXJuaW5ncyA9IHNvZnRXYXJuaW5ncyh0aW1pbmdzLCBtZWRpYW4pO1xuICAgIGlmICh3YXJuaW5ncy5sZW5ndGggPiAwKSB7XG4gICAgICBjb25zdCB0aHJlc2hvbGQgPSBDT01NSVRURURfQkFTRUxJTkVTLnNvZnRUaHJlc2hvbGQ7XG4gICAgICB3cml0ZVNvZnRHYXRlKHdhcm5pbmdzLCB0aHJlc2hvbGQpO1xuICAgICAgcHJvY2Vzcy5zdGRlcnIud3JpdGUoZm9ybWF0U29mdEdhdGUod2FybmluZ3MsIHRocmVzaG9sZCwgbWVkaWFuLCB0aW1pbmdzLmxlbmd0aCkpO1xuICAgIH0gZWxzZSB7XG4gICAgICBjbGVhclNvZnRHYXRlKCk7XG4gICAgICBwcm9jZXNzLnN0ZGVyci53cml0ZShcbiAgICAgICAgZm9ybWF0VGlnaHRlc3Qoc2xvd2VzdENvbGxlY3RzKHRpbWluZ3MsIG1lZGlhbiksIG1lZGlhbiwgdGltaW5ncy5sZW5ndGgpLFxuICAgICAgKTtcbiAgICB9XG4gIH1cblxuICAvKipcbiAgICogVGhlIGJhc2VsaW5lcyB0aGlzIHJ1bidzIG1lYXN1cmVtZW50cyBlYXJuOiB3aGF0IGl0IHdvdWxkIGxvd2VyLCBiZWZvcmUgYW55XG4gICAqIG9mIGl0IGlzIHdyaXR0ZW4uXG4gICAqXG4gICAqIFNoYXJlZCBieSB0aGUgcmVjb3JkZXIgYW5kIHRoZSBwcm9wb3NlciBzbyB0aGV5IGNhbm5vdCBkaXNhZ3JlZSDigJQgdGhlIG9uZVxuICAgKiB3cml0ZXMgdGhlIHJlc3VsdCB0byB0aGUgY2hlY2tlZC1pbiBmaWxlLCB0aGUgb3RoZXIgb25seSBkZXNjcmliZXMgaXQuXG4gICAqL1xuICBwcml2YXRlIGxvd2VyZWQoXG4gICAgdGltaW5nczogTW9kdWxlVGltaW5nW10sXG4gICAgbWVkaWFuOiBudW1iZXIsXG4gICk6IHtcbiAgICBiZWZvcmU6IENvbW1pdHRlZEJhc2VsaW5lcztcbiAgICBhZnRlcjogQ29tbWl0dGVkQmFzZWxpbmVzO1xuICAgIG1lYXN1cmVkOiBSZWNvcmQ8c3RyaW5nLCBudW1iZXI+O1xuICAgIHRpZ2h0ZXN0OiBudW1iZXI7XG4gIH0ge1xuICAgIGNvbnN0IGJlZm9yZSA9IENPTU1JVFRFRF9CQVNFTElORVM7XG4gICAgY29uc3QgbWVhc3VyZWQgPSBtZWFzdXJlZEltcG9ydENvc3RzKHRpbWluZ3MpO1xuICAgIGNvbnN0IHRpZ2h0ZXN0ID0gd29yc3RVc2VkKHRpbWluZ3MsIG1lZGlhbik7XG4gICAgY29uc3QgYWZ0ZXIgPSBsb3dlcmVkRnJvbShiZWZvcmUsIHsgbWVhc3VyZWQsIHRpZ2h0ZXN0IH0pO1xuICAgIHJldHVybiB7IGJlZm9yZSwgYWZ0ZXIsIG1lYXN1cmVkLCB0aWdodGVzdCB9O1xuICB9XG5cbiAgLyoqXG4gICAqIExvd2VyIHRoZSByZWNvcmRlZCBiYXNlbGluZXMgdG8gd2hhdCB0aGlzIHJ1biBtZWFzdXJlZCwgYW5kIHdyaXRlIHRoZW0uXG4gICAqXG4gICAqIFR3byB2YWx1ZXMgbW92ZTogZWFjaCB0cmFja2VkIGltcG9ydCB0byB0aGUgcnVuJ3MgZGVhcmVzdCBjb3N0LCBhbmQgdGhlIHNvZnRcbiAgICogdGhyZXNob2xkIHRvIGEgbWFyZ2luIGFib3ZlIHRoZSBydW4ncyB0aWdodGVzdCBmaWxlLiBCb3RoIG9ubHkgZXZlciBmYWxsLlxuICAgKi9cbiAgcHJpdmF0ZSByZWNvcmQodGltaW5nczogTW9kdWxlVGltaW5nW10sIG1lZGlhbjogbnVtYmVyKTogdm9pZCB7XG4gICAgY29uc3QgeyBiZWZvcmUsIGFmdGVyLCBtZWFzdXJlZCwgdGlnaHRlc3QgfSA9IHRoaXMubG93ZXJlZCh0aW1pbmdzLCBtZWRpYW4pO1xuICAgIGNvbnN0IHBhdGggPSBiYXNlbGluZUZpbGVQYXRoKCk7XG4gICAgd3JpdGVGaWxlU3luYyhwYXRoLCByZW5kZXJCYXNlbGluZXMoYWZ0ZXIpKTtcbiAgICAvLyBOb3RoaW5nIGlzIGxvb3NlIG9uY2UgdGhpcyBoYXMgcnVuLCBhbmQgYSByZXBvcnQgZnJvbSBiZWZvcmUgaXQgcmFuIHdvdWxkXG4gICAgLy8gb25seSBiZSBkZXNjcmliaW5nIGJhc2VsaW5lcyB0aGF0IG5vIGxvbmdlciBleGlzdC5cbiAgICBjbGVhclJ1blJlcG9ydCgpO1xuICAgIGNvbnN0IGxpbmVzID0gW1xuICAgICAgLi4uVFJBQ0tFRF9JTVBPUlRTLm1hcCgodHJhY2tlZCkgPT5cbiAgICAgICAgcmVjb3JkTGluZSh0cmFja2VkLCBiZWZvcmUuaW1wb3J0QmFzZWxpbmVzLCBhZnRlci5pbXBvcnRCYXNlbGluZXMsIG1lYXN1cmVkKSxcbiAgICAgICksXG4gICAgICByZWNvcmRUaHJlc2hvbGRMaW5lKGJlZm9yZS5zb2Z0VGhyZXNob2xkLCBhZnRlci5zb2Z0VGhyZXNob2xkLCB0aWdodGVzdCksXG4gICAgXTtcbiAgICBwcm9jZXNzLnN0ZGVyci53cml0ZShgY29sbGVjdC1idWRnZXQ6IHJlY29yZGVkIGJhc2VsaW5lcyB0byAke3BhdGh9XFxuJHtsaW5lcy5qb2luKFwiXFxuXCIpfVxcbmApO1xuICB9XG5cbiAgLyoqXG4gICAqIERlc2NyaWJlIHdoYXQgdGhlIHJlY29yZGVyICp3b3VsZCogbG93ZXIsIHdpdGhvdXQgd3JpdGluZyB0aGUgY2hlY2tlZC1pbiBmaWxlLlxuICAgKlxuICAgKiBXaGF0IGEgcHVsbCByZXF1ZXN0IHJ1bnM6IHRoZSBtZWFzdXJlbWVudCBoYXBwZW5zIGhlcmUsIGluIHRoZSByZXBvcnRlciwgYnV0XG4gICAqIHRoZSBkZWNpc2lvbiB0byBhcHBseSBpdCBzdGF5cyB3aXRoIGEgcGVyc29uLCBzbyBub3RoaW5nIHVuZGVyIHZlcnNpb24gY29udHJvbFxuICAgKiBpcyB0b3VjaGVkLiBBIHByb3Bvc2FsIGFuZCBhIHNtYWxsIHN0YXRlIGZpbGUgYXJlIGxlZnQgZm9yIHRoZSBsYXVuY2hlci5cbiAgICpcbiAgICogVGhlIG1lYXN1cmVtZW50IGlzIHJlcGVhdGVkIOKAlCB0aGUgbGF1bmNoZXIgcnVucyB0aGUgc3VpdGUgc2V2ZXJhbCB0aW1lcyDigJQgc28gYVxuICAgKiBkcm9wIGhhcyB0byBob2xkIGFjcm9zcyBldmVyeSBydW4gYmVmb3JlIGl0IGlzIHBvc3RlZC4gYENPTExFQ1RfUFJPUE9TQUxfU0FNUExFYFxuICAgKiBpcyB3aGF0IHRlbGxzIHRoaXMgcnVuIGl0IGlzIHBhcnQgb2Ygc3VjaCBhIHNlc3Npb246IGl0IG5hbWVzIHRoZSBzYW1wbGUgdG9cbiAgICogbGVhdmUsIGFuZCB0aGUgcmVwb3J0ZXIgdGhlbiBwcm9wb3NlcyBmcm9tIHRoZSB3b3JzdCBjYXNlIG9mIGV2ZXJ5IHNhbXBsZSB0aGVcbiAgICogc2Vzc2lvbiBoYXMgbGVmdCBzbyBmYXIuIFdpdGhvdXQgaXQgKGEgcGxhaW4gYG5wbSBydW4gY29sbGVjdDpwcm9wb3NlYCkgdGhlXG4gICAqIHJ1biBpcyBpdHMgb3duIHNpbmdsZSBzYW1wbGUsIGV4YWN0bHkgYXMgYmVmb3JlLlxuICAgKi9cbiAgcHJpdmF0ZSBwcm9wb3NlKHRpbWluZ3M6IE1vZHVsZVRpbWluZ1tdLCBtZWRpYW46IG51bWJlcik6IHZvaWQge1xuICAgIGNvbnN0IGJlZm9yZSA9IENPTU1JVFRFRF9CQVNFTElORVM7XG4gICAgY29uc3Qgc2FtcGxlOiBDb2xsZWN0U2FtcGxlID0ge1xuICAgICAgbWVhc3VyZWQ6IG1lYXN1cmVkSW1wb3J0Q29zdHModGltaW5ncyksXG4gICAgICB0aWdodGVzdDogd29yc3RVc2VkKHRpbWluZ3MsIG1lZGlhbiksXG4gICAgfTtcbiAgICBjb25zdCBpbmRleCA9IHByb2Nlc3MuZW52LkNPTExFQ1RfUFJPUE9TQUxfU0FNUExFO1xuICAgIGNvbnN0IHNhbXBsZXMgPSBpbmRleCA9PT0gdW5kZWZpbmVkID8gW3NhbXBsZV0gOiBhY2N1bXVsYXRlU2FtcGxlKE51bWJlcihpbmRleCksIHNhbXBsZSk7XG4gICAgY29uc3QgYWdncmVnYXRlID0gYWdncmVnYXRlU2FtcGxlcyhzYW1wbGVzKTtcbiAgICBjb25zdCBhZnRlciA9IGxvd2VyZWRGcm9tKGJlZm9yZSwgYWdncmVnYXRlKTtcbiAgICAvLyBUaGUgYWdncmVnYXRlJ3MgbWVhc3VyZW1lbnQgaXMgd2hhdCB0aGUgcmF0Y2hldCBzYXcsIHNvIGl0IGlzIGFsc28gd2hhdFxuICAgIC8vIGRlY2lkZXMgd2hldGhlciBhIGNvbW1pdHRlZCBiYXNlbGluZSB3YXMgc3RhbGUtaGlnaCDigJQgdGhlIGdhdGUganVkZ2VzIHRoZVxuICAgIC8vIHNhbWUgcXVhbnRpdHksIHNvIGEgcHJvcG9zYWwgY2Fubm90IGNhbGwgYSBnYXRlIGxvb3NlIHRoYXQgYSBydW4gd291bGQgcGFzcy5cbiAgICBjb25zdCBjaGFuZ2VzID0gcHJvcG9zYWxDaGFuZ2VzKGJlZm9yZSwgYWZ0ZXIsIGFnZ3JlZ2F0ZS5tZWFzdXJlZCwgYWdncmVnYXRlLnRpZ2h0ZXN0KTtcbiAgICB3cml0ZUZpbGVTeW5jKHByb3Bvc2FsRmlsZVBhdGgoKSwgcmVuZGVyUHJvcG9zYWwoY2hhbmdlcywgYWZ0ZXIsIHNhbXBsZXMubGVuZ3RoKSk7XG4gICAgd3JpdGVGaWxlU3luYyhcbiAgICAgIHByb3Bvc2FsU3RhdGVQYXRoKCksXG4gICAgICBgJHtKU09OLnN0cmluZ2lmeSh7IGNoYW5nZWQ6IGNoYW5nZXMubGVuZ3RoID4gMCwgc2FtcGxlczogc2FtcGxlcy5sZW5ndGggfSwgbnVsbCwgMil9XFxuYCxcbiAgICApO1xuICAgIC8vIFRoZSBzYW1lIGFnZ3JlZ2F0ZSB0aGF0IGVhcm5lZCB0aGUgZHJvcCBqdWRnZXMgdGhlIGxvb3NlIGdhdGUsIHNvIHRoZSBzZXNzaW9uXG4gICAgLy8gdGhhdCBjb25maXJtcyBhIHRpZ2h0ZW5pbmcgYWxzbyBjb25maXJtcyBhIHN0YWxlLWhpZ2ggYmFzZWxpbmUg4oCUIGFuZFxuICAgIC8vIGBucG0gcnVuIGNvbGxlY3Q6c3RhbGVgIGZhaWxzIG9uIHRoZSBzZWNvbmQgd2l0aG91dCByZS1tZWFzdXJpbmcgYW55dGhpbmcuXG4gICAgLy8gYHJ1bnNgIGlzIHRoZSBzZXNzaW9uJ3MgdGFyZ2V0LCBzbyBhIHNlc3Npb24gdGhhdCBjYW1lIHVwIHNob3J0IGlzIHZpc2libGUgdG9cbiAgICAvLyB0aGF0IHN0ZXAgcmF0aGVyIHRoYW4gcGFzc2luZyBhcyBhIGNvbXBsZXRlIG9uZS5cbiAgICB3cml0ZVJ1blJlcG9ydChcbiAgICAgIHByb3Bvc2FsUnVuVGFyZ2V0KHNhbXBsZXMubGVuZ3RoKSxcbiAgICAgIHNhbXBsZXMubGVuZ3RoLFxuICAgICAgYWdncmVnYXRlLm1lYXN1cmVkLFxuICAgICAgYWdncmVnYXRlLnRpZ2h0ZXN0LFxuICAgICAgc3RhbGVHYXRlcyhiZWZvcmUsIGFnZ3JlZ2F0ZSksXG4gICAgKTtcbiAgICBwcm9jZXNzLnN0ZGVyci53cml0ZShcbiAgICAgIGBjb2xsZWN0LWJ1ZGdldDogd3JvdGUgYSBwcm9wb3NhbCB3aXRoICR7Y2hhbmdlcy5sZW5ndGh9IGNoYW5nZShzKSBmcm9tIGAgK1xuICAgICAgICBgJHtzYW1wbGVzLmxlbmd0aH0gc2FtcGxlKHMpIHRvICR7cHJvcG9zYWxGaWxlUGF0aCgpfVxcbmAsXG4gICAgKTtcbiAgfVxufVxuXG4vLyBWaXRlc3QgbG9hZHMgYSByZXBvcnRlciBuYW1lZCBieSBwYXRoIOKAlCBmcm9tIGAtLXJlcG9ydGVyPeKApmAgb3IgdGhlIGNvbmZpZydzXG4vLyBgcmVwb3J0ZXJzYCDigJQgdGhyb3VnaCB0aGUgbW9kdWxlJ3MgKmRlZmF1bHQqIGV4cG9ydCwgYW5kIGNvbnN0cnVjdHMgaXQuIFRoZVxuLy8gbmFtZWQgZXhwb3J0IHN0YXlzIGZvciB0aGUgdGVzdCB0aGF0IGRyaXZlcyB0aGUgYnVkZ2V0IGxvZ2ljIGRpcmVjdGx5LlxuZXhwb3J0IGRlZmF1bHQgQ29sbGVjdEJ1ZGdldFJlcG9ydGVyO1xuIl0sImZpbGUiOiIvc3JjL3Rlc3QvY29sbGVjdC1idWRnZXQudHMifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvdGVzdC9jb2xsZWN0LWJ1ZGdldC50cyIsIi9zcmMvdGVzdC9jb2xsZWN0LWJ1ZGdldC50cyIsW11d
