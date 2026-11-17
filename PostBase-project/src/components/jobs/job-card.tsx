@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState } from "react";
-import { MapPin, Clock, DollarSign } from "lucide-react";
+import { MapPin, Clock } from "lucide-react";
 
 interface JobCardProps {
   id: string;
@@ -17,7 +17,9 @@ interface JobCardProps {
   type: string;
   salary?: string;
   posted: string;
-  description: string;
+  description?: string;
+  onPreview?: () => void;
+  previewSelected?: boolean;
   tags?: string[];
   /** The viewer has an application on this posting — the list read answers it
    * per row for a signed-in member, and a visitor's rows are all `false`. */
@@ -38,6 +40,8 @@ export function JobCard({
   salary,
   posted,
   description,
+  onPreview,
+  previewSelected,
   tags,
   applied: appliedProp = false,
   applicationStatus: statusProp,
@@ -86,7 +90,7 @@ export function JobCard({
       ? applicationStatus.charAt(0).toUpperCase() + applicationStatus.slice(1)
       : null;
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="commerce-job-card hover:shadow-md transition-shadow" data-preview-selected={previewSelected || undefined}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <Avatar className="h-12 w-12">
@@ -102,7 +106,7 @@ export function JobCard({
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-sm"><Link href={`/jobs/${id}`} className="hover:underline">{title}</Link></h3>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="text-xs text-muted-foreground">{company}</span>
                   <span className="text-xs text-muted-foreground">&middot;</span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -114,7 +118,7 @@ export function JobCard({
                 {applied ? "Applied" : submitting ? "Applying..." : "Apply"}
               </Button>
             </div>
-            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />{posted}
               </span>
@@ -130,7 +134,7 @@ export function JobCard({
               )}
               {salary && (
                 <span className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />{salary}
+                  {salary}
                 </span>
               )}
             </div>
@@ -142,7 +146,13 @@ export function JobCard({
                 )}
               </p>
             )}
-            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{description}</p>
+            {description && <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{description}</p>}
+            {onPreview && (
+              <Button type="button" variant="outline" size="sm" className="mt-3 hidden lg:inline-flex"
+                onClick={onPreview} aria-pressed={previewSelected} aria-label={`Preview ${title}`}>
+                Preview role
+              </Button>
+            )}
             {tags && tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {tags.map((tag) => (

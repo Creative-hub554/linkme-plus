@@ -38,30 +38,37 @@ export default function NewListingPage() {
       // Keep a created draft on a failed publish, so retrying does not duplicate it.
       if (!draftId.current) {
         const file = form.get("image") as File | null;
-        let media: { url: string; altText: string }[] = [];
+        const video = form.get("video") as File | null;
+        let media: { url: string; altText: string; type: string }[] = [];
         if (file?.size) {
-          const upload = await clientRequest<{
-            uploadUrl: string;
-            publicUrl: string;
-          }>(
-            "/api/uploads",
-            jsonBody({
-              filename: file.name,
-              contentType: file.type,
-              size: file.size,
-              purpose: "listing",
-            }),
-          );
-          const response = await fetch(upload.uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": file.type },
-            body: file,
+          // The server checks the image's bytes and size; the form declares
+          // nothing about the file but the purpose it is for.
+          const body = new FormData();
+          body.append("file", file);
+          body.append("purpose", "listing");
+          const upload = await clientRequest<{ url: string }>("/api/uploads", {
+            method: "POST",
+            body,
           });
-          if (!response.ok)
-            throw new Error("Image upload failed. Please try again.");
           media = [
-            { url: upload.publicUrl, altText: String(form.get("title")) },
+            { url: upload.url, altText: String(form.get("title")), type: "image" },
           ];
+        }
+        if (video?.size) {
+          // A vertical clip is a marketplace short: same listing, its own media
+          // type, rendered with vertical playback on the detail page.
+          const body = new FormData();
+          body.append("file", video);
+          body.append("purpose", "listing");
+          const upload = await clientRequest<{ url: string }>("/api/uploads", {
+            method: "POST",
+            body,
+          });
+          media.push({
+            url: upload.url,
+            altText: `${String(form.get("title"))} video`,
+            type: "short_video",
+          });
         }
         const result = await clientRequest<{ listing: { id: string } }>(
           "/api/marketplace",
@@ -91,7 +98,7 @@ export default function NewListingPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="commerce-page commerce-detail mx-auto max-w-2xl space-y-5">
       <Link href="/marketplace" className="text-brand-blue">
         ← Marketplace
       </Link>
@@ -109,6 +116,23 @@ export default function NewListingPage() {
           disabled={busy || Boolean(draftId.current)}
           className="space-y-4"
         >
+          <Label htmlFor="image">Photo (optional)</Label>
+          <Input
+            id="image"
+            name="image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+          />
+          <Label htmlFor="video">Short video (optional)</Label>
+          <Input
+            id="video"
+            name="video"
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+          />
+          <p className="text-xs text-muted-foreground">
+            Vertical clips play as a short on the listing page.
+          </p>
           <Label htmlFor="title">Title</Label>
           <Input id="title" name="title" required maxLength={200} />
           <Label htmlFor="description">Description</Label>
@@ -157,13 +181,6 @@ export default function NewListingPage() {
           </select>
           <Label htmlFor="location">Location</Label>
           <Input id="location" name="location" maxLength={100} />
-          <Label htmlFor="image">Photo (optional)</Label>
-          <Input
-            id="image"
-            name="image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-          />
         </fieldset>
         <Button disabled={busy} type="submit">
           {busy

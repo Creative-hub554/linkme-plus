@@ -11,7 +11,9 @@ vi.mock("@/lib/auth-client", () => ({ signUp: mocks.signUp, signInWithGoogle: mo
 vi.mock("@/components/auth/auth-shell", () => ({ AuthShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 import RegisterPage from "./page";
 beforeEach(() => { vi.clearAllMocks(); });
-afterEach(cleanupSurfaces);
+afterEach(() => {
+  cleanupSurfaces();
+});
 async function submitRegistration() {
   const ui = mountSurface(<RegisterPage />, { providers: "none" });
   await ui.type(ui.container.querySelector("#username") as HTMLInputElement, "new_member");

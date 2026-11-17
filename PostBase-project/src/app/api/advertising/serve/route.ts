@@ -5,7 +5,7 @@ import {
   adPlacements,
   adPayments,
 } from "@/lib/db/schema";
-import { errorResponse, successResponse } from "@/lib/api-helpers";
+import { errorResponse, optionalAuth, successResponse } from "@/lib/api-helpers";
 import { adLocations, eligibleAdSource } from "@/lib/advertising";
 import { and, eq, inArray, lte, gt, sql } from "drizzle-orm";
 export async function GET(request: Request) {
@@ -15,6 +15,9 @@ export async function GET(request: Request) {
   if (!adLocations.includes(location as (typeof adLocations)[number]))
     return errorResponse("Invalid advertising location");
   try {
+    const { session } = location === "feed"
+      ? await optionalAuth(request)
+      : { session: null };
     const now = new Date();
     const ads = await db
       .select({
@@ -36,7 +39,7 @@ export async function GET(request: Request) {
           eq(adCreatives.status, "approved"),
           lte(adCampaigns.startDate, now),
           gt(adCampaigns.endDate, now),
-          eligibleAdSource(),
+          eligibleAdSource(undefined, session?.user.id),
           category
             ? sql`${category} = any(${adCampaigns.targetCategories})`
             : undefined,

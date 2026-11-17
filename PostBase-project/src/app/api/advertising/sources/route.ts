@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { posts, pageRoles, pages, marketplaceListings } from "@/lib/db/schema";
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, or } from "drizzle-orm";
 import { offsetPagination } from "@/lib/offset-pagination";
 export async function GET(request: Request) {
   const { session, error } = await requireAuth(request);
@@ -27,12 +27,22 @@ export async function GET(request: Request) {
     const publicPosts = await db
       .select({ id: posts.id, content: posts.content, pageName: pages.name })
       .from(posts)
-      .innerJoin(pageRoles, eq(posts.pageId, pageRoles.pageId))
-      .innerJoin(pages, eq(posts.pageId, pages.id))
-      .where(
+      .leftJoin(
+        pageRoles,
         and(
+          eq(posts.pageId, pageRoles.pageId),
           eq(pageRoles.userId, session.user.id),
           eq(pageRoles.role, "admin"),
+        ),
+      )
+      .leftJoin(pages, eq(posts.pageId, pages.id))
+      .where(
+        and(
+          or(
+            and(isNull(posts.pageId), eq(posts.authorId, session.user.id)),
+            eq(pageRoles.userId, session.user.id),
+          ),
+          isNull(posts.groupId),
           eq(posts.visibility, "public"),
           isNull(posts.deletedAt),
         ),

@@ -1385,6 +1385,9 @@ const COMPONENT_EXCEPTION_KINDS = {
  * tell apart from a missing prop.
  */
 const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => React.ReactNode> = {
+  "../components/shared/private-evidence-upload.tsx#PrivateEvidenceUpload": (Upload) => (
+    <Upload purpose="office" value={[]} onChange={() => {}} />
+  ),
   "../components/ui/button.tsx#Button": (Button) => <Button>Save</Button>,
 
   // The preview takes a validated config and the member's identity, so the
@@ -1876,7 +1879,6 @@ const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KIND
   "../components/profile/profile-cover.tsx#CoverEditIcon": "nothing",
   "../components/providers/theme-provider.tsx#ThemeProvider": "nothing",
   "../components/providers/theme-sync.tsx#ThemeSync": "nothing",
-  "../components/realtime/typing-indicator.tsx#TypingIndicator": "nothing",
   "../components/shared/empty-state.tsx#EmptyState": "nothing",
   "../components/ui/avatar.tsx#Avatar": "nothing",
   "../components/ui/badge.tsx#Badge": "nothing",

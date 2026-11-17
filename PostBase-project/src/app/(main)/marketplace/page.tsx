@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ListingCard } from "@/components/marketplace/listing-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, SlidersHorizontal } from "lucide-react";
 
 const categories = [
   "All", "Electronics", "Fashion", "Home & Garden", "Sports", "Vehicles", "Toys", "Collectibles", "Art",
@@ -27,6 +27,7 @@ interface ListingResult {
   categoryName?: string | null;
   createdAt: string;
   image?: string | null;
+  imageType?: "image" | "video" | "short_video" | null;
   sellerName?: string | null;
   /** The viewer's own flag, answered per row by the list read for a signed-in
    * member and `false` for a visitor — the same contract the single-listing
@@ -86,14 +87,15 @@ export default function MarketplacePage() {
   useEffect(() => { setPage(1); }, [searchQuery, selectedCategory, minPrice, maxPrice, location]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="commerce-page space-y-5">
+      <header className="commerce-heading">
         <div>
-          <h1 className="text-2xl font-bold text-navy-800">Marketplace</h1>
+          <h1 className="commerce-title">Marketplace</h1>
           <p className="text-sm text-muted-foreground mt-1">Buy and sell items in your community</p>
         </div>
-        <div className="flex gap-2"><Button variant="outline" asChild><Link href="/marketplace/inventory">Inventory</Link></Button><Button asChild><Link href="/marketplace/new">Sell Item</Link></Button></div>
-      </div>
+        <Button asChild className="commerce-create"><Link href="/marketplace/new"><Plus aria-hidden="true" className="size-4" />List item</Link></Button>
+      </header>
+      <nav className="commerce-links" aria-label="Marketplace"><Link href="/marketplace/saved">Saved listings</Link><Link href="/marketplace/inventory">Selling &amp; inventory</Link></nav>
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -137,13 +139,13 @@ export default function MarketplacePage() {
 
       {!searchQuery.trim() && !minPrice && !maxPrice && !location.trim() && <SponsoredPlacement location="marketplace" category={selectedCategory === "All" ? undefined : selectedCategory} />}
       {loading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-label="Loading listings" aria-busy="true">{Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="aspect-square rounded-xl" />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4" aria-label="Loading listings" aria-busy="true">{Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="aspect-square rounded-xl" />)}</div>
       ) : error ? (
         <EmptyState title="Marketplace unavailable" description={error} action={<Button variant="outline" onClick={() => void loadListings()}>Try again</Button>} />
       ) : listings.length === 0 ? (
         <EmptyState title="No listings found" description="There are no active listings here yet. Check back when the community adds something new." />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} image={listing.image || undefined} seller={{ name: listing.sellerName || "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} image={listing.image || undefined} imageType={listing.imageType || undefined} seller={{ name: listing.sellerName || "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} />)}</div>
       )}
       <div className="flex items-center justify-center gap-3"><Button variant="outline" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>Previous</Button><span>Page {page}</span><Button variant="outline" disabled={!hasMore || loading} onClick={() => setPage(value => value + 1)}>Next</Button></div>
     </div>

@@ -85,7 +85,7 @@ describe("FileUpload", () => {
       ["cover", "1200x480 recommended"],
       ["cover-video", "6-10 seconds"],
       ["post", "Max 10MB images"],
-      ["listing", "Up to 10 images"],
+      ["listing", "Max 10MB images, 100MB video"],
       ["document", "PDF. Max 20MB"],
     ];
     for (const [purpose, hint] of hints) {
@@ -165,18 +165,19 @@ describe("FileUpload", () => {
     expect(ui.container.textContent).not.toContain("photo.png");
   });
 
-  test("uploads through both steps and reports the completed file", async () => {
+  test("uploads through the server and reports the completed file", async () => {
     const completed = vi.fn();
-    const put = vi.fn(async () => new Response("", { status: 200 }));
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes("/api/uploads")) {
-        expect(init?.method).toBe("POST");
-        return new Response(
-          JSON.stringify({ uploadUrl: "https://r2.example/put/1", key: "key-1", publicUrl: "https://cdn.example/1.png" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      return put();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      // One multipart request to our own route; the server reads the bytes.
+      expect(init?.method).toBe("POST");
+      const body = init?.body as FormData;
+      expect(body).toBeInstanceOf(FormData);
+      expect(body.get("purpose")).toBe("post");
+      expect((body.get("file") as File).name).toBe("photo.png");
+      return new Response(
+        JSON.stringify({ url: "https://cdn.example/1.png", key: "key-1" }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -188,11 +189,11 @@ describe("FileUpload", () => {
     await ui.waitFor(() => ui.container.textContent?.includes("Uploaded") ?? false, {
       description: "the row to report the upload finished",
     });
-    expect(put).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(completed).toHaveBeenCalledWith([{ url: "https://cdn.example/1.png", key: "key-1" }]);
   });
 
-  test("shows the server's reason when the presigned step is refused", async () => {
+  test("shows the server's reason when the upload is refused", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "Storage is full" }), { status: 500 })),
@@ -215,23 +216,15 @@ describe("FileUpload", () => {
     const input = ui.container.querySelector("input[type=file]") as HTMLInputElement;
     await ui.chooseFiles(input, [file("photo.png", "image/png")]);
     await ui.click(uploadButton(ui));
-    await ui.waitFor(() => ui.container.textContent?.includes("Failed to get upload URL") ?? false, {
+    await ui.waitFor(() => ui.container.textContent?.includes("Failed to upload file") ?? false, {
       description: "the fallback error to be shown",
     });
   });
 
-  test("reports a failed object-store step", async () => {
+  test("reports a failed object-store step with the generic message", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        if (String(input).includes("/api/uploads")) {
-          return new Response(
-            JSON.stringify({ uploadUrl: "https://r2.example/put/1", key: "key-1", publicUrl: "https://cdn.example/1.png" }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-        return new Response("", { status: 403 });
-      }),
+      vi.fn(async () => new Response("", { status: 403 })),
     );
     const ui = mountSurface(<FileUpload />, { providers: "none" });
     const input = ui.container.querySelector("input[type=file]") as HTMLInputElement;

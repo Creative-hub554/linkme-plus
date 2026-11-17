@@ -1,81 +1,141 @@
 import { requireAuth, successResponse, errorResponse } from "@/lib/api-helpers";
+import { detectFileType } from "@/lib/file-signature";
 import {
-  assertStorageConfigured,
-  generateKey,
-  getPresignedUploadUrl,
-  getPublicUrl,
-  validateFile,
-  getFolderForPurpose,
-  ALL_ALLOWED_TYPES,
+  MAX_DOCUMENT_SIZE,
   MAX_IMAGE_SIZE,
   MAX_VIDEO_SIZE,
-  MAX_DOCUMENT_SIZE,
+  UPLOAD_PURPOSES,
+  allowedTypesForPurpose,
+  assertStorageConfigured,
+  generateKey,
+  getFolderForPurpose,
+  getPublicUrl,
+  isUploadPurpose,
+  maxSizeForType,
+  putObject,
 } from "@/lib/r2";
+
+/**
+ * POST /api/uploads
+ *
+ * Stores one upload under the caller's own folder and answers with the URL the
+ * rest of the app records.
+ *
+ * This route used to hand out a presigned R2 URL: the caller sent
+ * `{ filename, contentType, size }`, the server signed a PUT for the key, and
+ * the bytes went straight to the bucket. Nothing in that exchange could be
+ * enforced — the signed PUT had no length bound, and `contentType` was the
+ * caller's claim, so a request could store an arbitrary object of arbitrary
+ * size under any allowed label, or simply lie about what it was uploading.
+ *
+ * The bytes now pass through this route, which is the only place the two rules
+ * can be applied honestly:
+ *
+ *   - Size is the length of the body the server received, checked against the
+ *     limit for the type it *detected*.
+ *   - Type is read from the file's signature (see `detectFileType`), then
+ *     checked against the types the purpose allows. The declared `File.type`
+ *     is ignored entirely, and the stored object's content type is the detected
+ *     one, so the bucket cannot serve a mislabelled file.
+ *
+ * The key's extension also comes from the detected type rather than the
+ * filename, so a `.png` name on PDF bytes is stored as a PDF.
+ *
+ * Ceiling: the body is read by the Worker, so it is bounded by the platform's
+ * request-body limit as well as by the per-type limits below.
+ */
+
+/** Enough of the file to read every signature `detectFileType` knows. */
+const HEADER_BYTES = 64;
+
+function megabytes(bytes: number): number {
+  return Math.round(bytes / 1024 / 1024);
+}
 
 export async function POST(request: Request) {
   const { session, error } = await requireAuth(request);
   if (error) return error;
 
+  let form: FormData;
   try {
-    const body = await request.json();
-    const { filename, contentType, purpose = "post", size } = body;
+    form = await request.formData();
+  } catch {
+    // A JSON body is the shape the retired presign endpoint took. Answering
+    // with the new contract's refusal, rather than a 500 from `formData()`,
+    // keeps a stale caller's failure legible.
+    return errorResponse("Send the file as multipart form data");
+  }
 
-    if (!filename || !contentType) {
-      return errorResponse("Filename and content type are required");
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return errorResponse("A file is required");
+  }
+
+  const requestedPurpose = form.get("purpose") ?? "post";
+  if (!isUploadPurpose(requestedPurpose)) {
+    return errorResponse(`Unknown upload purpose. Allowed: ${UPLOAD_PURPOSES.join(", ")}`);
+  }
+
+  try {
+    // The first bytes are all the classifier needs, and reading only those
+    // keeps classification independent of how large the file is.
+    const header = new Uint8Array(await file.slice(0, HEADER_BYTES).arrayBuffer());
+    const detected = detectFileType(header);
+    if (!detected) {
+      return errorResponse("That file is not an allowed image, video, or PDF");
     }
 
-    // Validate file type
-    if (!ALL_ALLOWED_TYPES.includes(contentType)) {
+    const allowed = allowedTypesForPurpose(requestedPurpose);
+    if (!allowed.includes(detected.mime)) {
       return errorResponse(
-        `File type not allowed. Allowed: ${ALL_ALLOWED_TYPES.join(", ")}`
+        `${detected.mime} files are not allowed for ${requestedPurpose} uploads. Allowed: ${allowed.join(", ")}`,
       );
     }
 
-    // Validate file size if provided
-    if (size) {
-      const validation = validateFile({ type: contentType, size }, purpose);
-      if (!validation.valid) {
-        return errorResponse(validation.error!);
-      }
+    const limit = maxSizeForType(detected.mime);
+    if (file.size > limit) {
+      return errorResponse(
+        `That file is ${megabytes(file.size)}MB. The limit for ${detected.mime} is ${megabytes(limit)}MB`,
+      );
     }
 
     try {
       assertStorageConfigured();
     } catch (storageError) {
-      return errorResponse(storageError instanceof Error ? storageError.message : "Cloudflare R2 storage is not configured", 503);
+      return errorResponse(
+        storageError instanceof Error ? storageError.message : "Cloudflare R2 storage is not configured",
+        503,
+      );
     }
 
-    // Generate key and presigned URL
-    const folder = getFolderForPurpose(purpose);
-    const key = generateKey(folder, session.user.id, filename);
-    const uploadUrl = await getPresignedUploadUrl(key, contentType);
+    const key = generateKey(
+      getFolderForPurpose(requestedPurpose),
+      session.user.id,
+      `upload.${detected.extension}`,
+    );
+    await putObject(key, file, detected.mime);
 
-    return successResponse({
-      uploadUrl,
-      key,
-      publicUrl: getPublicUrl(key),
-      contentType,
-      purpose,
-    });
+    return successResponse(
+      { url: getPublicUrl(key), key, type: detected.mime, size: file.size },
+      201,
+    );
   } catch (err) {
-    console.error("Generate upload URL error:", err);
-    return errorResponse("Failed to generate upload URL", 500);
+    console.error("Store upload error:", err);
+    return errorResponse("Failed to store that file", 500);
   }
 }
 
-// Get upload limits info
+/** The limits this route enforces, so a client can say them before uploading. */
 export async function GET() {
   return successResponse({
-    allowedTypes: {
-      images: ["image/jpeg", "image/png", "image/gif", "image/webp"],
-      videos: ["video/mp4", "video/webm", "video/quicktime"],
-      documents: ["application/pdf"],
-    },
+    purposes: UPLOAD_PURPOSES.map((purpose) => ({
+      purpose,
+      types: allowedTypesForPurpose(purpose),
+    })),
     maxSizes: {
       image: MAX_IMAGE_SIZE,
       video: MAX_VIDEO_SIZE,
       document: MAX_DOCUMENT_SIZE,
     },
-    purposes: ["avatar", "cover", "cover-video", "post", "listing", "document"],
   });
 }

@@ -10,6 +10,11 @@ import {
 } from "@/lib/api-helpers";
 import { eq, and, inArray, or, ilike, sql, count, desc } from "drizzle-orm";
 import { isUuid } from "@/lib/cursor-pagination";
+import {
+  invalidJobFields,
+  validOfficeEvidence,
+  lockJobPublisher,
+} from "@/lib/job-publication";
 
 /**
  * A company is administered through the Page it belongs to.
@@ -21,13 +26,20 @@ import { isUuid } from "@/lib/cursor-pagination";
  * no admin at all, so nobody administers it: posting to it, editing its jobs or
  * archiving them is refused rather than left open to any signed-in member.
  */
-async function adminsCompany(userId: string, pageId: string | null): Promise<boolean> {
+async function adminsCompany(
+  userId: string,
+  pageId: string | null,
+): Promise<boolean> {
   if (!pageId) return false;
   const [role] = await db
     .select({ id: pageRoles.id })
     .from(pageRoles)
     .where(
-      and(eq(pageRoles.pageId, pageId), eq(pageRoles.userId, userId), eq(pageRoles.role, "admin")),
+      and(
+        eq(pageRoles.pageId, pageId),
+        eq(pageRoles.userId, userId),
+        eq(pageRoles.role, "admin"),
+      ),
     );
   return Boolean(role);
 }
@@ -48,17 +60,31 @@ export async function GET(request: Request) {
   // Both are bound into `uuid` columns below, so a value that is not one is a
   // 400 rather than a cast failure the catch reports as a 500.
   if (jobId && !isUuid(jobId)) return errorResponse("Invalid job id", 400);
-  if (companyId && !isUuid(companyId)) return errorResponse("Invalid company id", 400);
+  if (companyId && !isUuid(companyId))
+    return errorResponse("Invalid company id", 400);
   const type = url.searchParams.get("type");
   const search = url.searchParams.get("q")?.trim().slice(0, 200);
   const location = url.searchParams.get("location");
   const { page, limit, offset } = offsetPagination(url.searchParams);
   const conditions = and(
-    manage && session ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')` : eq(jobs.status, "active"),
+    manage && session
+      ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')`
+      : and(eq(jobs.status, "active"), eq(jobs.reviewStatus, "approved")),
     companyId ? eq(jobs.companyId, companyId) : undefined,
-    type === "Remote" ? eq(jobs.remoteStatus, "remote") : type ? eq(jobs.jobType, type) : undefined,
+    type === "Remote"
+      ? eq(jobs.remoteStatus, "remote")
+      : type
+        ? eq(jobs.jobType, type)
+        : undefined,
     location ? ilike(jobs.location, `%${location}%`) : undefined,
-    search ? or(ilike(jobs.title, `%${search}%`), ilike(jobs.description, `%${search}%`), ilike(companies.name, `%${search}%`), sql`array_to_string(${jobs.skills}, ' ') ilike ${`%${search}%`}`) : undefined,
+    search
+      ? or(
+          ilike(jobs.title, `%${search}%`),
+          ilike(jobs.description, `%${search}%`),
+          ilike(companies.name, `%${search}%`),
+          sql`array_to_string(${jobs.skills}, ' ') ilike ${`%${search}%`}`,
+        )
+      : undefined,
   );
 
   try {
@@ -87,10 +113,20 @@ export async function GET(request: Request) {
         })
         .from(jobs)
         .innerJoin(companies, eq(jobs.companyId, companies.id))
-        .where(and(eq(jobs.id, jobId), or(
-          inArray(jobs.status, ["active", "closed"]),
-          session ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')` : undefined,
-        )));
+        .where(
+          and(
+            eq(jobs.id, jobId),
+            or(
+              and(
+                inArray(jobs.status, ["active", "closed"]),
+                eq(jobs.reviewStatus, "approved"),
+              ),
+              session
+                ? sql`exists (select 1 from page_roles pr where pr.page_id = ${companies.pageId} and pr.user_id = ${session.user.id} and pr.role = 'admin')`
+                : undefined,
+            ),
+          ),
+        );
 
       if (!job) {
         return errorResponse("Job not found", 404);
@@ -132,6 +168,9 @@ export async function GET(request: Request) {
         salaryMax: jobs.salaryMax,
         status: jobs.status,
         deadline: jobs.deadline,
+        ...(manage
+          ? { reviewStatus: jobs.reviewStatus, reviewNote: jobs.reviewNote }
+          : {}),
         createdAt: jobs.createdAt,
         applicationCount: sql<number>`(select count(*)::int from job_applications ja where ja.job_id = ${jobs.id})`,
         company: {
@@ -164,16 +203,24 @@ export async function GET(request: Request) {
     const applications =
       session && result.length > 0
         ? await db
-            .select({ jobId: jobApplications.jobId, status: jobApplications.status })
+            .select({
+              jobId: jobApplications.jobId,
+              status: jobApplications.status,
+            })
             .from(jobApplications)
             .where(
               and(
                 eq(jobApplications.userId, session.user.id),
-                inArray(jobApplications.jobId, result.map((job) => job.id)),
+                inArray(
+                  jobApplications.jobId,
+                  result.map((job) => job.id),
+                ),
               ),
             )
         : [];
-    const applicationsByJob = new Map(applications.map((application) => [application.jobId, application]));
+    const applicationsByJob = new Map(
+      applications.map((application) => [application.jobId, application]),
+    );
 
     return paginatedResponse(
       result.map((job) => ({
@@ -211,12 +258,19 @@ export async function POST(request: Request) {
       deadline,
     } = body;
 
-    if (!companyId || typeof title !== "string" || !title.trim() || title.length > 200) {
+    if (
+      !companyId ||
+      typeof title !== "string" ||
+      !title.trim() ||
+      title.length > 200
+    ) {
       return errorResponse("Company ID and title are required");
     }
     if (typeof companyId !== "string" || !isUuid(companyId)) {
       return errorResponse("Invalid company id", 400);
     }
+    const invalid = invalidJobFields(body);
+    if (invalid) return errorResponse(invalid, 400);
 
     // Check company admin role
     const [company] = await db
@@ -232,25 +286,40 @@ export async function POST(request: Request) {
       return errorResponse("Only a company admin can post a job", 403);
     }
 
-    const [newJob] = await db
-      .insert(jobs)
-      .values({
-        companyId,
-        title,
-        location,
-        remoteStatus,
-        jobType,
-        salaryMin,
-        salaryMax,
-        description,
-        requirements,
-        skills,
-        deadline: deadline ? new Date(deadline) : null,
-        status: "active",
-      })
-      .returning();
+    return await db.transaction(async (tx) => {
+      await lockJobPublisher(tx, session.user.id);
+      if (
+        !(await validOfficeEvidence(
+          tx,
+          session.user.id,
+          body.officeEvidenceIds,
+        ))
+      ) {
+        return errorResponse("Private office evidence is required", 400);
+      }
+      const [newJob] = await tx
+        .insert(jobs)
+        .values({
+          companyId,
+          title,
+          location,
+          remoteStatus,
+          jobType,
+          salaryMin,
+          salaryMax,
+          description,
+          requirements,
+          skills,
+          deadline: deadline ? new Date(deadline) : null,
+          publisherId: session.user.id,
+          officeEvidenceIds: body.officeEvidenceIds,
+          status: "draft",
+          reviewStatus: "pending_review",
+        })
+        .returning();
 
-    return successResponse({ job: newJob }, 201);
+      return successResponse({ job: newJob }, 201);
+    });
   } catch (err) {
     console.error("Create job error:", err);
     return errorResponse("Failed to create job", 500);
@@ -284,6 +353,14 @@ export async function PUT(request: Request) {
     if (!isUuid(id)) {
       return errorResponse("Invalid job id", 400);
     }
+    const invalid = invalidJobFields(body);
+    if (invalid) return errorResponse(invalid, 400);
+    if (
+      status !== undefined &&
+      !["active", "closed", "draft"].includes(status)
+    ) {
+      return errorResponse("Invalid job status", 400);
+    }
 
     // The job's company is what decides who may edit it, so the job is read
     // first — a missing job is a 404 rather than an anonymous 500 from the
@@ -306,25 +383,85 @@ export async function PUT(request: Request) {
       return errorResponse("Only a company admin can edit this job", 403);
     }
 
-    const [updated] = await db
-      .update(jobs)
-      .set({
-        title: title ?? undefined,
-        location: location ?? undefined,
-        remoteStatus: remoteStatus ?? undefined,
-        jobType: jobType ?? undefined,
-        salaryMin: salaryMin ?? undefined,
-        salaryMax: salaryMax ?? undefined,
-        description: description ?? undefined,
-        requirements: requirements ?? undefined,
-        skills: skills ?? undefined,
-        status: status ?? undefined,
-        deadline: deadline ? new Date(deadline) : undefined,
-      })
-      .where(eq(jobs.id, id))
-      .returning();
+    return await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(jobs)
+        .where(eq(jobs.id, id))
+        .for("update");
+      if (!current) return errorResponse("Job not found", 404);
+      const fields = [
+        "title",
+        "location",
+        "remoteStatus",
+        "jobType",
+        "salaryMin",
+        "salaryMax",
+        "description",
+        "requirements",
+        "skills",
+        "deadline",
+        "officeEvidenceIds",
+      ];
+      const revision = Object.fromEntries(
+        fields
+          .filter((key) => body[key] !== undefined)
+          .map((key) => [key, body[key]]),
+      );
+      if (
+        body.officeEvidenceIds !== undefined &&
+        !(await validOfficeEvidence(
+          tx,
+          current.publisherId ?? session.user.id,
+          body.officeEvidenceIds,
+        ))
+      ) {
+        return errorResponse("Private office evidence is required", 400);
+      }
+      if (Object.keys(revision).length && current.reviewStatus === "approved") {
+        const [updated] = await tx
+          .update(jobs)
+          .set({
+            pendingRevision: { ...current.pendingRevision, ...revision },
+            reviewNote: "Material changes await administrator review",
+          })
+          .where(eq(jobs.id, id))
+          .returning();
+        return successResponse({ job: updated, reviewRequired: true });
+      }
+      if (
+        (status === "active" || status === "closed") &&
+        current.reviewStatus !== "approved"
+      ) {
+        return errorResponse(
+          "Administrator approval is required before publication",
+          409,
+        );
+      }
+      const [updated] = await tx
+        .update(jobs)
+        .set({
+          title: title ?? undefined,
+          location: location ?? undefined,
+          remoteStatus: remoteStatus ?? undefined,
+          jobType: jobType ?? undefined,
+          salaryMin: salaryMin ?? undefined,
+          salaryMax: salaryMax ?? undefined,
+          description: description ?? undefined,
+          requirements: requirements ?? undefined,
+          skills: skills ?? undefined,
+          status: status ?? undefined,
+          deadline: deadline ? new Date(deadline) : undefined,
+          officeEvidenceIds: body.officeEvidenceIds,
+          reviewStatus: Object.keys(revision).length
+            ? "pending_review"
+            : undefined,
+        })
+        .where(eq(jobs.id, id))
+        .returning();
 
-    return successResponse({ job: updated });
+      return successResponse({ job: updated });
+    });
   } catch (err) {
     console.error("Update job error:", err);
     return errorResponse("Failed to update job", 500);

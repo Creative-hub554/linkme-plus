@@ -144,5 +144,5 @@ test("creates a company for a managed Page before posting its first job", async 
   expect(
     requests.calls.find((call) => call.pathname === "/api/jobs")?.body,
   ).toMatchObject({ companyId: "company-1", title: "Designer" });
-  expect(navigation.push).toHaveBeenCalledWith("/jobs/job-1");
+  expect(navigation.push).toHaveBeenCalledWith("/jobs/manage");
 });

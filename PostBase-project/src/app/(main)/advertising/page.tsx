@@ -64,10 +64,14 @@ export default function AdvertisingManagerPage() {
     [type, setType] = useState("banner");
   const [sources, setSources] = useState<{
     listings: { id: string; title: string }[];
-    posts: { id: string; content: string | null; pageName: string }[];
+    posts: { id: string; content: string | null; pageName: string | null }[];
   }>({ listings: [], posts: [] });
   const [sourcePage, setSourcePage] = useState(1);
   const [paymentCurrency, setPaymentCurrency] = useState("KHR");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("type") === "boost")
+      setType("boost");
+  }, []);
   const merchantSettings = data?.paymentSettings || (data?.settings ? [data.settings] : []);
   const selectedSettings = merchantSettings.find((item) => item.currency === paymentCurrency);
   useEffect(() => {
@@ -143,29 +147,16 @@ export default function AdvertisingManagerPage() {
       let qrImageUrl = String(form.get("qrImageUrl") || "");
       const image = form.get("qrFile") as File | null;
       if (image?.size) {
-        const upload = await clientRequest<{
-          uploadUrl: string;
-          publicUrl: string;
-        }>(
-          "/api/uploads",
-          jsonBody({
-            filename: image.name,
-            contentType: image.type,
-            size: image.size,
-            purpose: "post",
-          }),
-        );
-        if (
-          !(
-            await fetch(upload.uploadUrl, {
-              method: "PUT",
-              body: image,
-              headers: { "Content-Type": image.type },
-            })
-          ).ok
-        )
-          throw new Error("KHQR image upload failed");
-        qrImageUrl = upload.publicUrl;
+        // The route inspects the image itself, so a file renamed to `.png` is
+        // refused here rather than stored and served as one.
+        const body = new FormData();
+        body.append("file", image);
+        body.append("purpose", "post");
+        const upload = await clientRequest<{ url: string }>("/api/uploads", {
+          method: "POST",
+          body,
+        });
+        qrImageUrl = upload.url;
       }
       await clientRequest(
         "/api/admin/advertising",
@@ -247,7 +238,7 @@ export default function AdvertisingManagerPage() {
                 >
                   <option value="banner">Banner</option>
                   <option value="promotion">Promoted listing</option>
-                  <option value="boost">Boosted Page post</option>
+                  <option value="boost">Post boost (Feed)</option>
                 </select>
                 <Label htmlFor="placement">Placement and daily rate</Label>
                 <select
@@ -290,7 +281,7 @@ export default function AdvertisingManagerPage() {
                     <Label htmlFor="source">
                       {type === "promotion"
                         ? "Your listing"
-                        : "Public post from a Page you administer"}
+                        : "Your public post or a post from a Page you administer"}
                     </Label>
                     <select
                       id="source"
@@ -306,7 +297,7 @@ export default function AdvertisingManagerPage() {
                           ))
                         : sources.posts.map((item) => (
                             <option value={item.id} key={item.id}>
-                              {item.pageName}:{" "}
+                              {item.pageName || "Personal post"}:{" "}
                               {item.content?.slice(0, 80) || "Media post"}
                             </option>
                           ))}

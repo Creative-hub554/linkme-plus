@@ -13,12 +13,11 @@ import {
  * Accepts a multipart form with a single `file`, stores it in R2 under the
  * "post" purpose and answers with the public URL the post should record.
  *
- * The bytes are proxied through the server rather than PUT straight to R2 with
- * a presigned URL (`/api/uploads`). That presigned route cannot work from a
- * browser: the media bucket sends no `Access-Control-Allow-Origin`, so the
- * preflight is refused and the request never leaves. Attaching a photo to a
- * post failed exactly there. Server-side uploads are what the avatar and cover
- * routes already do.
+ * The bytes are proxied through the server rather than PUT straight to R2.
+ * A browser PUT to the bucket is refused — the media bucket sends no
+ * `Access-Control-Allow-Origin`, so the preflight never leaves the page — and
+ * a server that receives the bytes is also the only place their type and size
+ * can be checked instead of trusted. `/api/uploads` now works the same way.
  *
  * Ceiling: the file passes through this Worker, so it is bounded by the
  * platform's request-body limit. Today's composer attaches images (10MB max),

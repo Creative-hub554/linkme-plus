@@ -17,7 +17,11 @@ import { isUuid } from "@/lib/cursor-pagination";
 interface ListingMediaInput {
   url: string;
   altText?: string | null;
+  /** image | video | short_video — defaults to image when omitted. */
+  type?: "image" | "video" | "short_video";
 }
+
+const MEDIA_TYPES = new Set(["image", "video", "short_video"]);
 
 /** One entry of the `variants` array a client posts when creating a listing. */
 interface ProductVariantInput {
@@ -153,6 +157,7 @@ export async function GET(request: Request) {
         status: marketplaceListings.status,
         createdAt: marketplaceListings.createdAt,
         image: sql<string | null>`(select url from listing_media where listing_id = ${marketplaceListings.id} order by "order" asc limit 1)`,
+        imageType: sql<string | null>`(select type from listing_media where listing_id = ${marketplaceListings.id} order by "order" asc limit 1)`,
         sellerName: sql<string | null>`(select coalesce(p.display_name, u.username) from users u left join profiles p on p.user_id = u.id where u.id = ${marketplaceListings.sellerId})`,
       })
       .from(marketplaceListings)
@@ -234,6 +239,9 @@ export async function POST(request: Request) {
     if (categoryId !== undefined && categoryId !== null && (typeof categoryId !== "string" || !isUuid(categoryId))) {
       return errorResponse("Invalid category id", 400);
     }
+    if (Array.isArray(media) && media.some((m: ListingMediaInput) => m.type !== undefined && !MEDIA_TYPES.has(m.type))) {
+      return errorResponse("Invalid media type. Use image, video, or short_video.", 400);
+    }
 
     return await db.transaction(async tx => {
       await lockSeller(tx, session.user.id);
@@ -262,6 +270,7 @@ export async function POST(request: Request) {
           listingId: newListing.id,
           url: m.url,
           altText: m.altText,
+          type: m.type ?? "image",
           order: index,
         }))
       );

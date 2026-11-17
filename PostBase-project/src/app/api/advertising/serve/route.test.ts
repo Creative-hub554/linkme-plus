@@ -2,6 +2,9 @@ import { beforeEach, expect, test, vi } from "vitest";
 vi.mock("@/lib/db", async () => ({
   db: (await import("@/test/fake-db")).fakeDb,
 }));
+vi.mock("@/lib/auth", () => ({
+  auth: { api: { getSession: async () => ({ user: { id: "viewer" } }) } },
+}));
 import { GET } from "./route";
 import { adCampaigns } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
@@ -25,6 +28,15 @@ test("delivery requires verified payment, approved creative, live dates and elig
   expect(where).toContain("any");
   expect(fakeDb.selectParams[0]).toContain("verified");
   expect(fakeDb.selectParams[0]).toContain("Technology");
+});
+
+test("Feed boosts respect blocks in either direction", async () => {
+  fakeDb.selectReturns(adCampaigns, []);
+  const response = await GET(new Request("http://localhost/api/advertising/serve?location=feed"));
+  expect(response.status).toBe(200);
+  expect(fakeDb.selectWheres[0]).toContain("pb.blocker_id");
+  expect(fakeDb.selectWheres[0]).toContain("pb.blocked_id");
+  expect(fakeDb.selectParams[0].filter((value) => value === "viewer")).toHaveLength(2);
 });
 
 test("delivery requires a known placement location", async () => {

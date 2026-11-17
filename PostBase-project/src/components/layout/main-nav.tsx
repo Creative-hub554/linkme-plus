@@ -17,21 +17,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { signOut } from "@/lib/auth-client";
 import { NotificationBell } from "@/components/realtime/notification-bell";
 import { AuthTransitionOverlay } from "@/components/auth/auth-transition-overlay";
-import { isNavItemActive, mainNavItems, visibleNavItems } from "@/lib/nav-items";
+import { isNavItemActive, mainNavItems, socialNavItems, visibleNavItems } from "@/lib/nav-items";
 
 export function MainNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, isLoading, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const editorial = ["/feed", "/jobs", "/marketplace"].some((root) => pathname === root || pathname.startsWith(root + "/"));
   const [signingOut, setSigningOut] = useState(false);
   const avatarUrl = user?.image ?? user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? undefined;
   const displayName = user?.name ?? user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "User";
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      setMobileOpen(false);
+      menuTrigger.current?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [mobileOpen]);
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -45,10 +58,10 @@ export function MainNav() {
   return (
     <>
       {signingOut && <AuthTransitionOverlay mode="logout" />}
-      <header className="sticky top-0 z-50 w-full border-b border-surface-border bg-card/95 shadow-[0_1px_8px_rgba(26,32,52,0.04)] backdrop-blur">
+      <header className={cn("sticky top-0 z-50 w-full border-b border-surface-border bg-card/95 backdrop-blur", editorial && "community-masthead")}>
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={isAuthenticated ? "/profile" : "/"} className={cn("flex items-center gap-2", editorial && "community-wordmark")}>
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue text-white font-bold text-sm">
             L+
           </div>
@@ -87,7 +100,7 @@ export function MainNav() {
           ) : isAuthenticated ? (
             <>
               {/* A link, not a button: this one leaves the page. */}
-              <IconButton label="Search" href="/search" className="hidden md:flex">
+              <IconButton label="Search" href="/search" className={editorial ? "inline-flex" : "hidden md:flex"}>
                 <Search className="h-4 w-4" />
               </IconButton>
               <NotificationBell />
@@ -167,13 +180,14 @@ export function MainNav() {
               panel's `id` and the open state are passed once, in one place, and
               the component writes both attributes. */}
           <DisclosureButton
+            ref={menuTrigger}
             open={mobileOpen}
             controls="mobile-nav"
             label={mobileOpen ? "Close menu" : "Open menu"}
-            className="md:hidden"
+            className={cn("md:hidden", editorial && "community-menu-trigger")}
             onClick={() => setMobileOpen(!mobileOpen)}
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}{editorial && <span aria-hidden="true">Menu</span>}
           </DisclosureButton>
         </div>
       </div>
@@ -183,8 +197,8 @@ export function MainNav() {
           session — the public modules and the theme for all, and the account's
           own door where one exists. */}
       {mobileOpen && (
-        <div id="mobile-nav" className="md:hidden border-t border-surface-border bg-card">
-          <nav className="flex flex-col p-2">
+        <div id="mobile-nav" className={cn("ui-mobile-panel md:hidden border-t border-surface-border bg-card", editorial && "community-mobile-menu")}>
+          <nav aria-label="Mobile navigation" className="flex flex-col p-2">
             {visibleNavItems(mainNavItems, isAuthenticated).map((item) => {
               const isActive = isNavItemActive(pathname, item);
               return (
@@ -212,6 +226,18 @@ export function MainNav() {
                 purpose: it is drawn from the same tokens as the page, so the
                 change is visible right here, and closing on it would hide the
                 only feedback there is. */}
+            {editorial && isAuthenticated && (
+              <div className="community-menu-links">
+                {socialNavItems.filter((item) => item.href !== "/feed").map((item) => (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}>
+                    <item.icon aria-hidden="true" className="size-4" />{item.label}
+                  </Link>
+                ))}
+                <Link href="/settings" onClick={() => setMobileOpen(false)}>
+                  <Settings aria-hidden="true" className="size-4" />Settings
+                </Link>
+              </div>
+            )}
             <div className="border-t mt-2 px-3 pb-1 pt-3">
               <ThemeChoiceGroup />
             </div>

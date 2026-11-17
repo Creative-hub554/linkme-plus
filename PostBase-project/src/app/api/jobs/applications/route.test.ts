@@ -113,6 +113,14 @@ describe("POST /api/jobs/applications", () => {
     expect(fakeDb.reads).not.toContain("job_applications");
   });
 
+  it("refuses an application to an active job that has not passed review", async () => {
+    fakeDb.selectReturns(jobs, [{ id: JOB_ID, status: "active", reviewStatus: "pending_review" }]);
+    const response = await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }));
+    expect(response.status).toBe(409);
+    expectGatedNone("writes");
+    expect(fakeDb.reads).not.toContain("job_applications");
+  });
+
   it("refuses a second application to the same job, writing nothing", async () => {
     // The duplicate check is the route's own guard: a row already there for
     // (job, user) means the request stops before the insert.

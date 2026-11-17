@@ -131,14 +131,6 @@ vi.mock("@/utils/supabase/client", () => {
   };
 });
 
-// The messages page mounts the presence indicator, whose real hook opens a
-// WebSocket the stubbed browser cannot answer — error noise on every run. The
-// seam is the same one the hook's own tests mock: a connected socket that says
-// nothing.
-vi.mock("@/hooks/use-websocket", () => ({
-  useWebSocket: () => ({ isConnected: true, send: () => {}, lastMessage: null }),
-}));
-
 /**
  * The bell is mounted for real — it is in the nav, and its panel's
  * destinations are data-driven links like any other. What is replaced is the

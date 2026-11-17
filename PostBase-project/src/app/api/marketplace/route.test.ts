@@ -509,7 +509,7 @@ describe("POST /api/marketplace", () => {
       values: expect.objectContaining({ sellerId: "seller-1", title: "Camera", status: "draft" }),
     });
     expectGatedInsert(listingMedia, {
-      values: [{ listingId: LISTING_ID, url: MEDIA_URL, altText: "Front", order: 0 }],
+      values: [{ listingId: LISTING_ID, url: MEDIA_URL, altText: "Front", type: "image", order: 0 }],
     });
     expectGatedInsert(productVariants, {
       values: [

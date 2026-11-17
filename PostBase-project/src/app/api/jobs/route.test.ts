@@ -32,13 +32,21 @@ const session = vi.hoisted(() => ({ userId: "member-1" as string | null }));
 vi.mock("@/lib/auth", () => ({
   auth: {
     api: {
-      getSession: async () => (session.userId ? { user: { id: session.userId } } : null),
+      getSession: async () =>
+        session.userId ? { user: { id: session.userId } } : null,
     },
   },
 }));
 
 import { DELETE, GET, POST, PUT } from "./route";
-import { companies, jobApplications, jobs, pageRoles, privateEvidence, users } from "@/lib/db/schema";
+import {
+  companies,
+  jobApplications,
+  jobs,
+  pageRoles,
+  privateEvidence,
+  users,
+} from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
 
@@ -53,7 +61,20 @@ function jsonRequest(method: string, path: string, body?: unknown) {
     method,
     ...(body === undefined
       ? {}
-      : { headers: { "content-type": "application/json" }, body: JSON.stringify(method === "POST" && body && typeof body === "object" ? { officeEvidenceIds: [OFFICE_ID], deadline: new Date(Date.now() + 86400000).toISOString(), description: "An opportunity for an experienced team member", location: "Phnom Penh", ...body } : body) }),
+      : {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(
+            method === "POST" && body && typeof body === "object"
+              ? {
+                  officeEvidenceIds: [OFFICE_ID],
+                  deadline: new Date(Date.now() + 86400000).toISOString(),
+                  description: "An opportunity for an experienced team member",
+                  location: "Phnom Penh",
+                  ...body,
+                }
+              : body,
+          ),
+        }),
   });
 }
 
@@ -62,7 +83,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   session.userId = "member-1";
   fakeDb.selectReturns(users, [{ id: "member-1" }]);
-  fakeDb.selectReturns(privateEvidence, [{ id: OFFICE_ID, width: 800, height: 600 }]);
+  fakeDb.selectReturns(privateEvidence, [
+    { id: OFFICE_ID, width: 800, height: 600 },
+  ]);
 });
 
 describe("GET /api/jobs", () => {
@@ -70,7 +93,9 @@ describe("GET /api/jobs", () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb.failNextSelect(jobs, new Error("database unavailable"));
     try {
-      const response = await GET(new Request("http://localhost/api/jobs", { method: "GET" }));
+      const response = await GET(
+        new Request("http://localhost/api/jobs", { method: "GET" }),
+      );
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: "Failed to fetch jobs" });
@@ -84,9 +109,13 @@ describe("GET /api/jobs", () => {
   it("returns one job by id, with whether the viewer has applied", async () => {
     fakeDb
       .selectReturns(jobs, [{ id: JOB_ID, title: "Staff Engineer" }])
-      .selectReturns(jobApplications, [{ id: "application-1", status: "pending" }]);
+      .selectReturns(jobApplications, [
+        { id: "application-1", status: "pending" },
+      ]);
 
-    const response = await GET(new Request(`http://localhost/api/jobs?id=${JOB_ID}`));
+    const response = await GET(
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`),
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -100,7 +129,9 @@ describe("GET /api/jobs", () => {
   it("answers 404 for a job that does not exist", async () => {
     fakeDb.selectReturns(jobs, []);
 
-    const response = await GET(new Request(`http://localhost/api/jobs?id=${JOB_ID}`));
+    const response = await GET(
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`),
+    );
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Job not found" });
@@ -109,11 +140,15 @@ describe("GET /api/jobs", () => {
   });
 
   it("refuses a malformed job id and company filter instead of casting them", async () => {
-    const byId = await GET(new Request("http://localhost/api/jobs?id=not-a-uuid"));
+    const byId = await GET(
+      new Request("http://localhost/api/jobs?id=not-a-uuid"),
+    );
     expect(byId.status).toBe(400);
     expect(await byId.json()).toEqual({ error: "Invalid job id" });
 
-    const byCompany = await GET(new Request("http://localhost/api/jobs?companyId=not-a-uuid"));
+    const byCompany = await GET(
+      new Request("http://localhost/api/jobs?companyId=not-a-uuid"),
+    );
     expect(byCompany.status).toBe(400);
     expect(await byCompany.json()).toEqual({ error: "Invalid company id" });
 
@@ -194,9 +229,7 @@ describe("GET /api/jobs list read — the viewer's applied flags", () => {
   });
 
   it("makes no application read for an empty page", async () => {
-    fakeDb
-      .selectReturns(jobs, [])
-      .selectReturns(jobs, [{ total: 0 }]);
+    fakeDb.selectReturns(jobs, []).selectReturns(jobs, [{ total: 0 }]);
 
     const response = await GET(new Request("http://localhost/api/jobs"));
 
@@ -231,7 +264,9 @@ describe("GET /api/jobs as a visitor", () => {
   it("answers 401 to manage=true without a session, reading nothing", async () => {
     session.userId = null;
 
-    const response = await GET(new Request("http://localhost/api/jobs?manage=true"));
+    const response = await GET(
+      new Request("http://localhost/api/jobs?manage=true"),
+    );
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
@@ -242,7 +277,9 @@ describe("GET /api/jobs as a visitor", () => {
     session.userId = null;
     fakeDb.selectReturns(jobs, [{ id: JOB_ID, title: "Staff Engineer" }]);
 
-    const response = await GET(new Request(`http://localhost/api/jobs?id=${JOB_ID}`));
+    const response = await GET(
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`),
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -263,11 +300,18 @@ describe("writes stay member-only", () => {
     session.userId = null;
 
     const post = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+      }),
     );
-    const put = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
+    const put = await PUT(
+      jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }),
+    );
     const del = await DELETE(
-      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+        method: "DELETE",
+      }),
     );
 
     expect(post.status).toBe(401);
@@ -278,9 +322,28 @@ describe("writes stay member-only", () => {
 });
 
 describe("POST /api/jobs", () => {
+  it("refuses missing private office evidence without creating a public job", async () => {
+    fakeDb
+      .selectReturns(companies, [{ id: COMPANY_ID, pageId: PAGE_ID }])
+      .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }]);
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+        officeEvidenceIds: [],
+        status: "active",
+      }),
+    );
+    expect(response.status).toBe(400);
+    expectGatedNone("writes");
+  });
   it("refuses a job with no company or no title, writing nothing", async () => {
-    const withoutTitle = await POST(jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID }));
-    const withoutCompany = await POST(jsonRequest("POST", "/api/jobs", { title: "Designer" }));
+    const withoutTitle = await POST(
+      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID }),
+    );
+    const withoutCompany = await POST(
+      jsonRequest("POST", "/api/jobs", { title: "Designer" }),
+    );
 
     expect(withoutTitle.status).toBe(400);
     expect(withoutCompany.status).toBe(400);
@@ -289,7 +352,10 @@ describe("POST /api/jobs", () => {
 
   it("refuses a company id that is not uuid-shaped, writing nothing", async () => {
     const response = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: "not-a-uuid", title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: "not-a-uuid",
+        title: "Designer",
+      }),
     );
 
     expect(response.status).toBe(400);
@@ -302,7 +368,10 @@ describe("POST /api/jobs", () => {
     fakeDb.selectReturns(companies, []);
 
     const response = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+      }),
     );
 
     expect(response.status).toBe(404);
@@ -316,7 +385,10 @@ describe("POST /api/jobs", () => {
       .selectReturns(pageRoles, []);
 
     const response = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+      }),
     );
 
     expect(response.status).toBe(403);
@@ -330,7 +402,10 @@ describe("POST /api/jobs", () => {
     fakeDb.selectReturns(companies, [{ id: COMPANY_ID, pageId: null }]);
 
     const response = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+      }),
     );
 
     expect(response.status).toBe(403);
@@ -342,17 +417,27 @@ describe("POST /api/jobs", () => {
     fakeDb
       .selectReturns(companies, [{ id: COMPANY_ID, pageId: PAGE_ID }])
       .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }])
-      .insertReturns(jobs, [{ id: JOB_ID, status: "draft", reviewStatus: "pending_review" }]);
+      .insertReturns(jobs, [
+        { id: JOB_ID, status: "draft", reviewStatus: "pending_review" },
+      ]);
 
     const response = await POST(
-      jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+      jsonRequest("POST", "/api/jobs", {
+        companyId: COMPANY_ID,
+        title: "Designer",
+      }),
     );
 
     expect(response.status).toBe(201);
     expectGatedSequence("writes", [
       {
         table: "jobs",
-        values: expect.objectContaining({ companyId: COMPANY_ID, title: "Designer", status: "draft", reviewStatus: "pending_review" }),
+        values: expect.objectContaining({
+          companyId: COMPANY_ID,
+          title: "Designer",
+          status: "draft",
+          reviewStatus: "pending_review",
+        }),
       },
     ]);
   });
@@ -365,7 +450,10 @@ describe("POST /api/jobs", () => {
       .failNextInsert(jobs, new Error("database unavailable"));
     try {
       const response = await POST(
-        jsonRequest("POST", "/api/jobs", { companyId: COMPANY_ID, title: "Designer" }),
+        jsonRequest("POST", "/api/jobs", {
+          companyId: COMPANY_ID,
+          title: "Designer",
+        }),
       );
 
       expect(response.status).toBe(500);
@@ -378,8 +466,32 @@ describe("POST /api/jobs", () => {
 });
 
 describe("PUT /api/jobs", () => {
+  it.each(["active", "closed"])(
+    "cannot expose an unapproved job with status %s",
+    async (status) => {
+      const current = {
+        id: JOB_ID,
+        companyId: COMPANY_ID,
+        publisherId: "member-1",
+        reviewStatus: "pending_review",
+        status: "draft",
+      };
+      fakeDb
+        .selectReturns(jobs, [current])
+        .selectReturns(jobs, [current])
+        .selectReturns(companies, [{ pageId: PAGE_ID }])
+        .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }]);
+      const response = await PUT(
+        jsonRequest("PUT", "/api/jobs", { id: JOB_ID, status }),
+      );
+      expect(response.status).toBe(409);
+      expectGatedNone("writes");
+    },
+  );
   it("refuses an update with no id, writing nothing", async () => {
-    const response = await PUT(jsonRequest("PUT", "/api/jobs", { title: "Renamed" }));
+    const response = await PUT(
+      jsonRequest("PUT", "/api/jobs", { title: "Renamed" }),
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Job ID is required" });
@@ -401,7 +513,9 @@ describe("PUT /api/jobs", () => {
   it("answers 404 when the job does not exist, writing nothing", async () => {
     fakeDb.selectReturns(jobs, []);
 
-    const response = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
+    const response = await PUT(
+      jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }),
+    );
 
     expect(response.status).toBe(404);
     expectGatedNone("writes");
@@ -413,31 +527,65 @@ describe("PUT /api/jobs", () => {
       .selectReturns(companies, [{ pageId: PAGE_ID }])
       .selectReturns(pageRoles, []);
 
-    const response = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
+    const response = await PUT(
+      jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }),
+    );
 
     expect(response.status).toBe(403);
     expectGatedNone("writes");
   });
 
   it("queues material edits while retaining the approved public version", async () => {
-    const current = { id: JOB_ID, companyId: COMPANY_ID, publisherId: "member-1", title: "Original", status: "active", reviewStatus: "approved", firstPublishedAt: new Date(), officeEvidenceIds: [OFFICE_ID] };
-    fakeDb.selectReturns(jobs, [current]).selectReturns(jobs, [current]).selectReturns(companies, [{ pageId: PAGE_ID }]).selectReturns(pageRoles, [{ id: "role-1", role: "admin" }]);
-    const response = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
+    const current = {
+      id: JOB_ID,
+      companyId: COMPANY_ID,
+      publisherId: "member-1",
+      title: "Original",
+      status: "active",
+      reviewStatus: "approved",
+      firstPublishedAt: new Date(),
+      officeEvidenceIds: [OFFICE_ID],
+    };
+    fakeDb
+      .selectReturns(jobs, [current])
+      .selectReturns(jobs, [current])
+      .selectReturns(companies, [{ pageId: PAGE_ID }])
+      .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }]);
+    const response = await PUT(
+      jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }),
+    );
     expect(response.status).toBe(200);
     expect((await response.json()).reviewRequired).toBe(true);
-    expectGatedSequence("writes", [{ table: "jobs", values: { pendingRevision: { title: "Renamed" }, reviewNote: "Material changes await administrator review" } }]);
+    expectGatedSequence("writes", [
+      {
+        table: "jobs",
+        values: {
+          pendingRevision: { title: "Renamed" },
+          reviewNote: "Material changes await administrator review",
+        },
+      },
+    ]);
   });
 
   it("answers 500 and writes nothing when the update fails", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
       .selectReturns(jobs, [{ id: JOB_ID, companyId: COMPANY_ID }])
-      .selectReturns(jobs, [{ id: JOB_ID, companyId: COMPANY_ID, publisherId: "member-1", officeEvidenceIds: [OFFICE_ID] }])
+      .selectReturns(jobs, [
+        {
+          id: JOB_ID,
+          companyId: COMPANY_ID,
+          publisherId: "member-1",
+          officeEvidenceIds: [OFFICE_ID],
+        },
+      ])
       .selectReturns(companies, [{ pageId: PAGE_ID }])
       .selectReturns(pageRoles, [{ id: "role-1", role: "admin" }])
       .failNextUpdate(jobs, new Error("database unavailable"));
     try {
-      const response = await PUT(jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }));
+      const response = await PUT(
+        jsonRequest("PUT", "/api/jobs", { id: JOB_ID, title: "Renamed" }),
+      );
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: "Failed to update job" });
@@ -450,7 +598,9 @@ describe("PUT /api/jobs", () => {
 
 describe("DELETE /api/jobs", () => {
   it("refuses a delete with no id, reading and writing nothing", async () => {
-    const response = await DELETE(new Request("http://localhost/api/jobs", { method: "DELETE" }));
+    const response = await DELETE(
+      new Request("http://localhost/api/jobs", { method: "DELETE" }),
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Job ID is required" });
@@ -460,7 +610,9 @@ describe("DELETE /api/jobs", () => {
 
   it("refuses a delete with a malformed id, reading and writing nothing", async () => {
     const response = await DELETE(
-      new Request("http://localhost/api/jobs?id=not-a-uuid", { method: "DELETE" }),
+      new Request("http://localhost/api/jobs?id=not-a-uuid", {
+        method: "DELETE",
+      }),
     );
 
     expect(response.status).toBe(400);
@@ -473,7 +625,9 @@ describe("DELETE /api/jobs", () => {
     fakeDb.selectReturns(jobs, []);
 
     const response = await DELETE(
-      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+        method: "DELETE",
+      }),
     );
 
     expect(response.status).toBe(404);
@@ -488,7 +642,9 @@ describe("DELETE /api/jobs", () => {
       .selectReturns(pageRoles, []);
 
     const response = await DELETE(
-      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+        method: "DELETE",
+      }),
     );
 
     expect(response.status).toBe(403);
@@ -504,11 +660,15 @@ describe("DELETE /api/jobs", () => {
       .updateReturns(jobs, [{ id: JOB_ID }]);
 
     const response = await DELETE(
-      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+        method: "DELETE",
+      }),
     );
 
     expect(response.status).toBe(200);
-    expectGatedSequence("writes", [{ table: "jobs", values: { status: "archived" } }]);
+    expectGatedSequence("writes", [
+      { table: "jobs", values: { status: "archived" } },
+    ]);
     expectGatedNone("deletes");
   });
 
@@ -520,7 +680,9 @@ describe("DELETE /api/jobs", () => {
       .updateReturns(jobs, []);
 
     const response = await DELETE(
-      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+        method: "DELETE",
+      }),
     );
 
     // The job was read and authorized, but the archive matched nothing — the
@@ -538,7 +700,9 @@ describe("DELETE /api/jobs", () => {
       .failNextUpdate(jobs, new Error("database unavailable"));
     try {
       const response = await DELETE(
-        new Request(`http://localhost/api/jobs?id=${JOB_ID}`, { method: "DELETE" }),
+        new Request(`http://localhost/api/jobs?id=${JOB_ID}`, {
+          method: "DELETE",
+        }),
       );
 
       expect(response.status).toBe(500);
@@ -551,11 +715,26 @@ describe("DELETE /api/jobs", () => {
 });
 it("uses search and remote filters on both job rows and their total", async () => {
   fakeDb.selectReturns(jobs, []).selectReturns(jobs, [{ total: 0 }]);
-  const response = await GET(new Request("http://localhost/api/jobs?q=designer&type=Remote&location=London"));
+  const response = await GET(
+    new Request(
+      "http://localhost/api/jobs?q=designer&type=Remote&location=London",
+    ),
+  );
   expect(response.status).toBe(200);
   expect(fakeDb.selectWheres[0]).toContain("ilike");
   expect(fakeDb.selectParams[0]).toContain("remote");
   expect(fakeDb.selectParams[0]).toContain("%designer%");
   expect(fakeDb.selectParams[0]).toContain("%London%");
+  expect(fakeDb.selectWheres[0]).toContain('"review_status"');
+  expect(fakeDb.selectParams[0]).toContain("approved");
   expect(fakeDb.selectParams[1]).toEqual(fakeDb.selectParams[0]);
+});
+
+it("requires approval on public job detail reads as well as the directory", async () => {
+  session.userId = null;
+  fakeDb.selectReturns(jobs, []);
+  const response = await GET(new Request(`http://localhost/api/jobs?id=${JOB_ID}`));
+  expect(response.status).toBe(404);
+  expect(fakeDb.selectWheres[0]).toContain('"review_status"');
+  expect(fakeDb.selectParams[0]).toContain("approved");
 });

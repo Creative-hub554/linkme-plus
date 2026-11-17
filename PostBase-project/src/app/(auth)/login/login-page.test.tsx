@@ -128,7 +128,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -181,7 +181,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("skips the challenge when no verified factor exists", async () => {
@@ -193,7 +193,7 @@ describe("LoginPage", () => {
     await act(async () => {
       vi.advanceTimersByTime(900);
     });
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("does not challenge a reader already at the required level", async () => {
@@ -204,7 +204,7 @@ describe("LoginPage", () => {
       vi.advanceTimersByTime(900);
     });
     expect(mocks.listFactors).not.toHaveBeenCalled();
-    expect(mocks.push).toHaveBeenCalledWith("/feed");
+    expect(mocks.push).toHaveBeenCalledWith("/profile");
   });
 
   test("starts a Google sign-in", async () => {

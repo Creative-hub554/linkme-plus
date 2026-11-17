@@ -31,6 +31,15 @@ import type { ProfileThemeConfig } from "@/lib/profile-theme";
 export const visibilityEnum = pgEnum("visibility", postAudiences);
 export const userRoleEnum = pgEnum("user_role", ["member", "admin", "moderator"]);
 export const postTypeEnum = pgEnum("post_type", ["text", "image", "video", "short_video"]);
+
+/**
+ * Media kind on a media row. Shared by `post_media` (social) and
+ * `listing_media` (marketplace) so both surfaces validate the same way while
+ * keeping their storage separate — a social short lives attached to a post, a
+ * marketplace short lives attached to a listing, and neither can leak into the
+ * other's feed.
+ */
+export const mediaTypeEnum = pgEnum("media_type", ["image", "video", "short_video"]);
 export const listingStatusEnum = pgEnum("listing_status", ["draft", "active", "reserved", "sold", "expired", "removed"]);
 export const jobStatusEnum = pgEnum("job_status", ["draft", "active", "closed", "archived"]);
 export const applicationStatusEnum = pgEnum("application_status", ["pending", "reviewing", "shortlisted", "rejected", "hired"]);
@@ -195,7 +204,7 @@ export const postMedia = pgTable("post_media", {
     .references(() => posts.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   altText: varchar("alt_text", { length: 255 }),
-  type: varchar("type", { length: 20 }).notNull(),
+  type: mediaTypeEnum("type").default("image").notNull(),
   order: integer("order").default(0),
   processingStatus: varchar("processing_status", { length: 20 }).default("ready"),
 });
@@ -361,6 +370,7 @@ export const listingMedia = pgTable("listing_media", {
     .references(() => marketplaceListings.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   altText: varchar("alt_text", { length: 255 }),
+  type: mediaTypeEnum("type").default("image").notNull(),
   order: integer("order").default(0),
 });
 

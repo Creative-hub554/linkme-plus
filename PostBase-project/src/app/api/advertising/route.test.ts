@@ -403,6 +403,28 @@ function bookablePlacement(location: "feed" | "marketplace" | "jobs") {
     ]);
 }
 
+test("an author can book a personal post boost, while another member cannot", async () => {
+  const postId = "44444444-4444-4444-8444-444444444444";
+  const post = { id: postId, pageId: null, groupId: null, visibility: "public", content: "My post" };
+  const body = { type: "boost", placementId: id, sourceId: postId, ...bookingWindow(1) };
+
+  bookablePlacement("feed");
+  fakeDb.selectReturns(posts, [{ ...post, authorId: "another-member" }]);
+  const refused = await POST(request("POST", body));
+  expect(refused.status).toBe(403);
+  expect(fakeDb.writes).toEqual([]);
+
+  bookablePlacement("feed");
+  fakeDb
+    .selectReturns(posts, [{ ...post, authorId: auth.id }])
+    .selectReturns(postMedia, [])
+    .insertReturns(adCampaigns, [{ id }]);
+  const booked = await POST(request("POST", body));
+  expect(booked.status).toBe(201);
+  expect(fakeDb.writes[0].values).toMatchObject({ type: "boost", status: "pending_payment" });
+  expect(fakeDb.writes[3]).toMatchObject({ table: "boosted_post_campaigns", values: { postId } });
+});
+
 test("a booking must name a known campaign type and a real placement", async () => {
   const invalidType = await POST(request("POST", { type: "video" }));
   expect(invalidType.status).toBe(400);
@@ -561,7 +583,7 @@ test("a post boost must use a feed placement", async () => {
   expect(fakeDb.writes).toEqual([]);
 });
 
-test("a boost must target a published, public, undeleted Page post", async () => {
+test("a boost must target a published, public, undeleted post outside a group", async () => {
   const postId = "44444444-4444-4444-8444-444444444444";
   const published = {
     id: postId,
@@ -572,7 +594,7 @@ test("a boost must target a published, public, undeleted Page post", async () =>
   };
   const cases = [
     [],
-    [{ ...published, pageId: null }],
+    [{ ...published, groupId: "group-1" }],
     [{ ...published, visibility: "private" }],
     [{ ...published, deletedAt: new Date() }],
   ];
@@ -589,7 +611,7 @@ test("a boost must target a published, public, undeleted Page post", async () =>
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "Choose a published public Page post",
+      error: "Choose a published public post outside a group",
     });
   }
   expect(fakeDb.writes).toEqual([]);

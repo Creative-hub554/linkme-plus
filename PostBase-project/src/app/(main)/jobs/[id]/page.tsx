@@ -73,7 +73,7 @@ export default function JobDetailPage() {
     (data.job.status !== "active" ||
       (data.job.deadline && new Date(data.job.deadline) < new Date()));
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="commerce-page commerce-detail mx-auto max-w-3xl space-y-6">
       <Link href="/jobs" className="text-brand-blue">
         ← Jobs
       </Link>

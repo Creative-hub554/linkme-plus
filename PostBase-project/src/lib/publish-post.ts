@@ -8,10 +8,10 @@
  * So the file is stored first (`POST /api/posts/media` puts it in R2 and answers
  * with its public URL, and that URL is what the post records).
  *
- * The upload goes through our own route rather than the presigned one at
- * `/api/uploads`, because a browser PUT to the media bucket is refused: the
- * bucket returns no CORS headers, so the preflight fails and the file never
- * leaves the page.
+ * The upload goes through our own route rather than straight to the bucket: a
+ * browser PUT to the media bucket is refused (no CORS headers), and a
+ * server-side read is what lets the file's type and size be checked rather than
+ * taken from the page.
  *
  * Kept out of the composer because the composer deliberately knows nothing
  * about the network: it hands over the text and the file and clears itself, and

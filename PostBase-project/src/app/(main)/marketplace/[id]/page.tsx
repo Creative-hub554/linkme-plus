@@ -21,7 +21,12 @@ interface ListingDetail {
     condition: string | null;
     status: string;
   };
-  media: { id: string; url: string; altText: string | null }[];
+  media: {
+    id: string;
+    url: string;
+    altText: string | null;
+    type?: "image" | "video" | "short_video";
+  }[];
   inventory?: { quantity: number | null } | null;
 }
 export default function ListingDetailPage() {
@@ -87,7 +92,7 @@ export default function ListingDetailPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="commerce-page commerce-detail mx-auto max-w-3xl space-y-5">
       <Link href="/marketplace" className="text-brand-blue">
         ← Marketplace
       </Link>
@@ -106,14 +111,29 @@ export default function ListingDetailPage() {
             {data.listing.status}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            {data.media.map((item) => (
-              <img
-                key={item.id}
-                src={item.url}
-                alt={item.altText || data.listing.title}
-                className="w-full rounded-xl object-contain"
-              />
-            ))}
+            {data.media.map((item) =>
+              item.type === "short_video" || item.type === "video" ? (
+                <video
+                  key={item.id}
+                  src={item.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className={
+                    item.type === "short_video"
+                      ? "w-full rounded-xl object-contain aspect-[9/16] bg-black"
+                      : "w-full rounded-xl object-contain"
+                  }
+                />
+              ) : (
+                <img
+                  key={item.id}
+                  src={item.url}
+                  alt={item.altText || data.listing.title}
+                  className="w-full rounded-xl object-contain"
+                />
+              ),
+            )}
           </div>
           <p className="whitespace-pre-wrap">{data.listing.description}</p>
           <p>

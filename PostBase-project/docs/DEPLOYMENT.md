@@ -31,13 +31,12 @@ nothing is re-used from a previous run, so a stale dist can never be deployed:
    `sites-deploy/vinext-worker.js`: one module, all dependencies inlined,
    `node:*` builtins and `cloudflare:*` runtime modules left external for
    `nodejs_compat`. The built entry already carries the wrapped worker (the
-   per-request database scope, the `WebSocketRoom` Durable Object export, and
-   the vinext handler), and the script verifies the `WebSocketRoom` export
-   survives bundling before it proceeds.
+   per-request database scope and the vinext handler), and the script verifies
+   that the bundle still carries a default export before it proceeds.
 3. **Asset-first entry** — `sites-deploy/entry.js` is written fresh: file-ish
    GET/HEAD requests try the `ASSETS` binding first (native cache headers and
    redirects), and an unmatched 404 falls through to the worker, so SSR pages,
-   `/api/*`, `/ws` and scheduled jobs keep using the worker.
+   `/api/*` and scheduled jobs keep using the worker.
 4. **Pruned asset tree** — `dist/client` is copied into `sites-deploy/assets`
    with every dot-entry (`.vite/`, `.assetsignore`, ...) dropped, symlinks
    refused, and a post-pass re-verifies that no hidden file survived anywhere,
@@ -263,7 +262,7 @@ wrangler r2 bucket list
 wrangler r2 object put linkme-plus-uploads/test.txt --file=test.txt
 ```
 
-### Durable Object Errors
+### Worker Errors
 
 ```bash
 # Check logs

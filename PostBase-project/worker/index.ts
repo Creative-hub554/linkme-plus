@@ -2,10 +2,6 @@ import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db";
 import { purgeExpiredEvidence } from "../src/lib/evidence-retention";
 
-// The Durable Object class must be exported from the Worker entry for
-// wrangler.jsonc's `WebSocketRoom` binding to resolve; nothing else imports it.
-export { WebSocketRoom } from "../src/lib/durable-objects/websocket-room";
-
 const worker = {
   async scheduled(_event: { scheduledTime: number; cron: string }, _env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runWithDb(() => purgeExpiredEvidence()));

@@ -9,12 +9,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth-client", () => ({
   useSession: () => ({ session: { user: { id: "viewer" } } }),
 }));
-vi.mock("@/components/realtime/online-status", () => ({
-  OnlineStatus: () => null,
-}));
-vi.mock("@/components/realtime/typing-indicator", () => ({
-  TypingIndicator: () => null,
-}));
 import MessagesPage from "./page";
 afterEach(() => {
   cleanupSurfaces();

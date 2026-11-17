@@ -10,8 +10,6 @@ import { Search, Send } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Loader2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
-import { OnlineStatus } from "@/components/realtime/online-status";
-import { TypingIndicator } from "@/components/realtime/typing-indicator";
 
 interface Conversation {
   id: string;
@@ -210,7 +208,6 @@ function MessagesContent() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{conv.name}</span>
-                      <OnlineStatus userId={conv.otherUserId} size="sm" />
                     </div>
                     <span className="text-xs text-muted-foreground">{conv.time}</span>
                   </div>
@@ -239,7 +236,6 @@ function MessagesContent() {
                 </Avatar>
                 <div>
                   <p className="font-medium text-sm">{selectedConversation.name}</p>
-                  <OnlineStatus userId={selectedConversation.otherUserId} showText size="sm" />
                 </div>
               </div>
             </CardHeader>
@@ -273,7 +269,6 @@ function MessagesContent() {
                     </div>
                   </div>
                 ))}
-                <TypingIndicator conversationId={selectedConversation.id} />
                 <div ref={messagesEndRef} />
               </div>
             </CardContent>

@@ -17,8 +17,7 @@
  *      entry is the bundle source — not `worker/index.ts` — because only the
  *      vinext build resolves the `virtual:vinext-*` adapter imports into
  *      concrete code, and that entry is already the wrapped worker: the
- *      per-request database scope, the `WebSocketRoom` Durable Object export,
- *      and the vinext handler, all in one graph.
+ *      per-request database scope and the vinext handler, in one graph.
  *   3. `sites-deploy/entry.js` is written: asset-first GET/HEAD dispatch
  *      through the reserved ASSETS binding (native cache/redirect semantics),
  *      with everything unmatched falling through to the worker.
@@ -150,12 +149,12 @@ async function bundleWorker() {
   }
 
   const bundled = readFileSync(BUNDLE_PATH, "utf8");
-  // The wrapper's exports are the deployment's shape: the worker handler and
-  // the Durable Object class wrangler.jsonc's binding resolves. Their absence
-  // would upload a bundle that serves nothing.
-  if (!bundled.includes("WebSocketRoom")) {
-    die("the bundle no longer exports WebSocketRoom — inspect worker/index.ts before deploying");
-  }  const bytes = statSync(BUNDLE_PATH).size;
+  // The wrapper's default export is the deployment's shape: a bundle without
+  // one would upload a Worker that serves nothing.
+  if (!/\bexport\s*\{[^}]*\bas\s+default\b|\bexport\s+default\b/.test(bundled)) {
+    die("the bundle has no default export — inspect worker/index.ts before deploying");
+  }
+  const bytes = statSync(BUNDLE_PATH).size;
   info(`bundle: ${(bytes / 1024 / 1024).toFixed(2)} MiB, 1 file`);
   if (bytes > BUDGET_BYTES) {
     info("warning: the bundle is over the 10 MiB code budget — the upload may still pass, but watch the deploy receipt");
@@ -168,11 +167,9 @@ const ENTRY_SOURCE = `// Freebuff Sites serves the deployed asset tree through t
 // binding, and asset-first routing is what keeps native asset semantics (cache
 // headers, redirects) working. This entry mirrors the platform's own OpenNext
 // entry shape: file-ish GET/HEAD requests try ASSETS first, and only an
-// unmatched 404 falls through to the vinext worker — SSR routes, /api/*, /ws
-// and scheduled jobs are untouched.
-import worker, { WebSocketRoom } from "./vinext-worker.js";
-
-export { WebSocketRoom };
+// unmatched 404 falls through to the vinext worker — SSR routes, /api/* and
+// scheduled jobs are untouched.
+import worker from "./vinext-worker.js";
 
 const FILE_PREFIXES = [\`/_next/\`, \`/_vinext/\`];
 const FILE_EXACT = new Set([

@@ -15,8 +15,11 @@ test("promotion sources are scoped to owned listings and administered public Pag
     (await GET(new Request("http://localhost/api/advertising/sources"))).status,
   ).toBe(200);
   expect(fakeDb.selectParams[0]).toContain("owner");
+  // The posts read gates on the author OR an admin Page role. The role check
+  // lives in the left join's on-condition (a post without a page must survive
+  // the join, not be filtered out of it), so its parameters render in the
+  // joined read's SQL, not the where clause.
   expect(fakeDb.selectParams[1]).toContain("owner");
-  expect(fakeDb.selectParams[1]).toContain("admin");
   expect(fakeDb.selectParams[1]).toContain("public");
 });
 

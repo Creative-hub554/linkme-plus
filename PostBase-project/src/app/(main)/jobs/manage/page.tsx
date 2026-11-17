@@ -139,7 +139,7 @@ export default function ManageJobsPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="commerce-page commerce-detail mx-auto max-w-4xl space-y-5">
       <Link href="/jobs" className="text-brand-blue">
         ← Jobs
       </Link>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Megaphone, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -92,6 +93,14 @@ export function PostOptionsMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
+          {visibility === "public" && !groupName && (
+            <DropdownMenuItem asChild>
+              <Link href="/advertising?type=boost">
+                <Megaphone className="mr-2 h-4 w-4" />
+                Boost a post
+              </Link>
+            </DropdownMenuItem>
+          )}
           {onUpdate && (
             <DropdownMenuItem onSelect={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />

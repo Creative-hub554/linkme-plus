@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MapPin } from "lucide-react";
+import { Heart, MapPin, Play } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,8 @@ interface ListingCardProps {
   price: number;
   currency?: string;
   image?: string;
+  /** The first media row's kind — `short_video` puts a short badge on the tile. */
+  imageType?: "image" | "video" | "short_video";
   seller: { name: string; avatar?: string };
   location?: string;
   /** The category's human name. A uuid is not a name: no name, no badge. */
@@ -35,6 +37,7 @@ export function ListingCard({
   price,
   currency = "USD",
   image,
+  imageType,
   seller,
   location,
   category,
@@ -91,7 +94,7 @@ export function ListingCard({
   };
 
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow group">
+    <Card className="commerce-listing-card overflow-hidden hover:shadow-md transition-shadow group">
       <div className="relative aspect-square bg-surface-light-blue">
         {image ? (
           <img src={image} alt={title} className="w-full h-full object-cover" />
@@ -103,6 +106,11 @@ export function ListingCard({
         {condition && (
           <Badge className="absolute top-2 left-2" variant="secondary">
             {condition}
+          </Badge>
+        )}
+        {imageType === "short_video" && (
+          <Badge className="absolute bottom-2 left-2 gap-1" variant="secondary">
+            <Play aria-hidden="true" className="h-3 w-3" /> Short
           </Badge>
         )}
         {/* Named, and named with what pressing it does rather than only what
@@ -128,7 +136,7 @@ export function ListingCard({
         <p className="text-lg font-bold text-brand-blue mt-1">
           {currency === "USD" ? "$" : currency}{price.toFixed(2)}
         </p>
-        <div className="flex items-center justify-between mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex items-center gap-1.5">
             <Avatar className="h-5 w-5">
               <AvatarFallback className="text-[10px]">{seller.name[0]}</AvatarFallback>

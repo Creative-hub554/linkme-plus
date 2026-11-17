@@ -136,14 +136,14 @@ export async function POST(request: Request) {
     // The job has to exist before anybody applies to it: without this read an
     // application can name a job nothing renders.
     const [job] = await db
-      .select({ id: jobs.id, status: jobs.status, deadline: jobs.deadline })
+      .select({ id: jobs.id, status: jobs.status, deadline: jobs.deadline, reviewStatus: jobs.reviewStatus })
       .from(jobs)
       .where(eq(jobs.id, jobId));
 
     if (!job) {
       return errorResponse("Job not found", 404);
     }
-    if ((job.status && job.status !== "active") || (job.deadline && job.deadline < new Date())) return errorResponse("This job is no longer accepting applications", 409);
+    if (job.reviewStatus !== "approved" || (job.status && job.status !== "active") || (job.deadline && job.deadline < new Date())) return errorResponse("This job is no longer accepting applications", 409);
 
     // Check if already applied
     const [existing] = await db

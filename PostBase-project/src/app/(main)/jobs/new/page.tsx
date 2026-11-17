@@ -69,11 +69,12 @@ export default function NewJobPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="commerce-page commerce-detail mx-auto max-w-2xl space-y-5">
       <Link href="/jobs" className="text-brand-blue">
         ← Jobs
       </Link>
       <h1 className="text-2xl font-bold">Post a job</h1>
+      <p className="text-sm text-muted-foreground">Jobs require administrator approval before publication, including office evidence review. Your first 10 approved jobs are free.</p>
       <JobAllowanceUsage />
       {error && (
         <p role="alert" className="text-red-600">
@@ -151,7 +152,7 @@ export default function NewJobPage() {
           <Label htmlFor="deadline">Application deadline</Label>
           <Input id="deadline" name="deadline" required type="date" />
           <PrivateEvidenceUpload purpose="office" value={officeEvidenceIds} onChange={setOfficeEvidenceIds} />
-          <p className="text-sm text-muted-foreground">Jobs require approval before publication. Identity-verified accounts may publish automatically only after office evidence and system checks pass. Your first 10 approved jobs are free.</p>
+
           <Button type="submit" disabled={busy || !officeEvidenceIds.length}>
             {busy ? "Submitting…" : "Submit job for review"}
           </Button>

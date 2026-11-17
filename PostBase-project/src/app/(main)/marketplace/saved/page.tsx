@@ -97,7 +97,7 @@ export default function SavedListingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="commerce-page commerce-detail space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-navy-800">Saved listings</h1>
         <p className="text-sm text-muted-foreground mt-1">

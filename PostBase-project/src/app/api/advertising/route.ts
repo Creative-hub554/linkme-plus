@@ -175,33 +175,37 @@ export async function POST(request: Request) {
         .where(eq(posts.id, body.sourceId));
       if (
         !post ||
-        !post.pageId ||
+        post.groupId ||
         post.visibility !== "public" ||
         post.deletedAt
       )
-        return errorResponse("Choose a published public Page post");
-      const [role] = await db
-        .select()
-        .from(pageRoles)
-        .where(
-          and(
-            eq(pageRoles.pageId, post.pageId),
-            eq(pageRoles.userId, session.user.id),
-            eq(pageRoles.role, "admin"),
-          ),
-        );
-      if (!role)
-        return errorResponse(
-          "Only the Page administrator can boost this post",
-          403,
-        );
+        return errorResponse("Choose a published public post outside a group");
+      if (!post.pageId && post.authorId !== session.user.id)
+        return errorResponse("Only the post author can boost this post", 403);
+      if (post.pageId) {
+        const [role] = await db
+          .select()
+          .from(pageRoles)
+          .where(
+            and(
+              eq(pageRoles.pageId, post.pageId),
+              eq(pageRoles.userId, session.user.id),
+              eq(pageRoles.role, "admin"),
+            ),
+          );
+        if (!role)
+          return errorResponse(
+            "Only the Page administrator can boost this post",
+            403,
+          );
+      }
       const [media] = await db
         .select()
         .from(postMedia)
         .where(eq(postMedia.postId, post.id))
         .orderBy(postMedia.order)
         .limit(1);
-      headline = post.content?.slice(0, 200) || "Sponsored Page post";
+      headline = post.content?.slice(0, 200) || "Sponsored post";
       destinationUrl = `/feed?post=${post.id}`;
       imageUrl = media?.type.startsWith("image") ? media.url : null;
     } else if (!headline || !destinationUrl || !imageUrl)

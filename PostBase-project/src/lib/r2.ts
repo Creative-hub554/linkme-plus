@@ -1,5 +1,4 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const runtimeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
 const R2_ACCOUNT_ID = runtimeEnv.R2_ACCOUNT_ID || "";
@@ -60,6 +59,53 @@ export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 export const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 export const MAX_DOCUMENT_SIZE = 20 * 1024 * 1024; // 20MB
 
+/**
+ * The upload purposes the app accepts, and what each one may store.
+ *
+ * These are the rules the file pickers already describe in prose ("JPG, PNG,
+ * WebP. Max 10MB.", "PDF. Max 20MB."), moved where a server can apply them.
+ * The route classifies the bytes first and then looks the *detected* type up
+ * here, so a purpose is a policy on what was uploaded rather than on what the
+ * caller said it was.
+ */
+export const UPLOAD_PURPOSES = [
+  "avatar",
+  "cover",
+  "cover-video",
+  "post",
+  "listing",
+  "document",
+] as const;
+
+export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
+
+const PURPOSE_TYPES: Record<UploadPurpose, readonly string[]> = {
+  avatar: ["image/jpeg", "image/png", "image/webp"],
+  cover: ALLOWED_IMAGE_TYPES,
+  "cover-video": ALLOWED_VIDEO_TYPES,
+  post: ALL_ALLOWED_TYPES,
+  // Listings accept photos and videos — a `short_video` media row stores a
+  // video file, so the upload gate cannot be images-only anymore.
+  listing: [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES],
+  document: ALLOWED_DOCUMENT_TYPES,
+};
+
+export function isUploadPurpose(value: unknown): value is UploadPurpose {
+  return typeof value === "string" && (UPLOAD_PURPOSES as readonly string[]).includes(value);
+}
+
+/** The content types a purpose may store, for a type already read from bytes. */
+export function allowedTypesForPurpose(purpose: UploadPurpose): readonly string[] {
+  return PURPOSE_TYPES[purpose];
+}
+
+/** The size ceiling for a type the server identified from the file's bytes. */
+export function maxSizeForType(type: string): number {
+  if (ALLOWED_VIDEO_TYPES.includes(type)) return MAX_VIDEO_SIZE;
+  if (ALLOWED_DOCUMENT_TYPES.includes(type)) return MAX_DOCUMENT_SIZE;
+  return MAX_IMAGE_SIZE;
+}
+
 // Image sizes for processing
 export const IMAGE_SIZES = {
   thumbnail: { width: 150, height: 150 },
@@ -100,22 +146,6 @@ export function keyBelongsToUser(key: string, userId: string): boolean {
   return segments.length >= 3 && segments[1] === userId;
 }
 
-// Get presigned upload URL
-export async function getPresignedUploadUrl(
-  key: string,
-  contentType: string,
-  expiresIn = 3600
-): Promise<string> {
-  assertStorageConfigured();
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-    ContentType: contentType,
-  });
-
-  return getSignedUrl(r2Client, command, { expiresIn });
-}
-
 // Upload a file directly from the server (e.g. cover uploads proxied through the API)
 export async function putObject(
   key: string,
@@ -140,20 +170,20 @@ export async function putObject(
   await r2Client.send(command);
 }
 
-// Get public URL for a file
-export function getPublicUrl(key: string): string {
-  if (!PUBLIC_URL) {
-    throw new Error("R2_PUBLIC_URL is required for public media URLs");
-  }
-  return `${PUBLIC_URL}/${key}`;
-}
-
 // Get processed image URL
 export function getProcessedImageUrl(key: string, _size: ImageSize): string {
   const url = getPublicUrl(key);
   // In production, use Cloudflare Images or a worker for on-the-fly processing
   // For now, return the original URL
   return url;
+}
+
+// Get public URL for a file
+export function getPublicUrl(key: string): string {
+  if (!PUBLIC_URL) {
+    throw new Error("R2_PUBLIC_URL is required for public media URLs");
+  }
+  return `${PUBLIC_URL}/${key}`;
 }
 
 // Delete file from R2
