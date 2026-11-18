@@ -39,3 +39,7 @@ node_modules/
 /freebuff-sites-build/
 /.open-next/
 /.wrangler/
+
+# Local browser-automation snapshots and mutation-test artifacts
+.playwright-cli/
+.freebuff/.mutation-coverage-report.*.json
