@@ -1,5 +1,5 @@
 -- Preserve the existing production verification table and enum; legacy requests do not establish National ID verification.
-DO $ BEGIN CREATE TYPE "public"."verification_request_status" AS ENUM('pending', 'approved', 'rejected'); EXCEPTION WHEN duplicate_object THEN NULL; END $;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."verification_request_status" AS ENUM('pending', 'approved', 'rejected'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
 CREATE TABLE "job_publications" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"job_id" uuid,
