@@ -1,0 +1,102 @@
+- generic [ref=f1e3]:
+  - complementary [ref=f1e4]:
+    - link "LinkMe+" [ref=f1e5] [cursor=pointer]:
+      - /url: /design
+      - generic [aria-hidden] [ref=f1e6]: L+
+      - text: LinkMe+
+    - navigation "Primary navigation" [ref=f1e7]:
+      - link "Home Feed" [ref=f1e8] [cursor=pointer]:
+        - /url: /design/home
+      - link "Shorts" [ref=f1e13] [cursor=pointer]:
+        - /url: /design/shorts
+      - link "Marketplace" [ref=f1e17] [cursor=pointer]:
+        - /url: /design/marketplace
+      - link "Jobs" [ref=f1e22] [cursor=pointer]:
+        - /url: /design/jobs
+      - link "Groups" [ref=f1e28] [cursor=pointer]:
+        - /url: /design/groups
+      - link "Messages" [ref=f1e34] [cursor=pointer]:
+        - /url: /design/messages
+      - link "Profile" [ref=f1e38] [cursor=pointer]:
+        - /url: /design/profile
+    - button "Create" [ref=f1e44] [cursor=pointer]
+    - link "Sarah Chen @sarahchen" [ref=f1e46] [cursor=pointer]:
+      - /url: /design/profile
+      - generic [aria-hidden] [ref=f1e47]: SC
+      - generic [ref=f1e48]:
+        - strong [ref=f1e49]: Sarah Chen
+        - generic [ref=f1e50]: "@sarahchen"
+  - main [ref=f1e51]:
+    - status [ref=f1e52]
+    - generic [ref=f1e54]:
+      - generic [ref=f1e56]:
+        - heading "Profile" [level=1] [ref=f1e57]
+        - paragraph [ref=f1e58]: Your public presence on LinkMe+.
+      - generic [ref=f1e59]:
+        - generic [ref=f1e60]:
+          - generic "Ambient profile cover" [ref=f1e61]
+          - generic [ref=f1e62]:
+            - button "Play" [ref=f1e63] [cursor=pointer]
+            - button "Unmute" [ref=f1e64] [cursor=pointer]
+        - generic [ref=f1e65]:
+          - generic [ref=f1e66]:
+            - generic [aria-hidden] [ref=f1e67]: SC
+            - button "Customize in Cover Studio" [ref=f1e68] [cursor=pointer]
+          - generic [ref=f1e69]:
+            - heading [level=2] [ref=f1e70]:
+              - text: Sarah Chen
+              - img "Verified" [ref=f1e71]
+            - paragraph [ref=f1e74]: "@sarahchen · Product Designer & Creative Technologist"
+          - paragraph [ref=f1e75]: Designing calm digital spaces, glassmorphic interfaces, and modular design systems. Building in public on LinkMe+.
+          - generic [ref=f1e76]:
+            - generic [ref=f1e77]:
+              - strong [ref=f1e78]: 1,420
+              - text: connections
+            - generic [ref=f1e79]:
+              - strong [ref=f1e80]: 8,940
+              - text: followers
+            - generic [ref=f1e81]:
+              - strong [ref=f1e82]: "164"
+              - text: posts
+          - generic "Profile sections" [ref=f1e83]:
+            - button "Posts" [pressed] [ref=f1e84] [cursor=pointer]
+            - button "Shorts" [ref=f1e86] [cursor=pointer]
+            - button "Marketplace Listings" [ref=f1e87] [cursor=pointer]
+            - button "Groups" [ref=f1e88] [cursor=pointer]
+            - button "Career / Resume" [ref=f1e89] [cursor=pointer]
+          - region "Posts" [ref=f1e90]:
+            - paragraph [ref=f1e91]: Small steps. Big ideas. Building something beautiful today with our new obsidian glassmorphic tokens and ambient cover motion.
+  - complementary [ref=f1e92]:
+    - generic [ref=f1e93]:
+      - generic [ref=f1e97]: Search LinkMe+
+      - textbox "Search LinkMe+" [ref=f1e98]
+    - group [ref=f1e99]:
+      - generic "Direct Messages" [ref=f1e100] [cursor=pointer]
+      - generic [ref=f1e101]:
+        - button "Marcus Reid Love the new Marquee Wall preset in Short Studio!" [ref=f1e102] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f1e103]: MR
+          - generic [ref=f1e104]:
+            - strong [ref=f1e105]: Marcus Reid
+            - generic [ref=f1e106]: Love the new Marquee Wall preset in Short Studio!
+        - button "Elena Vance Sent over the Figma tokens for the Marketplace drawer." [ref=f1e107] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f1e108]: EV
+          - generic [ref=f1e109]:
+            - strong [ref=f1e110]: Elena Vance
+            - generic [ref=f1e111]: Sent over the Figma tokens for the Marketplace drawer.
+    - generic [ref=f1e112]:
+      - heading "Trending communities" [level=2] [ref=f1e113]
+      - link [ref=f1e114] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=f1e115]: Design Systems & Motion
+        - paragraph [ref=f1e116]: 14.2K members
+      - link [ref=f1e117] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=f1e118]: Indie Builders & Founders
+        - paragraph [ref=f1e119]: 22.8K members
+    - generic [ref=f1e120]:
+      - link "Help" [ref=f1e121] [cursor=pointer]:
+        - /url: /help
+      - link "Privacy" [ref=f1e122] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=f1e123] [cursor=pointer]:
+        - /url: /terms

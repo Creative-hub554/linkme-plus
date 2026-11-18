@@ -87,6 +87,8 @@ export interface MarketplaceItem {
   condition: "New" | "Like New" | "Digital Download" | "Good";
   location: string;
   imageUrl: string;
+  /** Frames the card's hover swipe walks through; a short_video frame plays muted while hovered. */
+  media?: { url: string; type: "image" | "video" | "short_video" }[];
   description: string;
   seller: Pick<
     UserProfile,

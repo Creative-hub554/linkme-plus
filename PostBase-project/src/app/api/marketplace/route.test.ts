@@ -332,6 +332,40 @@ describe("GET /api/marketplace list read — the category name", () => {
   });
 });
 
+describe("GET /api/marketplace sorting", () => {
+  /**
+   * The product grid is ordered by the `sort` parameter: newest by default,
+   * or by the effective price (min, falling back to max) in either direction.
+   * An unknown value is a bad request, not a silently unsorted page.
+   */
+
+  it("rejects a sort value outside the allowlist with 400", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/marketplace?sort=popular"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid sort. Use newest, price_asc, or price_desc.",
+    });
+  });
+
+  it("binds the effective price expression for a price sort", async () => {
+    fakeDb
+      .selectReturns(marketplaceListings, [{ id: LISTING_ID, title: "Camera" }])
+      .selectReturns(marketplaceListings, [{ total: 1 }]);
+
+    const response = await GET(
+      new Request("http://localhost/api/marketplace?sort=price_desc"),
+    );
+
+    expect(response.status).toBe(200);
+    // The sort rides the query the page was read under, ordering on the
+    // effective price so a range-only listing sorts by something real.
+    expect(fakeDb.selectWheres[0]).toContain("coalesce");
+  });
+});
+
 describe("GET /api/marketplace list read — the viewer's saved flags", () => {
   /**
    * The list is what a card is rendered from, so the viewer's own `isSaved`
@@ -358,11 +392,13 @@ describe("GET /api/marketplace list read — the viewer's saved flags", () => {
     expect(body.data[1].isSaved).toBe(false);
     // The flags are the third read (page, count, flags) — one read, not one
     // per row — and it is bound to the viewer and the page's ids, the way the
-    // category filter above is pinned by its own shape.
+    // category filter above is pinned by its own shape. The fourth read is the
+    // page's media, batched once for the hover swipe previews.
     expect(fakeDb.reads).toEqual([
       "marketplace_listings",
       "marketplace_listings",
       "saved_listings",
+      "listing_media",
     ]);
     expect(fakeDb.selectWheres[2]).toContain("saved_listings");
     expect(fakeDb.selectParams[2]).toContain("seller-1");

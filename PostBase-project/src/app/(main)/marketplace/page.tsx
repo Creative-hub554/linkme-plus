@@ -16,6 +16,13 @@ const categories = [
   "All", "Electronics", "Fashion", "Home & Garden", "Sports", "Vehicles", "Toys", "Collectibles", "Art",
 ];
 
+/** How the product grid is ordered. Kept in step with the API's sort allowlist. */
+const sorts = [
+  { value: "newest", label: "Newest" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
+] as const;
+
 interface ListingResult {
   id: string;
   title: string;
@@ -28,6 +35,8 @@ interface ListingResult {
   createdAt: string;
   image?: string | null;
   imageType?: "image" | "video" | "short_video" | null;
+  /** Full media list for the hover swipe preview, batched by the list read. */
+  media?: { url: string; type: "image" | "video" | "short_video" }[];
   sellerName?: string | null;
   /** The viewer's own flag, answered per row by the list read for a signed-in
    * member and `false` for a visitor — the same contract the single-listing
@@ -58,6 +67,7 @@ export default function MarketplacePage() {
   const [location, setLocation] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sort, setSort] = useState<(typeof sorts)[number]["value"]>("newest");
   const [listings, setListings] = useState<ListingResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +83,7 @@ export default function MarketplacePage() {
       if (maxPrice) params.set("maxPrice", maxPrice);
       if (location.trim()) params.set("location", location.trim());
       if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      params.set("sort", sort);
       const response = await fetch(`/api/marketplace?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to load listings");
       const payload = await response.json();
@@ -81,13 +92,13 @@ export default function MarketplacePage() {
       setHasMore(Boolean(payload.pagination?.hasMore));
     } catch { if (request === requestRef.current) setError("We couldn't load marketplace listings right now."); }
     finally { if (request === requestRef.current) setLoading(false); }
-  }, [searchQuery, selectedCategory, minPrice, maxPrice, location, page]);
+  }, [searchQuery, selectedCategory, minPrice, maxPrice, location, page, sort]);
 
   useEffect(() => { void loadListings(); }, [loadListings]);
-  useEffect(() => { setPage(1); }, [searchQuery, selectedCategory, minPrice, maxPrice, location]);
+  useEffect(() => { setPage(1); }, [searchQuery, selectedCategory, minPrice, maxPrice, location, sort]);
 
   return (
-    <div className="commerce-page space-y-5">
+    <div className="commerce-page mk-dark space-y-5">
       <header className="commerce-heading">
         <div>
           <h1 className="commerce-title">Marketplace</h1>
@@ -113,6 +124,17 @@ export default function MarketplacePage() {
           <SlidersHorizontal className="h-4 w-4 mr-2" />
           Filters
         </Button>
+        <label className="sr-only" htmlFor="listing-sort">Sort listings</label>
+        <select
+          id="listing-sort"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as (typeof sorts)[number]["value"])}
+          className="h-10 rounded-md border bg-card px-3 text-sm"
+        >
+          {sorts.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
       </div>
 
       {showFilters && <div id="listing-filters" className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3">
@@ -145,7 +167,7 @@ export default function MarketplacePage() {
       ) : listings.length === 0 ? (
         <EmptyState title="No listings found" description="There are no active listings here yet. Check back when the community adds something new." />
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} image={listing.image || undefined} imageType={listing.imageType || undefined} seller={{ name: listing.sellerName || "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} id={listing.id} title={listing.title} price={listing.priceMin ?? listing.priceMax ?? 0} image={listing.image || undefined} imageType={listing.imageType || undefined} media={listing.media} seller={{ name: listing.sellerName || "Community seller" }} location={listing.location || undefined} category={listing.categoryName || undefined} condition={listing.condition || undefined} liked={listing.isSaved} />)}</div>
       )}
       <div className="flex items-center justify-center gap-3"><Button variant="outline" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>Previous</Button><span>Page {page}</span><Button variant="outline" disabled={!hasMore || loading} onClick={() => setPage(value => value + 1)}>Next</Button></div>
     </div>

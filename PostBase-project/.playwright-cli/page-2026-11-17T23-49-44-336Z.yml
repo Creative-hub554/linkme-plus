@@ -1,0 +1,106 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "LinkMe+" [ref=e5] [cursor=pointer]:
+      - /url: /design
+      - generic [aria-hidden] [ref=e6]: L+
+      - text: LinkMe+
+    - navigation "Primary navigation" [ref=e7]:
+      - link "Home Feed" [ref=e8] [cursor=pointer]:
+        - /url: /design/home
+      - link "Shorts" [ref=e13] [cursor=pointer]:
+        - /url: /design/shorts
+      - link "Marketplace" [ref=e17] [cursor=pointer]:
+        - /url: /design/marketplace
+      - link "Jobs" [ref=e23] [cursor=pointer]:
+        - /url: /design/jobs
+      - link "Groups" [ref=e29] [cursor=pointer]:
+        - /url: /design/groups
+      - link "Messages" [ref=e35] [cursor=pointer]:
+        - /url: /design/messages
+      - link "Profile" [ref=e39] [cursor=pointer]:
+        - /url: /design/profile
+    - button "Create" [ref=e44] [cursor=pointer]
+    - link "Sarah Chen @sarahchen" [ref=e46] [cursor=pointer]:
+      - /url: /design/profile
+      - generic [aria-hidden] [ref=e47]: SC
+      - generic [ref=e48]:
+        - strong [ref=e49]: Sarah Chen
+        - generic [ref=e50]: "@sarahchen"
+  - main [ref=e51]:
+    - status [ref=e52]
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - heading "Marketplace" [level=1] [ref=e57]
+          - paragraph [ref=e58]: Buy and sell with people you can get to know.
+        - button "List item" [ref=e59] [cursor=pointer]
+      - generic "Listing category" [ref=e60]:
+        - button "All" [pressed] [ref=e61] [cursor=pointer]
+        - button "Tech & Gear" [ref=e62] [cursor=pointer]
+        - button "Design Assets" [ref=e63] [cursor=pointer]
+        - button "Workspace" [ref=e64] [cursor=pointer]
+        - button "Apparel" [ref=e65] [cursor=pointer]
+      - generic [ref=e66]:
+        - article [ref=e67]:
+          - button "$48 Obsidian Glass UI Kit (Figma + React) Digital Download Sarah Chen Verified seller" [ref=e68] [cursor=pointer]:
+            - generic [ref=e69]: $48
+            - generic [ref=e71]:
+              - heading "Obsidian Glass UI Kit (Figma + React)" [level=2] [ref=e72]
+              - generic [ref=e73]: Digital Download
+              - paragraph [ref=e74]:
+                - text: Sarah Chen
+                - img "Verified seller" [ref=e75]
+        - article [ref=e78]:
+          - button "$265 Custom 65% Aluminum Mechanical Keyboard Like New Marcus Reid Verified seller" [ref=e79] [cursor=pointer]:
+            - generic [ref=e80]: $265
+            - generic [ref=e89]:
+              - heading "Custom 65% Aluminum Mechanical Keyboard" [level=2] [ref=e90]
+              - generic [ref=e91]: Like New
+              - paragraph [ref=e92]:
+                - text: Marcus Reid
+                - img "Verified seller" [ref=e93]
+        - article [ref=e96]:
+          - button "Short $1,790 Sony A7C II Mirrorless Camera Body Like New Devon Park Verified seller" [ref=e97] [cursor=pointer]:
+            - generic [ref=e98]:
+              - generic [ref=e99]: Short
+              - generic [ref=e112]: $1,790
+            - generic [ref=e113]:
+              - heading "Sony A7C II Mirrorless Camera Body" [level=2] [ref=e114]
+              - generic [ref=e115]: Like New
+              - paragraph [ref=e116]:
+                - text: Devon Park
+                - img "Verified seller" [ref=e117]
+  - complementary [ref=e120]:
+    - generic [ref=e121]:
+      - generic [ref=e125]: Search LinkMe+
+      - textbox "Search LinkMe+" [ref=e126]
+    - group [ref=e127]:
+      - generic "Direct Messages" [ref=e128] [cursor=pointer]
+      - generic [ref=e129]:
+        - button "Marcus Reid Love the new Marquee Wall preset in Short Studio!" [ref=e130] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e131]: MR
+          - generic [ref=e132]:
+            - strong [ref=e133]: Marcus Reid
+            - generic [ref=e134]: Love the new Marquee Wall preset in Short Studio!
+        - button "Elena Vance Sent over the Figma tokens for the Marketplace drawer." [ref=e135] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e136]: EV
+          - generic [ref=e137]:
+            - strong [ref=e138]: Elena Vance
+            - generic [ref=e139]: Sent over the Figma tokens for the Marketplace drawer.
+    - generic [ref=e140]:
+      - heading "Trending communities" [level=2] [ref=e141]
+      - link [ref=e142] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e143]: Design Systems & Motion
+        - paragraph [ref=e144]: 14.2K members
+      - link [ref=e145] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e146]: Indie Builders & Founders
+        - paragraph [ref=e147]: 22.8K members
+    - generic [ref=e148]:
+      - link "Help" [ref=e149] [cursor=pointer]:
+        - /url: /help
+      - link "Privacy" [ref=e150] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=e151] [cursor=pointer]:
+        - /url: /terms

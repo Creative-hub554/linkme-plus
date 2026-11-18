@@ -1,0 +1,119 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "LinkMe+" [ref=e5] [cursor=pointer]:
+      - /url: /design
+      - generic [aria-hidden] [ref=e6]: L+
+      - text: LinkMe+
+    - navigation "Primary navigation" [ref=e7]:
+      - link "Home Feed" [ref=e8] [cursor=pointer]:
+        - /url: /design/home
+      - link "Shorts" [ref=e14] [cursor=pointer]:
+        - /url: /design/shorts
+      - link "Marketplace" [ref=e18] [cursor=pointer]:
+        - /url: /design/marketplace
+      - link "Jobs" [ref=e23] [cursor=pointer]:
+        - /url: /design/jobs
+      - link "Groups" [ref=e29] [cursor=pointer]:
+        - /url: /design/groups
+      - link "Messages" [ref=e35] [cursor=pointer]:
+        - /url: /design/messages
+      - link "Profile" [ref=e39] [cursor=pointer]:
+        - /url: /design/profile
+    - button "Create" [ref=e44] [cursor=pointer]
+    - link "Sarah Chen @sarahchen" [ref=e46] [cursor=pointer]:
+      - /url: /design/profile
+      - generic [aria-hidden] [ref=e47]: SC
+      - generic [ref=e48]:
+        - strong [ref=e49]: Sarah Chen
+        - generic [ref=e50]: "@sarahchen"
+  - main [ref=e51]:
+    - status [ref=e52]
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - heading "Home Feed" [level=1] [ref=e57]
+          - paragraph [ref=e58]: What your people are working on.
+        - button "New post" [ref=e59] [cursor=pointer]
+      - region "Stories" [ref=e60]:
+        - button "Sarah Live now" [ref=e61] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e63]: SC
+          - strong [ref=e64]: Sarah
+          - generic [ref=e65]: Live now
+        - button "Marcus 18m ago" [ref=e66] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e68]: MR
+          - strong [ref=e69]: Marcus
+          - generic [ref=e70]: 18m ago
+        - button "Elena 1h ago" [ref=e71] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e73]: EV
+          - strong [ref=e74]: Elena
+          - generic [ref=e75]: 1h ago
+        - button "Devon 3h ago" [ref=e76] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e78]: DP
+          - strong [ref=e79]: Devon
+          - generic [ref=e80]: 3h ago
+      - generic [ref=e81]:
+        - article [ref=e82]:
+          - generic [ref=e83]:
+            - generic [aria-hidden] [ref=e84]: SC
+            - generic [ref=e85]:
+              - strong [ref=e86]:
+                - text: Sarah Chen
+                - img "Verified" [ref=e87]
+              - paragraph [ref=e90]: Just now · Community · Design Systems
+          - button "Open post by Sarah Chen" [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]: Small steps. Big ideas. Building something beautiful today with our new obsidian glassmorphic tokens and ambient cover motion.
+            - img "Indigo and terracotta light rings" [ref=e94]
+          - generic [ref=e95]:
+            - button "Liked · 148" [pressed] [ref=e96] [cursor=pointer]
+            - button "Comment · 24" [ref=e99] [cursor=pointer]
+            - button "Share" [ref=e102] [cursor=pointer]
+            - button "Bookmark" [ref=e109] [cursor=pointer]
+        - article [ref=e112]:
+          - generic [ref=e113]:
+            - generic [aria-hidden] [ref=e114]: MR
+            - generic [ref=e115]:
+              - strong [ref=e116]:
+                - text: Marcus Reid
+                - img "Verified" [ref=e117]
+              - paragraph [ref=e120]: 2h ago · Community · Indie Founders
+          - button "Open post by Marcus Reid" [ref=e121] [cursor=pointer]:
+            - generic [ref=e122]: Just shipped our zero-latency WebSocket layer for LinkMe+ direct messages. Keeping social interactions calm, fast, and clutter-free.
+          - generic [ref=e123]:
+            - button "Like · 312" [ref=e124] [cursor=pointer]
+            - button "Comment · 41" [ref=e127] [cursor=pointer]
+            - button "Share" [ref=e130] [cursor=pointer]
+            - button "Bookmark" [ref=e137] [cursor=pointer]
+  - complementary [ref=e140]:
+    - generic [ref=e141]:
+      - generic [ref=e145]: Search LinkMe+
+      - textbox "Search LinkMe+" [ref=e146]
+    - group [ref=e147]:
+      - generic "Direct Messages" [ref=e148] [cursor=pointer]
+      - generic [ref=e149]:
+        - button "Marcus Reid Love the new Marquee Wall preset in Short Studio!" [ref=e150] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e151]: MR
+          - generic [ref=e152]:
+            - strong [ref=e153]: Marcus Reid
+            - generic [ref=e154]: Love the new Marquee Wall preset in Short Studio!
+        - button "Elena Vance Sent over the Figma tokens for the Marketplace drawer." [ref=e155] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e156]: EV
+          - generic [ref=e157]:
+            - strong [ref=e158]: Elena Vance
+            - generic [ref=e159]: Sent over the Figma tokens for the Marketplace drawer.
+    - generic [ref=e160]:
+      - heading "Trending communities" [level=2] [ref=e161]
+      - link [ref=e162] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e163]: Design Systems & Motion
+        - paragraph [ref=e164]: 14.2K members
+      - link [ref=e165] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e166]: Indie Builders & Founders
+        - paragraph [ref=e167]: 22.8K members
+    - generic [ref=e168]:
+      - link "Help" [ref=e169] [cursor=pointer]:
+        - /url: /help
+      - link "Privacy" [ref=e170] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=e171] [cursor=pointer]:
+        - /url: /terms

@@ -1,0 +1,120 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "LinkMe+" [ref=e5] [cursor=pointer]:
+      - /url: /design
+      - text: L+ LinkMe+
+    - navigation "Primary navigation" [ref=e6]:
+      - link "Home Feed" [ref=e7] [cursor=pointer]:
+        - /url: /design/home
+      - link "Shorts" [ref=e11] [cursor=pointer]:
+        - /url: /design/shorts
+      - link "Marketplace" [ref=e14] [cursor=pointer]:
+        - /url: /design/marketplace
+      - link "Jobs" [ref=e18] [cursor=pointer]:
+        - /url: /design/jobs
+      - link "Groups" [ref=e23] [cursor=pointer]:
+        - /url: /design/groups
+      - link "Messages" [ref=e28] [cursor=pointer]:
+        - /url: /design/messages
+      - link "Profile" [ref=e31] [cursor=pointer]:
+        - /url: /design/profile
+    - button "Create" [ref=e35]
+    - link [ref=e37] [cursor=pointer]:
+      - /url: /design/profile
+      - text: SC
+      - generic [ref=e38]:
+        - strong [ref=e39]: Sarah Chen
+        - text: "@sarahchen"
+  - banner [ref=e40]:
+    - link "LinkMe+" [ref=e41] [cursor=pointer]:
+      - /url: /design
+      - text: L+ LinkMe+
+    - button "Create" [ref=e42]
+  - main [ref=e44]:
+    - status [ref=e45]
+    - generic [ref=e47]:
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - heading "Marketplace" [level=1] [ref=e50]
+          - paragraph [ref=e51]: Buy and sell with people you can get to know.
+        - button "List item" [ref=e52]
+      - generic "Listing category" [ref=e53]:
+        - button "All" [pressed] [ref=e54]
+        - button "Tech & Gear" [ref=e55]
+        - button "Design Assets" [ref=e56]
+        - button "Workspace" [ref=e57]
+        - button "Apparel" [ref=e58]
+      - generic [ref=e59]:
+        - article [ref=e60]:
+          - button "$48 Obsidian Glass UI Kit (Figma + React) Digital Download Sarah Chen Verified seller" [ref=e61]:
+            - generic [ref=e62]: $48
+            - generic [ref=e64]:
+              - heading "Obsidian Glass UI Kit (Figma + React)" [level=2] [ref=e65]
+              - text: Digital Download
+              - paragraph [ref=e66]:
+                - text: Sarah Chen
+                - img "Verified seller" [ref=e67]
+        - article [ref=e70]:
+          - button "$265 Custom 65% Aluminum Mechanical Keyboard Like New Marcus Reid Verified seller" [ref=e71]:
+            - generic [ref=e72]: $265
+            - generic [ref=e78]:
+              - heading "Custom 65% Aluminum Mechanical Keyboard" [level=2] [ref=e79]
+              - text: Like New
+              - paragraph [ref=e80]:
+                - text: Marcus Reid
+                - img "Verified seller" [ref=e81]
+        - article [ref=e84]:
+          - button "Short $1,790 Sony A7C II Mirrorless Camera Body Like New Devon Park Verified seller" [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e87]: Short
+              - generic [ref=e96]: $1,790
+            - generic [ref=e97]:
+              - heading "Sony A7C II Mirrorless Camera Body" [level=2] [ref=e98]
+              - text: Like New
+              - paragraph [ref=e99]:
+                - text: Devon Park
+                - img "Verified seller" [ref=e100]
+  - complementary [ref=e103]:
+    - generic [ref=e104]:
+      - generic [ref=e108]: Search LinkMe+
+      - textbox "Search LinkMe+" [ref=e109]
+    - group [ref=e110]:
+      - generic "Direct Messages" [ref=e111]
+      - generic [ref=e112]:
+        - button [ref=e113]:
+          - text: MR
+          - generic [ref=e114]:
+            - strong [ref=e115]: Marcus Reid
+            - text: Love the new Marquee Wall preset in Short Studio!
+        - button [ref=e116]:
+          - text: EV
+          - generic [ref=e117]:
+            - strong [ref=e118]: Elena Vance
+            - text: Sent over the Figma tokens for the Marketplace drawer.
+    - generic [ref=e119]:
+      - heading "Trending communities" [level=2] [ref=e120]
+      - link [ref=e121] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e122]: Design Systems & Motion
+        - paragraph [ref=e123]: 14.2K members
+      - link [ref=e124] [cursor=pointer]:
+        - /url: /design/groups
+        - strong [ref=e125]: Indie Builders & Founders
+        - paragraph [ref=e126]: 22.8K members
+    - generic [ref=e127]:
+      - link "Help" [ref=e128] [cursor=pointer]:
+        - /url: /help
+      - link "Privacy" [ref=e129] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=e130] [cursor=pointer]:
+        - /url: /terms
+  - navigation "Mobile navigation" [ref=e131]:
+    - link "Home" [ref=e132] [cursor=pointer]:
+      - /url: /design/home
+    - link "Shorts" [ref=e136] [cursor=pointer]:
+      - /url: /design/shorts
+    - link "Market" [ref=e139] [cursor=pointer]:
+      - /url: /design/marketplace
+    - link "Jobs" [ref=e143] [cursor=pointer]:
+      - /url: /design/jobs
+    - button "More" [ref=e148]

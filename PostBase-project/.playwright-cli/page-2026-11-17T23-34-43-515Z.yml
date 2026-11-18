@@ -1,0 +1,88 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "LinkMe+" [ref=e5] [cursor=pointer]:
+      - /url: /design
+      - generic [aria-hidden] [ref=e6]: L+
+      - text: LinkMe+
+    - navigation "Primary navigation" [ref=e7]:
+      - link "Home Feed" [ref=e8] [cursor=pointer]:
+        - /url: /design/home
+      - link "Shorts" [ref=e13] [cursor=pointer]:
+        - /url: /design/shorts
+      - link "Marketplace" [ref=e18] [cursor=pointer]:
+        - /url: /design/marketplace
+      - link "Jobs" [ref=e23] [cursor=pointer]:
+        - /url: /design/jobs
+      - link "Groups" [ref=e29] [cursor=pointer]:
+        - /url: /design/groups
+      - link "Messages" [ref=e35] [cursor=pointer]:
+        - /url: /design/messages
+      - link "Profile" [ref=e39] [cursor=pointer]:
+        - /url: /design/profile
+    - button "Create" [ref=e44] [cursor=pointer]
+    - link "Sarah Chen @sarahchen" [ref=e46] [cursor=pointer]:
+      - /url: /design/profile
+      - generic [aria-hidden] [ref=e47]: SC
+      - generic [ref=e48]:
+        - strong [ref=e49]: Sarah Chen
+        - generic [ref=e50]: "@sarahchen"
+  - main [ref=e51]:
+    - status [ref=e52]
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - heading "Shorts" [level=1] [ref=e57]
+          - paragraph [ref=e58]: Clips from the creative community.
+        - button "Open Short Video Studio" [ref=e59] [cursor=pointer]
+      - generic [ref=e62]:
+        - region "Short videos. Use Up and Down to change clips." [ref=e63]:
+          - article [ref=e64]:
+            - generic [ref=e65]:
+              - generic "Testing dynamic kinetic typography inside Short Video Studio." [ref=e66]
+              - generic [ref=e67]:
+                - button "Play" [ref=e68] [cursor=pointer]
+                - button "Unmute" [ref=e69] [cursor=pointer]
+            - generic:
+              - generic: Marquee Wall · Style 01/30
+              - strong: Sarah Chen
+              - paragraph: Testing dynamic kinetic typography inside Short Video Studio.
+              - generic: Original Studio Loop — Midnight Obsidian
+          - article [ref=e70]:
+            - generic:
+              - generic: Glass Prism · Style 07/30
+              - strong: Elena Vance
+              - paragraph: Late-night desk setup tour + ambient lighting presets.
+              - generic: Lofi Pulse — Deep Indigo Mix
+        - generic [ref=e71]:
+          - button "Previous short" [disabled] [ref=e72]
+          - button "Next short" [ref=e75] [cursor=pointer]
+          - button "Like short" [ref=e78] [cursor=pointer]
+          - button "Save short" [ref=e81] [cursor=pointer]
+  - complementary [ref=e84]:
+    - generic [ref=e85]:
+      - generic [ref=e89]: Search LinkMe+
+      - textbox "Search LinkMe+" [ref=e90]
+    - group [ref=e91]:
+      - generic "Direct Messages" [ref=e92] [cursor=pointer]
+      - generic [ref=e93]:
+        - button "Marcus Reid Love the new Marquee Wall preset in Short Studio!" [ref=e94] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e95]: MR
+          - generic [ref=e96]:
+            - strong [ref=e97]: Marcus Reid
+            - generic [ref=e98]: Love the new Marquee Wall preset in Short Studio!
+        - button "Elena Vance Sent over the Figma tokens for the Marketplace drawer." [ref=e99] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e100]: EV
+          - generic [ref=e101]:
+            - strong [ref=e102]: Elena Vance
+            - generic [ref=e103]: Sent over the Figma tokens for the Marketplace drawer.
+    - generic [ref=e104]:
+      - heading "Suggested creators" [level=2] [ref=e105]
+      - link "Sarah Chen" [ref=e106] [cursor=pointer]:
+        - /url: /design/profile
+    - generic [ref=e107]:
+      - link "Help" [ref=e108] [cursor=pointer]:
+        - /url: /help
+      - link "Privacy" [ref=e109] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=e110] [cursor=pointer]:
+        - /url: /terms

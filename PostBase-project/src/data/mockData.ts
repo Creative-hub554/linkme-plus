@@ -196,6 +196,10 @@ export const MOCK_MARKETPLACE: MarketplaceItem[] = [
     condition: "Like New",
     location: "San Francisco, CA",
     imageUrl: "/design-media/keyboard.webp",
+    media: [
+      { url: "/design-media/keyboard.webp", type: "image" },
+      { url: "/design-media/terracotta.webp", type: "image" },
+    ],
     description:
       "Anodized deep violet chassis, tactile linear switches, PBT keycaps, and coiled USB-C cable.",
     seller: {
@@ -216,6 +220,11 @@ export const MOCK_MARKETPLACE: MarketplaceItem[] = [
     condition: "Like New",
     location: "New York, NY",
     imageUrl: "/design-media/camera.webp",
+    media: [
+      { url: "/design-media/camera.webp", type: "image" },
+      { url: "/design-media/ambient.webp", type: "image" },
+      { url: "/design-media/ambient.webm", type: "short_video" },
+    ],
     description:
       "Low shutter count (under 2,400), includes original box, battery, and Peak Design strap.",
     seller: {

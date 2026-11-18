@@ -13,7 +13,7 @@ import {
   Share2,
   ShieldCheck,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CURRENT_USER, MOCK_SHORTS, MOCK_STORIES } from "@/data/mockData";
 import { ShortVideoCanvas } from "@/components/cover-studio/short-video-canvas";
 import { shortVideoTemplates } from "@/components/cover-studio/short-video-templates";
@@ -374,6 +374,85 @@ export function Studio({
   );
 }
 
+type ListingSwipeMedia = NonNullable<MarketplaceItem["media"]>[number];
+
+/** One frame of the card's hover swipe: images hold, a short frame plays muted. */
+function SwipeFrame({ item }: { item: ListingSwipeMedia }) {
+  if (item.type === "short_video" || item.type === "video") {
+    return (
+      <video
+        src={item.url}
+        // A hover preview glances without sound.
+        muted
+        autoPlay
+        loop
+        playsInline
+      />
+    );
+  }
+  return <Media src={item.url} alt="" />;
+}
+
+/**
+ * Hover swipe preview: while the pointer rests on the tile, the media track
+ * slides one frame at a time — photos first, ending on the short — with pager
+ * dots marking the active frame. Leaving the tile returns to the first frame.
+ * Honors prefers-reduced-motion: the track stays pinned on the first frame.
+ */
+function ListingHoverSwipe({ media }: { media: NonNullable<MarketplaceItem["media"]> }) {
+  const reduce = useDesignReducedMotion();
+  const [frame, setFrame] = useState(0);
+  // Hover is state: the advance timer is created only while the pointer
+  // rests on the tile, and torn down the moment it leaves.
+  const [hovering, setHovering] = useState(false);
+  useEffect(() => {
+    if (!hovering || reduce || media.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setFrame((current) => (current + 1) % media.length);
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [hovering, reduce, media.length, media]);
+
+  return (
+    <div
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => {
+        setHovering(false);
+        setFrame(0);
+      }}
+    >
+      <div
+        className="ld-swipe-track"
+        style={{
+          transform: `translateX(-${(media.length > 1 ? frame : 0) * 100}%)`,
+        }}
+      >
+        {media.map((item, index) => (
+          <div className="ld-swipe-frame" key={`${item.url}-${index}`}>
+            <SwipeFrame item={item} />
+          </div>
+        ))}
+      </div>
+      {media.length > 1 && (
+        <span className="ld-swipe-dots" aria-hidden="true">
+          {media.map((item, index) => (
+            <span
+              key={`${item.url}-${index}`}
+              className="ld-swipe-dot"
+              data-active={index === frame}
+            />
+          ))}
+        </span>
+      )}
+      {media.some((item) => item.type === "short_video") && (
+        <span className="ld-swipe-short">
+          <Film size={11} aria-hidden="true" /> Short
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function Marketplace({
   listings,
   open,
@@ -440,7 +519,11 @@ export function Marketplace({
                     layoutId={reduce ? undefined : "media-" + item.id}
                     className="ld-listing-media"
                   >
-                    <Media src={item.imageUrl} alt="" />
+                    {item.media && item.media.length > 0 ? (
+                      <ListingHoverSwipe media={item.media} />
+                    ) : (
+                      <Media src={item.imageUrl} alt="" />
+                    )}
                     <span className="ld-price">
                       {item.currency}
                       {item.price.toLocaleString("en-US")}

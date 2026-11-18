@@ -148,7 +148,7 @@ export default function InventoryPage() {
         ? "Low stock"
         : "In stock";
   return (
-    <div className="commerce-page commerce-detail mx-auto max-w-3xl space-y-5">
+    <div className="commerce-page mk-dark commerce-detail mx-auto max-w-3xl space-y-5">
       <Link href="/marketplace" className="text-brand-blue">
         ← Marketplace
       </Link>

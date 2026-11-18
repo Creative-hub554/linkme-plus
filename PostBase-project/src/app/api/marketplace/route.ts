@@ -66,6 +66,14 @@ export async function GET(request: Request) {
   if ((min && (!Number.isSafeInteger(Number(min)) || Number(min) < 0 || Number(min) > 2147483647)) || (max && (!Number.isSafeInteger(Number(max)) || Number(max) < 0 || Number(max) > 2147483647))) return errorResponse("Invalid price filter");
   if (min && max && Number(min) > Number(max)) return errorResponse("Minimum price must not exceed maximum price");
   const location = url.searchParams.get("location")?.trim();
+  // How the results are ordered. `newest` is the default shelf; the price
+  // sorts use the effective price (min, falling back to max) so a range-only
+  // listing still sorts by something real. Unknown values are rejected rather
+  // than silently sorted by nothing.
+  const sort = url.searchParams.get("sort") ?? "newest";
+  if (!["newest", "price_asc", "price_desc"].includes(sort)) {
+    return errorResponse("Invalid sort. Use newest, price_asc, or price_desc.", 400);
+  }
   const conditions = and(
     mine && session ? eq(marketplaceListings.sellerId, session.user.id) : eq(marketplaceListings.status, "active"), isNull(marketplaceListings.deletedAt),
     mine ? undefined : sellerPublicVisibility(),
@@ -163,7 +171,15 @@ export async function GET(request: Request) {
       .from(marketplaceListings)
       .leftJoin(categories, eq(marketplaceListings.categoryId, categories.id))
       .where(conditions)
-      .orderBy(desc(marketplaceListings.createdAt))
+      .orderBy(
+        sort === "price_asc"
+          ? sql`coalesce(${marketplaceListings.priceMin}, ${marketplaceListings.priceMax}) asc nulls last`
+          : sort === "price_desc"
+            ? sql`coalesce(${marketplaceListings.priceMin}, ${marketplaceListings.priceMax}) desc nulls last`
+            : desc(marketplaceListings.createdAt),
+        // Tiebreaker so a same-key page boundary cannot reshuffle rows.
+        desc(marketplaceListings.id),
+      )
       .limit(limit)
       .offset(offset);
 
@@ -200,8 +216,38 @@ export async function GET(request: Request) {
           )
         : new Set<string>();
 
+    // Hover previews swipe through a listing's media, so the page's rows ride
+    // with their media arrays — one batched read for the whole page rather than
+    // a query per card, keyed in the order the cards render.
+    const pageIds = result.map((listing) => listing.id);
+    const pageMedia =
+      pageIds.length > 0
+        ? (
+            await db
+              .select({
+                listingId: listingMedia.listingId,
+                url: listingMedia.url,
+                type: listingMedia.type,
+              })
+              .from(listingMedia)
+              .where(inArray(listingMedia.listingId, pageIds))
+              .orderBy(listingMedia.order)
+          ).reduce<
+            Map<string, { url: string; type: "image" | "video" | "short_video" }[]>
+          >((grouped, item) => {
+            const list = grouped.get(item.listingId) ?? [];
+            list.push({ url: item.url, type: item.type });
+            grouped.set(item.listingId, list);
+            return grouped;
+          }, new Map())
+        : new Map<string, { url: string; type: "image" | "video" | "short_video" }[]>();
+
     return paginatedResponse(
-      result.map((listing) => ({ ...listing, isSaved: savedIds.has(listing.id) })),
+      result.map((listing) => ({
+        ...listing,
+        media: pageMedia.get(listing.id) ?? [],
+        isSaved: savedIds.has(listing.id),
+      })),
       total,
       page,
       limit,

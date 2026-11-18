@@ -605,6 +605,150 @@ body:has(.community-masthead) { background: var(--community-canvas); }
   color: var(--community-accent);
 }
 
+/*
+ * Marketplace, wearing the design-system look (the `/design` mock's language).
+ *
+ * The `mk-dark` scope lives on the marketplace page wrappers; `body:has()` is
+ * what carries the remap past the page's own div — the masthead and footer are
+ * drawn by the shell outside it, and they must follow into the dark or the
+ * page would float on a light band. The values are the ld tokens from
+ * linkme-design.css: obsidian canvas, indigo/burgundy ambient accents, coral
+ * action, warm cream text.
+ */
+body:has(.mk-dark) {
+  --community-paper: #14101a;
+  --community-canvas: #080409;
+  --community-ink: #f8eae8;
+  --community-muted: #d28479;
+  --community-line: rgb(220 201 199 / 14%);
+  --community-accent: #ba4838;
+  --community-soft: rgb(28 25 89 / 25%);
+  --community-action: #4340ba;
+  --community-action-hover: #5653d6;
+  --community-on-action: #f8eae8;
+  /* The base body rule paints text with shadcn's `--foreground`, so the dark
+     scope has to carry that token too — otherwise the page turns dark and the
+     ink stays navy. */
+  --foreground: 0 0% 96%;
+  --background: 280 33% 3%;
+  --border: 0 0% 25%;
+  --muted-foreground: 8 45% 65%;
+  --card: 280 20% 8%;
+  --card-foreground: 0 0% 96%;
+  --popover: 280 20% 8%;
+  --popover-foreground: 0 0% 96%;
+  background: var(--community-canvas);
+  color-scheme: dark;
+}
+/* The masthead and footer are drawn by the shell outside the page's own div;
+   body:has() carries the remap to them, so they follow into the dark or the
+   page would float on a light band. */
+body:has(.mk-dark) .community-masthead,
+body:has(.mk-dark) .community-bottom-nav,
+body:has(.mk-dark) footer {
+  background: var(--community-paper);
+  border-color: var(--community-line);
+  color: var(--community-ink);
+}
+
+/*
+ * Every `mk-dark` class rule below sits inside `@layer components`.
+ *
+ * An unlayered class rule outranks every @layer regardless of specificity, so
+ * these would beat Tailwind's own utilities instead of competing with them —
+ * see `src/test/globals-layer.test.ts`, which is exactly the guard for this.
+ * The `body:has()` rules above are exempt: they have no class in the selector,
+ * the same concession the file already makes for `:focus-visible`.
+ */
+@layer components {
+body:has(.mk-dark) footer a,
+body:has(.mk-dark) .community-bottom-nav a {
+  color: var(--community-muted);
+}
+body:has(.mk-dark) footer a:hover {
+  color: var(--community-ink);
+}
+/* Glass cards: the mock's listing card is a translucent indigo pane, not paper. */
+.mk-dark .commerce-listing-card {
+  background: rgb(28 25 89 / 18%);
+  border-color: rgb(220 201 199 / 14%);
+  box-shadow: 0 24px 70px rgb(89 59 94 / 19%);
+  backdrop-filter: blur(6px);
+}
+.mk-dark .commerce-listing-card h3 {
+  color: #f8eae8;
+}
+.mk-dark .commerce-listing-card .text-brand-blue {
+  color: #f8eae8;
+}
+/* Price rides the image as the mock's dark pill, top-right. */
+.mk-price-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #100b19;
+  color: #fff1e9;
+  font-weight: 760;
+  font-size: 0.85rem;
+}
+/* The ghost tile behind a listing without media. */
+.mk-dark .bg-surface-light-blue {
+  background: rgb(28 25 89 / 25%);
+  color: var(--community-muted);
+}
+/* Typography: the mock sets its headings in Inter with tight tracking, not the
+   editorial serif — the serif was the light theme's signature. */
+.mk-dark .commerce-title,
+.mk-dark .commerce-detail h1,
+.mk-dark h1 {
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 760;
+  letter-spacing: -0.045em;
+}
+/* Badges: the shared Badge is a light-theme chip (navy-100 fill, navy ink). On
+   the glass tile a white blob is the loudest thing on the card, so the dark
+   scope repaints the card's overlay chips as translucent panes with cream ink.
+   `.bg-navy-100` is the `secondary` variant's fill — the only one these
+   overlays use. */
+.mk-dark .commerce-listing-card .bg-navy-100 {
+  background: rgb(8 4 9 / 78%);
+  color: #fff1e9;
+  border-color: rgb(220 201 199 / 22%);
+  backdrop-filter: blur(4px);
+}
+/* The category chip in the card's body sits on the glass, not on a photo. */
+.mk-dark .commerce-listing-card .text-foreground {
+  color: #fff1e9;
+}
+.mk-dark .commerce-listing-card [class*="border"] {
+  border-color: rgb(220 201 199 / 22%);
+}
+/* Sub-links under the heading take the mock's coral accent, not the old
+   terracotta underline. */
+.mk-dark .commerce-links a {
+  color: var(--community-muted);
+  text-decoration-color: rgb(210 132 121 / 45%);
+}
+.mk-dark .commerce-links a:hover {
+  color: #fff1e9;
+}
+/* Section rules and the search row read as hairlines on the dark canvas. */
+.mk-dark .commerce-heading {
+  border-color: rgb(220 201 199 / 14%);
+}
+.mk-dark :is(input, select, textarea) {
+  background: rgb(20 16 26 / 88%);
+  border-color: rgb(220 201 199 / 18%);
+  color: #fff1e9;
+}
+.mk-dark :is(input, select, textarea)::placeholder {
+  color: rgb(210 132 121 / 75%);
+}
+}
+/* end @layer components — the marketplace dark scope */
+
 /* Shared motion for menus, dialogs and form controls. */
 :root {
   --ui-motion-fast: 140ms;
