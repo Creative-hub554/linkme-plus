@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { CURRENT_USER, MOCK_CHATS, MOCK_GROUPS, MOCK_JOBS, MOCK_MARKETPLACE, MOCK_POSTS } from "@/data/mockData";
 import { useEffect } from "react";
 import type * as React from "react";
 import {
@@ -1303,6 +1304,13 @@ describe("pages with no case of their own", () => {
   describe.each(skeletalRoutes())("the %s page", (route) => {
     covers(route);
     test("renders something, and nothing unnamed in it", async () => {
+      if (route === "/design/[[...screen]]") {
+        mocks.navigation.pathname = "/design";
+        const { default: DesignPage } = await import("@/app/design/[[...screen]]/page");
+        const { default: DesignLayout } = await import("@/app/design/layout");
+        await audit(<DesignLayout>{await DesignPage({ params: Promise.resolve({}) })}</DesignLayout>);
+        return;
+      }
       const load = pageModules.get(route);
       if (!load) throw new Error(`no module was found for ${route}`);
       const { default: Page } = await load();
@@ -1385,6 +1393,32 @@ const COMPONENT_EXCEPTION_KINDS = {
  * tell apart from a missing prop.
  */
 const COMPONENT_HARNESSES: Record<string, (Component: React.ElementType) => React.ReactNode> = {
+  "../components/layout/site-frame.tsx#SiteFrame": (Frame) => <Frame footer={<footer>Site footer</footer>}>Page content</Frame>,
+  "../components/linkme-design/forms.tsx#Messages": (Messages) => (
+    <Messages threads={MOCK_CHATS} selected={MOCK_CHATS[0].id} select={() => {}} send={() => {}} />
+  ),
+  "../components/linkme-design/modules.tsx#Feed": (Feed) => (
+    <Feed posts={MOCK_POSTS} onPost={() => {}} onStory={() => {}} onLike={() => {}} onSave={() => {}} onShare={() => {}} compose={() => {}} />
+  ),
+  "../components/linkme-design/modules.tsx#Marketplace": (Marketplace) => (
+    <Marketplace listings={MOCK_MARKETPLACE} open={() => {}} create={() => {}} />
+  ),
+  "../components/linkme-design/modules.tsx#Jobs": (Jobs) => (
+    <Jobs jobs={MOCK_JOBS} applied={[]} apply={() => {}} create={() => {}} />
+  ),
+  "../components/linkme-design/modules.tsx#Groups": (Groups) => (
+    <Groups groups={MOCK_GROUPS} toggle={() => {}} />
+  ),
+  "../components/linkme-design/modules.tsx#Profile": (Profile) => (
+    <Profile theme={CURRENT_USER.coverStudioTheme} posts={MOCK_POSTS} listings={MOCK_MARKETPLACE} groups={MOCK_GROUPS} studio={() => {}} />
+  ),
+  "../components/linkme-design/primitives.tsx#Avatar": (Avatar) => <Avatar name="Ada Writer" />,
+  "../components/linkme-design/primitives.tsx#Video": (Video) => (
+    <Video src="/design-media/example.mp4" label="Campaign preview" />
+  ),
+  "../components/linkme-design/primitives.tsx#Overlay": (Overlay) => (
+    <Overlay open title="Details" onClose={() => {}}>Listing details</Overlay>
+  ),
   "../components/shared/private-evidence-upload.tsx#PrivateEvidenceUpload": (Upload) => (
     <Upload purpose="office" value={[]} onChange={() => {}} />
   ),
@@ -1835,6 +1869,9 @@ const COVERED_BY_FAMILY = new Set(
  * page cases above already do that for most of these.
  */
 const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KINDS> = {
+  "../components/auth/google-icon.tsx#GoogleIcon": "nothing",
+  "../components/layout/page-transition.tsx#PageTransition": "nothing",
+  "../components/linkme-design/primitives.tsx#Media": "props",
   "../components/profile/media-gallery.tsx#ProfileMediaGallery": "props",
   "../components/advertising/sponsored-placement.tsx#SponsoredPlacement": "props",
   // Needs props the harness cannot invent.
@@ -1910,6 +1947,7 @@ const COMPONENT_EXCEPTIONS: Record<string, keyof typeof COMPONENT_EXCEPTION_KIND
 describe("components, mounted on their own", () => {
   beforeEach(() => {
     stubFetch();
+    mocks.navigation.pathname = "/feed";
     mocks.navigation.params = new URLSearchParams("");
     delete mocks.routeParams.username;
     delete mocks.routeParams.id;

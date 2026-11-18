@@ -432,6 +432,7 @@ button, a, input, textarea, select {
   --community-on-action: #321b17;
 }
 body:has(.community-masthead) { background: var(--community-canvas); }
+@layer utilities {
 .community-feed-frame, .community-masthead, .community-bottom-nav { color: var(--community-ink); }
 .community-masthead, .community-bottom-nav { background: var(--community-paper); border-color: var(--community-line); }
 .community-masthead .community-wordmark > div { background: #753f31; color: #fff5ec; }
@@ -605,8 +606,10 @@ body:has(.community-masthead) { background: var(--community-canvas); }
   color: var(--community-accent);
 }
 
+}
+
 /*
- * Marketplace, wearing the design-system look (the `/design` mock's language).
+ * Marketplace colors from the design preview.
  *
  * The `mk-dark` scope lives on the marketplace page wrappers; `body:has()` is
  * what carries the remap past the page's own div — the masthead and footer are
@@ -640,9 +643,8 @@ body:has(.mk-dark) {
   background: var(--community-canvas);
   color-scheme: dark;
 }
-/* The masthead and footer are drawn by the shell outside the page's own div;
-   body:has() carries the remap to them, so they follow into the dark or the
-   page would float on a light band. */
+/* Match the shared community layer so scoped selectors can override it. */
+@layer utilities {
 body:has(.mk-dark) .community-masthead,
 body:has(.mk-dark) .community-bottom-nav,
 body:has(.mk-dark) footer {
@@ -651,16 +653,6 @@ body:has(.mk-dark) footer {
   color: var(--community-ink);
 }
 
-/*
- * Every `mk-dark` class rule below sits inside `@layer components`.
- *
- * An unlayered class rule outranks every @layer regardless of specificity, so
- * these would beat Tailwind's own utilities instead of competing with them —
- * see `src/test/globals-layer.test.ts`, which is exactly the guard for this.
- * The `body:has()` rules above are exempt: they have no class in the selector,
- * the same concession the file already makes for `:focus-visible`.
- */
-@layer components {
 body:has(.mk-dark) footer a,
 body:has(.mk-dark) .community-bottom-nav a {
   color: var(--community-muted);
@@ -747,7 +739,6 @@ body:has(.mk-dark) footer a:hover {
   color: rgb(210 132 121 / 75%);
 }
 }
-/* end @layer components — the marketplace dark scope */
 
 /* Shared motion for menus, dialogs and form controls. */
 :root {

@@ -105,6 +105,7 @@ function button(ui: MountedSurface, label: string) {
 
 afterEach(() => {
   cleanupSurfaces();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -122,6 +123,8 @@ beforeEach(() => {
 
 describe("the advertising manager", () => {
   test("lists a campaign with its creative, payment state and performance", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T12:00:00.000Z"));
     const { ui } = await mountPage();
     const text = ui.container.textContent ?? "";
     expect(text).toContain("Our shop");

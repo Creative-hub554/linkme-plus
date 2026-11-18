@@ -369,12 +369,18 @@ function servedRoutes(): Set<string> {
 function servesRoute(routes: ReadonlySet<string>, base: string): boolean {
   if (routes.has(base)) return true;
   const wanted = base.split("/").filter(Boolean);
-  if (wanted.length === 0) return false;
   return [...routes].some((route) => {
     const have = route.split("/").filter(Boolean);
+    const last = have.at(-1);
+    const optionalCatchAll = last?.startsWith("[[...");
+    const catchAll = optionalCatchAll || last?.startsWith("[...");
+    const prefix = catchAll ? have.slice(0, -1) : have;
+    const lengthMatches = catchAll
+      ? wanted.length >= prefix.length + (optionalCatchAll ? 0 : 1)
+      : wanted.length === prefix.length;
     return (
-      have.length === wanted.length &&
-      have.every((segment, i) =>
+      lengthMatches &&
+      prefix.every((segment, i) =>
         (segment.startsWith("[") && segment.endsWith("]")) || segment === wanted[i],
       )
     );
@@ -676,6 +682,9 @@ describe("every link the chrome advertises", () => {
     // hash rides along, and a dynamic segment stands for whatever a link names.
     const routes = new Set(["/feed", "/pages/[username]"]);
     expectAllServed(routes, "a surface", ["/feed", "/pages/anything?tab=cover", "/feed#top"]);
+    expect(servesRoute(new Set(["/design/[[...screen]]"]), "/design")).toBe(true);
+    expect(servesRoute(new Set(["/docs/[...slug]"]), "/docs")).toBe(false);
+    expect(servesRoute(new Set(["/docs/[...slug]"]), "/docs/api/auth")).toBe(true);
   });
 });
 
@@ -747,7 +756,14 @@ describe("every link the data renders", () => {
         if (!load) throw new Error(`no module was found for ${route}`);
         const { default: PageComponent } = await load();
 
-        const ui = mountSurface(<PageComponent />, { providers: "theme+tooltip" });
+        let surface = <PageComponent />;
+        if (route === "/design/[[...screen]]") {
+          mocks.pathname = "/design";
+          const { default: DesignPage } = await import("@/app/design/[[...screen]]/page");
+          const { default: DesignLayout } = await import("@/app/design/layout");
+          surface = <DesignLayout>{await DesignPage({ params: Promise.resolve({}) })}</DesignLayout>;
+        }
+        const ui = mountSurface(surface, { providers: "theme+tooltip" });
         try {
           // Waited for, not slept on: the links the data produces exist only
           // after the stub's answers have rendered, including the ones a page
