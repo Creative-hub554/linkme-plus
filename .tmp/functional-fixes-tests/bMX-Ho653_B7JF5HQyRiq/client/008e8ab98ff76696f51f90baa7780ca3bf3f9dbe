@@ -1,0 +1,19 @@
+__vite_ssr_exportName__("default", () => { try { return CoverStudioPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/next/navigation.js", {"importedNames":["redirect"]});
+
+/**
+* The studio used to live here, as a destination in the main navigation.
+*
+* It is a tab of the profile now, so this address forwards there rather than
+* disappearing: the link was in the header, in the feed's sidebar and inside the
+* cover dialog, and a bookmark is not a thing to break because the layout
+* changed. The tab it lands on is named in the url, so the redirect can say
+* exactly where it meant to go.
+*/
+function CoverStudioPage() {
+	(0,__vite_ssr_import_0__.redirect)("/profile?tab=cover");
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7Ozs7Ozs7OztBQVdlLFNBQVMsa0JBQWtCO0NBQ3hDLG1DQUFTLG9CQUFvQjtBQUMvQiIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsicGFnZS50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgcmVkaXJlY3QgfSBmcm9tIFwibmV4dC9uYXZpZ2F0aW9uXCI7XG5cbi8qKlxuICogVGhlIHN0dWRpbyB1c2VkIHRvIGxpdmUgaGVyZSwgYXMgYSBkZXN0aW5hdGlvbiBpbiB0aGUgbWFpbiBuYXZpZ2F0aW9uLlxuICpcbiAqIEl0IGlzIGEgdGFiIG9mIHRoZSBwcm9maWxlIG5vdywgc28gdGhpcyBhZGRyZXNzIGZvcndhcmRzIHRoZXJlIHJhdGhlciB0aGFuXG4gKiBkaXNhcHBlYXJpbmc6IHRoZSBsaW5rIHdhcyBpbiB0aGUgaGVhZGVyLCBpbiB0aGUgZmVlZCdzIHNpZGViYXIgYW5kIGluc2lkZSB0aGVcbiAqIGNvdmVyIGRpYWxvZywgYW5kIGEgYm9va21hcmsgaXMgbm90IGEgdGhpbmcgdG8gYnJlYWsgYmVjYXVzZSB0aGUgbGF5b3V0XG4gKiBjaGFuZ2VkLiBUaGUgdGFiIGl0IGxhbmRzIG9uIGlzIG5hbWVkIGluIHRoZSB1cmwsIHNvIHRoZSByZWRpcmVjdCBjYW4gc2F5XG4gKiBleGFjdGx5IHdoZXJlIGl0IG1lYW50IHRvIGdvLlxuICovXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBDb3ZlclN0dWRpb1BhZ2UoKSB7XG4gIHJlZGlyZWN0KFwiL3Byb2ZpbGU/dGFiPWNvdmVyXCIpO1xufVxuIl0sImZpbGUiOiIvc3JjL2FwcC8obWFpbikvY292ZXItc3R1ZGlvL3BhZ2UudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhtYWluKS9jb3Zlci1zdHVkaW8vcGFnZS50c3giLCIvc3JjL2FwcC8obWFpbikvY292ZXItc3R1ZGlvL3BhZ2UudHN4IixbXV0=

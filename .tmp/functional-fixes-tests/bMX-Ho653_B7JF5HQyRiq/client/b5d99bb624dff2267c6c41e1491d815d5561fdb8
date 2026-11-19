@@ -1,0 +1,92 @@
+__vite_ssr_exportName__("mainNavItems", () => { try { return mainNavItems } catch {} });
+__vite_ssr_exportName__("socialNavItems", () => { try { return socialNavItems } catch {} });
+__vite_ssr_exportName__("visibleNavItems", () => { try { return visibleNavItems } catch {} });
+__vite_ssr_exportName__("isNavItemActive", () => { try { return isNavItemActive } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Home","ShoppingBag","Briefcase","Users","Flag","MessageCircle"]});
+
+/** The whole of the main navigation: Social, and the two modules beside it. */
+const mainNavItems = [
+	{
+		// Social is a module rather than a page: the feed is the door, and Groups,
+		// Pages and Messages answer to the same nav item. The feed is built from
+		// follows, so it is the one module a visitor cannot browse.
+		href: "/feed",
+		label: "Social",
+		icon: __vite_ssr_import_0__.Home,
+		matches: [
+			"/feed",
+			"/groups",
+			"/pages",
+			"/messages"
+		],
+		requiresAuth: true
+	},
+	{
+		href: "/marketplace",
+		label: "Marketplace",
+		icon: __vite_ssr_import_0__.ShoppingBag,
+		matches: ["/marketplace"]
+	},
+	{
+		href: "/jobs",
+		label: "Jobs",
+		icon: __vite_ssr_import_0__.Briefcase,
+		matches: ["/jobs"]
+	}
+];
+/** The four surfaces under Social, and the tab strip that switches between them. */
+const socialNavItems = [
+	{
+		href: "/feed",
+		label: "Feed",
+		icon: __vite_ssr_import_0__.Home,
+		matches: ["/feed"]
+	},
+	{
+		href: "/groups",
+		label: "Groups",
+		icon: __vite_ssr_import_0__.Users,
+		matches: ["/groups"]
+	},
+	{
+		href: "/pages",
+		label: "Pages",
+		icon: __vite_ssr_import_0__.Flag,
+		matches: ["/pages"]
+	},
+	{
+		href: "/messages",
+		label: "Messages",
+		icon: __vite_ssr_import_0__.MessageCircle,
+		matches: ["/messages"]
+	}
+];
+/**
+* The items a reader is offered, given whether they are signed in.
+*
+* The rule lives here rather than at each renderer because the header, the
+* phone bar and the mobile panel all draw the same list — three separate
+* filters is how the bottom bar ends up offering a signed-out visitor a link
+* that bounces. What a signed-out visitor may browse is the product's own
+* decision (marketplace and jobs yes, the follow feed no), so the flag on each
+* item is the whole of the policy.
+*/
+function visibleNavItems(items, isAuthenticated) {
+	return items.filter((item) => isAuthenticated || !item.requiresAuth);
+};
+/**
+* Whether the reader is currently on (or inside) this item's destination.
+*
+* Matched on path boundaries rather than with a bare `startsWith`: `/groups`
+* must not be lit by `/groups-old`, and a module's prefix must not be lit by a
+* route that merely begins with the same letters. A trailing slash is trimmed
+* for the same reason `/marketplace/` should read as `/marketplace`.
+*/
+function isNavItemActive(pathname, item) {
+	const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+	return item.matches.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7OztBQUFBOzs7QUE0Q08sTUFBTSxlQUEwQjtDQUNyQzs7OztFQUlFLE1BQU07RUFDTixPQUFPO0VBQ1AsTUFBTTtFQUNOLFNBQVM7R0FBQztHQUFTO0dBQVc7R0FBVTtFQUFXO0VBQ25ELGNBQWM7Q0FDaEI7Q0FDQTtFQUNFLE1BQU07RUFDTixPQUFPO0VBQ1AsTUFBTTtFQUNOLFNBQVMsQ0FBQyxjQUFjO0NBQzFCO0NBQ0E7RUFDRSxNQUFNO0VBQ04sT0FBTztFQUNQLE1BQU07RUFDTixTQUFTLENBQUMsT0FBTztDQUNuQjtBQUNGOztBQUdPLE1BQU0saUJBQTRCO0NBQ3ZDO0VBQUUsTUFBTTtFQUFTLE9BQU87RUFBUSxNQUFNO0VBQU0sU0FBUyxDQUFDLE9BQU87Q0FBRTtDQUMvRDtFQUFFLE1BQU07RUFBVyxPQUFPO0VBQVUsTUFBTTtFQUFPLFNBQVMsQ0FBQyxTQUFTO0NBQUU7Q0FDdEU7RUFBRSxNQUFNO0VBQVUsT0FBTztFQUFTLE1BQU07RUFBTSxTQUFTLENBQUMsUUFBUTtDQUFFO0NBQ2xFO0VBQUUsTUFBTTtFQUFhLE9BQU87RUFBWSxNQUFNO0VBQWUsU0FBUyxDQUFDLFdBQVc7Q0FBRTtBQUN0Rjs7Ozs7Ozs7Ozs7QUFZTyxTQUFTLGdCQUFnQixPQUFrQixpQkFBcUM7Q0FDckYsT0FBTyxNQUFNLFFBQVEsU0FBUyxtQkFBbUIsQ0FBQyxLQUFLLFlBQVk7QUFDckU7Ozs7Ozs7OztBQVVPLFNBQVMsZ0JBQWdCLFVBQWtCLE1BQXdCO0NBQ3hFLE1BQU0sT0FBTyxTQUFTLFNBQVMsS0FBSyxTQUFTLFNBQVMsR0FBRyxJQUFJLFNBQVMsTUFBTSxHQUFHLENBQUMsQ0FBQyxJQUFJO0NBQ3JGLE9BQU8sS0FBSyxRQUFRLE1BQU0sV0FBVyxTQUFTLFVBQVUsS0FBSyxXQUFXLEdBQUcsT0FBTyxFQUFFLENBQUM7QUFDdkYiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbIm5hdi1pdGVtcy50cyJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQge1xuICBIb21lLFxuICBTaG9wcGluZ0JhZyxcbiAgQnJpZWZjYXNlLFxuICBVc2VycyxcbiAgRmxhZyxcbiAgTWVzc2FnZUNpcmNsZSxcbiAgdHlwZSBMdWNpZGVJY29uLFxufSBmcm9tIFwibHVjaWRlLXJlYWN0XCI7XG5cbi8qKlxuICogVGhlIGFwcCdzIG5hdmlnYXRpb24sIGluIG9uZSBwbGFjZS5cbiAqXG4gKiBUaGUgaGVhZGVyLCB0aGUgcGhvbmUncyBib3R0b20gYmFyIGFuZCB0aGUgU29jaWFsIHRhYiBzdHJpcCBhcmUgdGhyZWVcbiAqIHJlbmRlcmluZ3Mgb2YgdGhlIHNhbWUgdHdvIGxpc3RzLCBhbmQgdGhleSB1c2VkIHRvIGJlIHRocmVlIHNlcGFyYXRlIGFycmF5cyDigJRcbiAqIHdoaWNoIGlzIGhvdyB0aGUgYm90dG9tIGJhciBjb3VsZCBvZmZlciBhIGRlc3RpbmF0aW9uIHRoZSBoZWFkZXIgZGlkIG5vdC5cbiAqIEV2ZXJ5dGhpbmcgdGhhdCBkcmF3cyBuYXZpZ2F0aW9uIHJlYWRzIGZyb20gaGVyZS5cbiAqXG4gKiBgbWF0Y2hlc2AgaXMgc2VwYXJhdGUgZnJvbSBgaHJlZmAgYmVjYXVzZSBhIG5hdiBpdGVtIGNhbiBzdGFuZCBmb3IgYSB3aG9sZVxuICogbW9kdWxlLiBTb2NpYWwgaGFzIG5vIHBhZ2Ugb2YgaXRzIG93bjogaXQgKmlzKiB0aGUgZm91ciBzdXJmYWNlcyB1bmRlciBpdCwgc29cbiAqIGl0cyBocmVmIGlzIHRoZSBmZWVkIHdoaWxlIGl0cyBtYXRjaGVzIGFyZSBhbGwgZm91ciwgYW5kIGl0IHN0YXlzIGxpdCB3aGlsZSBhXG4gKiByZWFkZXIgaXMgaW4gR3JvdXBzLCBQYWdlcyBvciBNZXNzYWdlcy5cbiAqL1xuZXhwb3J0IGludGVyZmFjZSBOYXZJdGVtIHtcbiAgLyoqIFdoZXJlIHRoZSBpdGVtIGdvZXMgd2hlbiBpdCBpcyBjbGlja2VkLiBPbmUgb2Yge0BsaW5rIG1hdGNoZXN9LiAqL1xuICBocmVmOiBzdHJpbmc7XG4gIGxhYmVsOiBzdHJpbmc7XG4gIGljb246IEx1Y2lkZUljb247XG4gIC8qKlxuICAgKiBUaGUgcGF0aCBwcmVmaXhlcyB0aGlzIGl0ZW0gc3RhbmRzIGZvci4gQSByZWFkZXIgaXMgXCJvblwiIHRoaXMgaXRlbSB3aGVuIHRoZVxuICAgKiBjdXJyZW50IHBhdGggaXMgb25lIG9mIHRoZW0gb3Igc2l0cyB1bmRlciBpdC5cbiAgICovXG4gIG1hdGNoZXM6IHN0cmluZ1tdO1xuICAvKipcbiAgICogV2hldGhlciB0aGUgZGVzdGluYXRpb24gbmVlZHMgYSBzZXNzaW9uIGJlaGluZCBpdC4gU29jaWFsIGlzIGEgZmVlZCBvZlxuICAgKiBmb2xsb3dzIOKAlCBzaWduZWQgb3V0LCBgL2ZlZWRgIHJlZGlyZWN0cyB0byBsb2dpbiDigJQgd2hpbGUgdGhlIG1hcmtldHBsYWNlXG4gICAqIGFuZCBqb2JzIHBhZ2VzIGFyZSB0aGUgcHJvZHVjdCdzIHB1YmxpYyBkaXNjb3ZlcnksIHJlYWNoYWJsZSB3aXRob3V0IGFuXG4gICAqIGFjY291bnQuIEFkdmVydGlzaW5nIGEgbGluayB0aGUgcmVhZGVyIHdpbGwgYmUgYm91bmNlZCBmcm9tIGlzIHRoZSBzYW1lXG4gICAqIGJyb2tlbiBwcm9taXNlIGFzIGFkdmVydGlzaW5nIG9uZSB0aGF0IDQwNHMuXG4gICAqL1xuICByZXF1aXJlc0F1dGg/OiBib29sZWFuO1xufVxuXG4vKiogVGhlIHdob2xlIG9mIHRoZSBtYWluIG5hdmlnYXRpb246IFNvY2lhbCwgYW5kIHRoZSB0d28gbW9kdWxlcyBiZXNpZGUgaXQuICovXG5leHBvcnQgY29uc3QgbWFpbk5hdkl0ZW1zOiBOYXZJdGVtW10gPSBbXG4gIHtcbiAgICAvLyBTb2NpYWwgaXMgYSBtb2R1bGUgcmF0aGVyIHRoYW4gYSBwYWdlOiB0aGUgZmVlZCBpcyB0aGUgZG9vciwgYW5kIEdyb3VwcyxcbiAgICAvLyBQYWdlcyBhbmQgTWVzc2FnZXMgYW5zd2VyIHRvIHRoZSBzYW1lIG5hdiBpdGVtLiBUaGUgZmVlZCBpcyBidWlsdCBmcm9tXG4gICAgLy8gZm9sbG93cywgc28gaXQgaXMgdGhlIG9uZSBtb2R1bGUgYSB2aXNpdG9yIGNhbm5vdCBicm93c2UuXG4gICAgaHJlZjogXCIvZmVlZFwiLFxuICAgIGxhYmVsOiBcIlNvY2lhbFwiLFxuICAgIGljb246IEhvbWUsXG4gICAgbWF0Y2hlczogW1wiL2ZlZWRcIiwgXCIvZ3JvdXBzXCIsIFwiL3BhZ2VzXCIsIFwiL21lc3NhZ2VzXCJdLFxuICAgIHJlcXVpcmVzQXV0aDogdHJ1ZSxcbiAgfSxcbiAge1xuICAgIGhyZWY6IFwiL21hcmtldHBsYWNlXCIsXG4gICAgbGFiZWw6IFwiTWFya2V0cGxhY2VcIixcbiAgICBpY29uOiBTaG9wcGluZ0JhZyxcbiAgICBtYXRjaGVzOiBbXCIvbWFya2V0cGxhY2VcIl0sXG4gIH0sXG4gIHtcbiAgICBocmVmOiBcIi9qb2JzXCIsXG4gICAgbGFiZWw6IFwiSm9ic1wiLFxuICAgIGljb246IEJyaWVmY2FzZSxcbiAgICBtYXRjaGVzOiBbXCIvam9ic1wiXSxcbiAgfSxcbl07XG5cbi8qKiBUaGUgZm91ciBzdXJmYWNlcyB1bmRlciBTb2NpYWwsIGFuZCB0aGUgdGFiIHN0cmlwIHRoYXQgc3dpdGNoZXMgYmV0d2VlbiB0aGVtLiAqL1xuZXhwb3J0IGNvbnN0IHNvY2lhbE5hdkl0ZW1zOiBOYXZJdGVtW10gPSBbXG4gIHsgaHJlZjogXCIvZmVlZFwiLCBsYWJlbDogXCJGZWVkXCIsIGljb246IEhvbWUsIG1hdGNoZXM6IFtcIi9mZWVkXCJdIH0sXG4gIHsgaHJlZjogXCIvZ3JvdXBzXCIsIGxhYmVsOiBcIkdyb3Vwc1wiLCBpY29uOiBVc2VycywgbWF0Y2hlczogW1wiL2dyb3Vwc1wiXSB9LFxuICB7IGhyZWY6IFwiL3BhZ2VzXCIsIGxhYmVsOiBcIlBhZ2VzXCIsIGljb246IEZsYWcsIG1hdGNoZXM6IFtcIi9wYWdlc1wiXSB9LFxuICB7IGhyZWY6IFwiL21lc3NhZ2VzXCIsIGxhYmVsOiBcIk1lc3NhZ2VzXCIsIGljb246IE1lc3NhZ2VDaXJjbGUsIG1hdGNoZXM6IFtcIi9tZXNzYWdlc1wiXSB9LFxuXTtcblxuLyoqXG4gKiBUaGUgaXRlbXMgYSByZWFkZXIgaXMgb2ZmZXJlZCwgZ2l2ZW4gd2hldGhlciB0aGV5IGFyZSBzaWduZWQgaW4uXG4gKlxuICogVGhlIHJ1bGUgbGl2ZXMgaGVyZSByYXRoZXIgdGhhbiBhdCBlYWNoIHJlbmRlcmVyIGJlY2F1c2UgdGhlIGhlYWRlciwgdGhlXG4gKiBwaG9uZSBiYXIgYW5kIHRoZSBtb2JpbGUgcGFuZWwgYWxsIGRyYXcgdGhlIHNhbWUgbGlzdCDigJQgdGhyZWUgc2VwYXJhdGVcbiAqIGZpbHRlcnMgaXMgaG93IHRoZSBib3R0b20gYmFyIGVuZHMgdXAgb2ZmZXJpbmcgYSBzaWduZWQtb3V0IHZpc2l0b3IgYSBsaW5rXG4gKiB0aGF0IGJvdW5jZXMuIFdoYXQgYSBzaWduZWQtb3V0IHZpc2l0b3IgbWF5IGJyb3dzZSBpcyB0aGUgcHJvZHVjdCdzIG93blxuICogZGVjaXNpb24gKG1hcmtldHBsYWNlIGFuZCBqb2JzIHllcywgdGhlIGZvbGxvdyBmZWVkIG5vKSwgc28gdGhlIGZsYWcgb24gZWFjaFxuICogaXRlbSBpcyB0aGUgd2hvbGUgb2YgdGhlIHBvbGljeS5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHZpc2libGVOYXZJdGVtcyhpdGVtczogTmF2SXRlbVtdLCBpc0F1dGhlbnRpY2F0ZWQ6IGJvb2xlYW4pOiBOYXZJdGVtW10ge1xuICByZXR1cm4gaXRlbXMuZmlsdGVyKChpdGVtKSA9PiBpc0F1dGhlbnRpY2F0ZWQgfHwgIWl0ZW0ucmVxdWlyZXNBdXRoKTtcbn1cblxuLyoqXG4gKiBXaGV0aGVyIHRoZSByZWFkZXIgaXMgY3VycmVudGx5IG9uIChvciBpbnNpZGUpIHRoaXMgaXRlbSdzIGRlc3RpbmF0aW9uLlxuICpcbiAqIE1hdGNoZWQgb24gcGF0aCBib3VuZGFyaWVzIHJhdGhlciB0aGFuIHdpdGggYSBiYXJlIGBzdGFydHNXaXRoYDogYC9ncm91cHNgXG4gKiBtdXN0IG5vdCBiZSBsaXQgYnkgYC9ncm91cHMtb2xkYCwgYW5kIGEgbW9kdWxlJ3MgcHJlZml4IG11c3Qgbm90IGJlIGxpdCBieSBhXG4gKiByb3V0ZSB0aGF0IG1lcmVseSBiZWdpbnMgd2l0aCB0aGUgc2FtZSBsZXR0ZXJzLiBBIHRyYWlsaW5nIHNsYXNoIGlzIHRyaW1tZWRcbiAqIGZvciB0aGUgc2FtZSByZWFzb24gYC9tYXJrZXRwbGFjZS9gIHNob3VsZCByZWFkIGFzIGAvbWFya2V0cGxhY2VgLlxuICovXG5leHBvcnQgZnVuY3Rpb24gaXNOYXZJdGVtQWN0aXZlKHBhdGhuYW1lOiBzdHJpbmcsIGl0ZW06IE5hdkl0ZW0pOiBib29sZWFuIHtcbiAgY29uc3QgcGF0aCA9IHBhdGhuYW1lLmxlbmd0aCA+IDEgJiYgcGF0aG5hbWUuZW5kc1dpdGgoXCIvXCIpID8gcGF0aG5hbWUuc2xpY2UoMCwgLTEpIDogcGF0aG5hbWU7XG4gIHJldHVybiBpdGVtLm1hdGNoZXMuc29tZSgocHJlZml4KSA9PiBwYXRoID09PSBwcmVmaXggfHwgcGF0aC5zdGFydHNXaXRoKGAke3ByZWZpeH0vYCkpO1xufVxuIl0sImZpbGUiOiIvc3JjL2xpYi9uYXYtaXRlbXMudHMifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvbGliL25hdi1pdGVtcy50cyIsIi9zcmMvbGliL25hdi1pdGVtcy50cyIsW11d

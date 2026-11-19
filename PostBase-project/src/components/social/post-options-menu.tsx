@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Megaphone, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,6 +41,7 @@ export function PostOptionsMenu({
   postId,
   content,
   visibility,
+  topicId,
   groupName,
   hasMedia,
   onDelete,
@@ -49,6 +51,7 @@ export function PostOptionsMenu({
   /** The post's current text, used to seed the edit form. */
   content: string;
   visibility?: string | null;
+  topicId?: string | null;
   /**
    * The group the post belongs to, when it belongs to one. Passed through to the
    * edit form, which cannot offer a group post an audience: it has one.
@@ -90,6 +93,14 @@ export function PostOptionsMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
+          {visibility === "public" && !groupName && (
+            <DropdownMenuItem asChild>
+              <Link href="/advertising?type=boost">
+                <Megaphone className="mr-2 h-4 w-4" />
+                Boost a post
+              </Link>
+            </DropdownMenuItem>
+          )}
           {onUpdate && (
             <DropdownMenuItem onSelect={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
@@ -108,6 +119,7 @@ export function PostOptionsMenu({
 
       {onUpdate && (
         <PostEditDialog
+          initialTopicId={topicId}
           postId={postId}
           content={content}
           visibility={visibility}

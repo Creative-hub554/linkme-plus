@@ -1,0 +1,133 @@
+__vite_ssr_exportName__("default", () => { try { return TermsPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/components/ui/card.tsx", {"importedNames":["Card","CardContent"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/app/(static)/terms/page.tsx";
+
+function TermsPage() {
+	return /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+		className: "max-w-3xl mx-auto space-y-8 py-8",
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("div", {
+			className: "text-center",
+			children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h1", {
+				className: "text-3xl font-bold text-navy-800",
+				children: "Terms of Service"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 7,
+				columnNumber: 9
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", {
+				className: "text-muted-foreground mt-2",
+				children: "Last updated: January 2026"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 8,
+				columnNumber: 9
+			}, this)]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 6,
+			columnNumber: 7
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.Card), { children: /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)((0,__vite_ssr_import_0__.CardContent), {
+			className: "p-6 space-y-4 text-sm text-muted-foreground",
+			children: [
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "1. Acceptance of Terms"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 14,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "By accessing or using LinkMe+, you agree to be bound by these Terms of Service. If you do not agree, do not use the platform." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 15,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 13,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "2. User Accounts"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 18,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "You must be at least 13 years old to create an account. You are responsible for maintaining the security of your account and for all activities that occur under your account." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 19,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 17,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "3. Content"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 22,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "You retain ownership of content you post. By posting content, you grant LinkMe+ a non-exclusive license to display, distribute, and promote your content on the platform." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 23,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 21,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "4. Marketplace"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 26,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "LinkMe+ facilitates transactions between buyers and sellers. We are not a party to any transaction and do not guarantee the quality, safety, or legality of items listed." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 27,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 25,
+					columnNumber: 11
+				}, this),
+				/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("section", { children: [/* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("h2", {
+					className: "font-semibold text-foreground mb-2",
+					children: "5. Prohibited Conduct"
+				}, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 30,
+					columnNumber: 13
+				}, this), /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)("p", { children: "You may not use LinkMe+ to post illegal, harmful, threatening, abusive, harassing, defamatory, or otherwise objectionable content. Violation may result in account suspension or termination." }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 31,
+					columnNumber: 13
+				}, this)] }, void 0, true, {
+					fileName: _jsxFileName,
+					lineNumber: 29,
+					columnNumber: 11
+				}, this)
+			]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 12,
+			columnNumber: 9
+		}, this) }, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 11,
+			columnNumber: 7
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 5,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUFBOzs7OztBQUVlLFNBQVMsWUFBWTtDQUNsQyxPQUNFLGlEQUFDLE9BQUQ7RUFBSyxXQUFVO1lBQWYsQ0FDRSxpREFBQyxPQUFEO0dBQUssV0FBVTthQUFmLENBQ0UsaURBQUMsTUFBRDtJQUFJLFdBQVU7Y0FBbUM7R0FBb0I7Ozs7YUFDckUsaURBQUMsS0FBRDtJQUFHLFdBQVU7Y0FBNkI7R0FBNkI7Ozs7V0FDcEU7Ozs7O1lBRUwsb0RBQUMsNkJBQUQsWUFDRSxvREFBQyxvQ0FBRDtHQUFhLFdBQVU7YUFBdkI7SUFDRSxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBMEI7Ozs7Y0FDN0UsaURBQUMsS0FBRCxZQUFHLGdJQUFnSTs7OztZQUM1SDs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBb0I7Ozs7Y0FDdkUsaURBQUMsS0FBRCxZQUFHLGlMQUFpTDs7OztZQUM3Szs7Ozs7SUFDVCxpREFBQyxXQUFELGFBQ0UsaURBQUMsTUFBRDtLQUFJLFdBQVU7ZUFBcUM7SUFBYzs7OztjQUNqRSxpREFBQyxLQUFELFlBQUcsNEtBQTRLOzs7O1lBQ3hLOzs7OztJQUNULGlEQUFDLFdBQUQsYUFDRSxpREFBQyxNQUFEO0tBQUksV0FBVTtlQUFxQztJQUFrQjs7OztjQUNyRSxpREFBQyxLQUFELFlBQUcsNEtBQTRLOzs7O1lBQ3hLOzs7OztJQUNULGlEQUFDLFdBQUQsYUFDRSxpREFBQyxNQUFEO0tBQUksV0FBVTtlQUFxQztJQUF5Qjs7OztjQUM1RSxpREFBQyxLQUFELFlBQUcsZ01BQWdNOzs7O1lBQzVMOzs7OztHQUNFOzs7OztXQUNUOzs7O1VBQ0g7Ozs7OztBQUVUIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJwYWdlLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBDYXJkLCBDYXJkQ29udGVudCB9IGZyb20gXCJAL2NvbXBvbmVudHMvdWkvY2FyZFwiO1xuXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBUZXJtc1BhZ2UoKSB7XG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9XCJtYXgtdy0zeGwgbXgtYXV0byBzcGFjZS15LTggcHktOFwiPlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlclwiPlxuICAgICAgICA8aDEgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtbmF2eS04MDBcIj5UZXJtcyBvZiBTZXJ2aWNlPC9oMT5cbiAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1tdXRlZC1mb3JlZ3JvdW5kIG10LTJcIj5MYXN0IHVwZGF0ZWQ6IEphbnVhcnkgMjAyNjwvcD5cbiAgICAgIDwvZGl2PlxuXG4gICAgICA8Q2FyZD5cbiAgICAgICAgPENhcmRDb250ZW50IGNsYXNzTmFtZT1cInAtNiBzcGFjZS15LTQgdGV4dC1zbSB0ZXh0LW11dGVkLWZvcmVncm91bmRcIj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+MS4gQWNjZXB0YW5jZSBvZiBUZXJtczwvaDI+XG4gICAgICAgICAgICA8cD5CeSBhY2Nlc3Npbmcgb3IgdXNpbmcgTGlua01lKywgeW91IGFncmVlIHRvIGJlIGJvdW5kIGJ5IHRoZXNlIFRlcm1zIG9mIFNlcnZpY2UuIElmIHlvdSBkbyBub3QgYWdyZWUsIGRvIG5vdCB1c2UgdGhlIHBsYXRmb3JtLjwvcD5cbiAgICAgICAgICA8L3NlY3Rpb24+XG4gICAgICAgICAgPHNlY3Rpb24+XG4gICAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCB0ZXh0LWZvcmVncm91bmQgbWItMlwiPjIuIFVzZXIgQWNjb3VudHM8L2gyPlxuICAgICAgICAgICAgPHA+WW91IG11c3QgYmUgYXQgbGVhc3QgMTMgeWVhcnMgb2xkIHRvIGNyZWF0ZSBhbiBhY2NvdW50LiBZb3UgYXJlIHJlc3BvbnNpYmxlIGZvciBtYWludGFpbmluZyB0aGUgc2VjdXJpdHkgb2YgeW91ciBhY2NvdW50IGFuZCBmb3IgYWxsIGFjdGl2aXRpZXMgdGhhdCBvY2N1ciB1bmRlciB5b3VyIGFjY291bnQuPC9wPlxuICAgICAgICAgIDwvc2VjdGlvbj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+My4gQ29udGVudDwvaDI+XG4gICAgICAgICAgICA8cD5Zb3UgcmV0YWluIG93bmVyc2hpcCBvZiBjb250ZW50IHlvdSBwb3N0LiBCeSBwb3N0aW5nIGNvbnRlbnQsIHlvdSBncmFudCBMaW5rTWUrIGEgbm9uLWV4Y2x1c2l2ZSBsaWNlbnNlIHRvIGRpc3BsYXksIGRpc3RyaWJ1dGUsIGFuZCBwcm9tb3RlIHlvdXIgY29udGVudCBvbiB0aGUgcGxhdGZvcm0uPC9wPlxuICAgICAgICAgIDwvc2VjdGlvbj5cbiAgICAgICAgICA8c2VjdGlvbj5cbiAgICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJmb250LXNlbWlib2xkIHRleHQtZm9yZWdyb3VuZCBtYi0yXCI+NC4gTWFya2V0cGxhY2U8L2gyPlxuICAgICAgICAgICAgPHA+TGlua01lKyBmYWNpbGl0YXRlcyB0cmFuc2FjdGlvbnMgYmV0d2VlbiBidXllcnMgYW5kIHNlbGxlcnMuIFdlIGFyZSBub3QgYSBwYXJ0eSB0byBhbnkgdHJhbnNhY3Rpb24gYW5kIGRvIG5vdCBndWFyYW50ZWUgdGhlIHF1YWxpdHksIHNhZmV0eSwgb3IgbGVnYWxpdHkgb2YgaXRlbXMgbGlzdGVkLjwvcD5cbiAgICAgICAgICA8L3NlY3Rpb24+XG4gICAgICAgICAgPHNlY3Rpb24+XG4gICAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCB0ZXh0LWZvcmVncm91bmQgbWItMlwiPjUuIFByb2hpYml0ZWQgQ29uZHVjdDwvaDI+XG4gICAgICAgICAgICA8cD5Zb3UgbWF5IG5vdCB1c2UgTGlua01lKyB0byBwb3N0IGlsbGVnYWwsIGhhcm1mdWwsIHRocmVhdGVuaW5nLCBhYnVzaXZlLCBoYXJhc3NpbmcsIGRlZmFtYXRvcnksIG9yIG90aGVyd2lzZSBvYmplY3Rpb25hYmxlIGNvbnRlbnQuIFZpb2xhdGlvbiBtYXkgcmVzdWx0IGluIGFjY291bnQgc3VzcGVuc2lvbiBvciB0ZXJtaW5hdGlvbi48L3A+XG4gICAgICAgICAgPC9zZWN0aW9uPlxuICAgICAgICA8L0NhcmRDb250ZW50PlxuICAgICAgPC9DYXJkPlxuICAgIDwvZGl2PlxuICApO1xufVxuIl0sImZpbGUiOiJDOlxcV29ya3NwYWNlXFxXZWJzaXRlYnVpbGRlcnRvb2xzYWlcXFBvc3RCYXNlLXByb2plY3RcXHNyY1xcYXBwXFwoc3RhdGljKVxcdGVybXNcXHBhZ2UudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhzdGF0aWMpL3Rlcm1zL3BhZ2UudHN4IiwiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKHN0YXRpYylcXHRlcm1zXFxwYWdlLnRzeCIsW11d

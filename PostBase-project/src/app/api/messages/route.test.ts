@@ -79,6 +79,16 @@ describe("GET /api/messages", () => {
     expectGatedSequence("reads", ["conversations"]);
   });
 
+  it("refuses a conversation id that is not uuid-shaped, reading nothing", async () => {
+    const response = await GET(read("?id=not-a-uuid"));
+
+    expect(response.status).toBe(400);
+    // This guard's own message, not the 404 a read of a conversation that is
+    // "not there" answers.
+    expect(await response.json()).toEqual({ error: "Invalid conversation ID" });
+    expectGatedNone("reads");
+  });
+
   it("answers 404 for a conversation that is not there", async () => {
     fakeDb.selectReturns(conversations, []);
 

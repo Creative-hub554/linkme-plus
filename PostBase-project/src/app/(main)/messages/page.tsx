@@ -10,8 +10,6 @@ import { Search, Send } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Loader2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
-import { OnlineStatus } from "@/components/realtime/online-status";
-import { TypingIndicator } from "@/components/realtime/typing-indicator";
 
 interface Conversation {
   id: string;
@@ -35,6 +33,7 @@ interface ConversationPayload {
   id: string;
   otherMember?: { name?: string; userId?: string } | null;
   lastMessage?: { content?: string; createdAt?: string } | null;
+  unreadCount?: number;
 }
 
 function MessagesContent() {
@@ -53,12 +52,17 @@ function MessagesContent() {
   const [newMessage, setNewMessage] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedConversation?.id ?? null;
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
     setLoading(true);
-    fetch("/api/messages", { cache: "no-store" })
+    setSelectedConversation(null);
+    const refresh = () => fetch("/api/messages", { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load messages")))
       .then((payload) => {
         if (cancelled) return;
@@ -68,22 +72,24 @@ function MessagesContent() {
           name: item.otherMember?.name || "Member",
           lastMessage: item.lastMessage?.content || "No messages yet",
           time: item.lastMessage?.createdAt ? new Date(item.lastMessage.createdAt).toLocaleDateString() : "",
-          unread: 0,
+          unread: item.id === selectedIdRef.current ? 0 : item.unreadCount ?? 0,
           otherUserId: item.otherMember?.userId || "",
         }));
         setConversations(mapped);
+        setError(null);
         setSelectedConversation((current) => {
+          if (current) return mapped.find((item: Conversation) => item.id === current.id) || null;
           const requested = requestedConversationId
             ? mapped.find((item: Conversation) => item.id === requestedConversationId)
             : undefined;
           if (requested) return requested;
-          if (current) return mapped.find((item: Conversation) => item.id === current.id) || null;
           return mapped[0] || null;
         });
       })
       .catch(() => { if (!cancelled) setError("We couldn't load your conversations right now."); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => { if (!cancelled) { setLoading(false); timer = setTimeout(refresh, 5000); } });
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [requestedConversationId]);
 
   // Keyed on the id alone: a refresh of the conversation list replaces the
@@ -92,11 +98,21 @@ function MessagesContent() {
   useEffect(() => {
     if (!selectedConversationId) { setMessages([]); return; }
     let cancelled = false;
-    fetch(`/api/messages?id=${encodeURIComponent(selectedConversationId)}`, { cache: "no-store" })
+    let timer: ReturnType<typeof setTimeout>;
+    setMessages([]); setSendError(null); setNewMessage("");
+    const refresh = () => fetch(`/api/messages?id=${encodeURIComponent(selectedConversationId)}`, { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load conversation")))
-      .then((payload) => { if (!cancelled) setMessages(Array.isArray(payload.messages) ? payload.messages : []); })
-      .catch(() => { if (!cancelled) setMessages([]); });
-    return () => { cancelled = true; };
+      .then((payload) => {
+        if (cancelled) return;
+        const rows: Message[] = Array.isArray(payload.messages) ? payload.messages : [];
+        setMessages(previous => [...new Map([...previous, ...rows].map(item => [item.id, item])).values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+        setConversations(previous => previous.map(item => item.id === selectedConversationId ? { ...item, unread: 0 } : item));
+        setSendError(null);
+      })
+      .catch(() => { if (!cancelled) setSendError("Unable to refresh this conversation. Retrying shortly."); })
+      .finally(() => { if (!cancelled) timer = setTimeout(refresh, 3000); });
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [selectedConversationId]);
 
   // Scroll to bottom when new messages arrive
@@ -114,6 +130,7 @@ function MessagesContent() {
     const content = newMessage.trim();
     if (!content || !selectedConversation || sending) return;
 
+    const conversationId = selectedConversation.id;
     const tempId = `pending-${Date.now()}`;
     const pendingMessage: Message = {
       id: tempId,
@@ -139,8 +156,10 @@ function MessagesContent() {
       if (!response.ok || !payload?.message) throw new Error("Send failed");
 
       const saved = payload.message as Message;
-      setMessages((prev) => prev.map((item) => (item.id === tempId ? saved : item)));
+      setConversations(prev => prev.map(item => item.id === conversationId ? { ...item, lastMessage: saved.content, time: new Date(saved.createdAt).toLocaleDateString() } : item));
+      if (selectedIdRef.current === conversationId) setMessages(prev => [...prev.filter(item => item.id !== tempId && item.id !== saved.id), saved]);
     } catch {
+      if (selectedIdRef.current !== conversationId) return;
       setMessages((prev) => prev.filter((item) => item.id !== tempId));
       setNewMessage(content);
       setSendError("We couldn't send that message. Please try again.");
@@ -163,12 +182,12 @@ function MessagesContent() {
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input aria-label="Search conversations" placeholder="Search conversations..." className="pl-9" />
+            <Input aria-label="Search conversations" placeholder="Search conversations..." className="pl-9" value={search} onChange={event => setSearch(event.target.value)} />
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y">
-            {loading ? <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading conversations...</div> : error ? <p className="p-4 text-sm text-red-600">{error}</p> : conversations.length === 0 ? <EmptyState title="No conversations yet" description="Start a conversation from a member's profile." /> : conversations.map((conv) => (
+            {loading ? <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading conversations...</div> : error ? <p className="p-4 text-sm text-red-600">{error}</p> : conversations.length === 0 ? <EmptyState title="No conversations yet" description="Start a conversation from a member's profile." /> : conversations.filter(conv => (conv.name + " " + conv.lastMessage).toLowerCase().includes(search.trim().toLowerCase())).map((conv) => (
               // A button, because it is one: as a `div` with an `onClick` this
               // was not focusable, could not be activated from the keyboard, and
               // had nowhere to say it was the open conversation rather than
@@ -189,7 +208,6 @@ function MessagesContent() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{conv.name}</span>
-                      <OnlineStatus userId={conv.otherUserId} size="sm" />
                     </div>
                     <span className="text-xs text-muted-foreground">{conv.time}</span>
                   </div>
@@ -218,7 +236,6 @@ function MessagesContent() {
                 </Avatar>
                 <div>
                   <p className="font-medium text-sm">{selectedConversation.name}</p>
-                  <OnlineStatus userId={selectedConversation.otherUserId} showText size="sm" />
                 </div>
               </div>
             </CardHeader>
@@ -252,7 +269,6 @@ function MessagesContent() {
                     </div>
                   </div>
                 ))}
-                <TypingIndicator conversationId={selectedConversation.id} />
                 <div ref={messagesEndRef} />
               </div>
             </CardContent>

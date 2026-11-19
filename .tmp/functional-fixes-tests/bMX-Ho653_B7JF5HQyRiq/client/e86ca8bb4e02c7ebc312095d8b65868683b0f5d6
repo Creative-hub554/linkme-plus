@@ -1,0 +1,95 @@
+__vite_ssr_exportName__("ThemeChoiceGroup", () => { try { return ThemeChoiceGroup } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useId"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/providers/theme-provider.tsx", {"importedNames":["useTheme"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/lib/theme-icons.ts", {"importedNames":["THEME_ICONS"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/src/lib/theme.ts", {"importedNames":["THEMES"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/shared/theme-choice-group.tsx";
+
+/**
+* The theme, as one choice among three, spelled as buttons.
+*
+* A `radiogroup` of `radio`s rather than a row of pressed buttons: this is a
+* single choice among a few, and `aria-checked` is the attribute that says which
+* one — "pressed" would announce a toggle and leave the "only one of these" part
+* for the reader to infer. The filled chip is the visual duplicate of that same
+* fact, never the only place it is said.
+*
+* It exists as its own component because it has two homes — the settings card
+* and the nav's mobile panel — and they are on screen *together* on a phone, so
+* a copied pair would be two things to keep in step rather than one. The labels
+* and the glyphs come from `THEMES` and `THEME_ICONS` for the same reason.
+*
+* The nav's account menu offers the same three choices and is deliberately not
+* this component: a menu has its own roles for a set of options
+* (`menuitemradio`), and those items must be `DropdownMenuRadioItem`s to sit in
+* a menu at all. See `theme-menu-items.tsx`.
+*
+* Nothing here stores anything: the choice goes to `ThemeProvider`, which owns
+* both the storage and the class on `<html>`.
+*/
+function ThemeChoiceGroup() {
+	const { theme, setTheme } = (0,__vite_ssr_import_1__.useTheme)();
+	// Generated rather than written, because this component can be in the
+	// document twice at once: two groups sharing a written `id` would leave one of
+	// them named by the *other* one's heading.
+	const labelId = (0,__vite_ssr_import_0__.useId)();
+	return /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("div", {
+		className: "space-y-2",
+		children: [/* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("p", {
+			id: labelId,
+			className: "text-sm font-medium text-navy-800",
+			children: "Theme"
+		}, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 41,
+			columnNumber: 7
+		}, this), /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("div", {
+			role: "radiogroup",
+			"aria-labelledby": labelId,
+			className: "grid grid-cols-3 gap-2",
+			children: __vite_ssr_import_3__.THEMES.map((option) => {
+				const Icon = __vite_ssr_import_2__.THEME_ICONS[option.id];
+				const selected = theme === option.id;
+				return /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("button", {
+					type: "button",
+					role: "radio",
+					"aria-checked": selected,
+					onClick: () => setTheme(option.id),
+					className: (0,__vite_ssr_import_4__.cn)("flex min-h-11 flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue", selected ? "border-brand-blue bg-brand-blue/10 text-brand-blue" : "border-surface-border text-navy-700 hover:bg-navy-50 hover:text-navy-800"),
+					children: [/* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)(Icon, {
+						className: "h-4 w-4",
+						"aria-hidden": "true"
+					}, void 0, false, {
+						fileName: _jsxFileName,
+						lineNumber: 62,
+						columnNumber: 15
+					}, this), option.label]
+				}, option.id, true, {
+					fileName: _jsxFileName,
+					lineNumber: 49,
+					columnNumber: 13
+				}, this);
+			})
+		}, void 0, false, {
+			fileName: _jsxFileName,
+			lineNumber: 44,
+			columnNumber: 7
+		}, this)]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 40,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7O0FBTkE7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQThCTyxTQUFTLG1CQUFtQjtDQUNqQyxNQUFNLEVBQUUsT0FBTyxhQUFhLG9DQUFTOzs7O0NBS3JDLE1BQU0sVUFBVSxpQ0FBTTtDQUV0QixPQUNFLGlEQUFDLE9BQUQ7RUFBSyxXQUFVO1lBQWYsQ0FDRSxpREFBQyxLQUFEO0dBQUcsSUFBSTtHQUFTLFdBQVU7YUFBb0M7RUFFM0Q7Ozs7WUFDSCxpREFBQyxPQUFEO0dBQUssTUFBSztHQUFhLG1CQUFpQjtHQUFTLFdBQVU7YUFDeEQsNkJBQU8sS0FBSyxXQUFXO0lBQ3RCLE1BQU0sT0FBTyxrQ0FBWSxPQUFPO0lBQ2hDLE1BQU0sV0FBVyxVQUFVLE9BQU87SUFDbEMsT0FDRSxpREFBQyxVQUFEO0tBRUUsTUFBSztLQUNMLE1BQUs7S0FDTCxnQkFBYztLQUNkLGVBQWUsU0FBUyxPQUFPLEVBQUU7S0FDakMsV0FBVyw2QkFDVCx3TUFDQSxXQUNJLHVEQUNBLDBFQUNOO2VBWEYsQ0FhRSxpREFBQyxNQUFEO01BQU0sV0FBVTtNQUFVLGVBQVk7S0FBUTs7OztlQUM3QyxPQUFPLEtBQ0Y7T0FkRCxPQUFPOzs7O1dBY047R0FFWixDQUFDO0VBQ0U7Ozs7VUFDRjs7Ozs7O0FBRVQiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInRoZW1lLWNob2ljZS1ncm91cC50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCB7IHVzZUlkIH0gZnJvbSBcInJlYWN0XCI7XG5pbXBvcnQgeyB1c2VUaGVtZSB9IGZyb20gXCJAL2NvbXBvbmVudHMvcHJvdmlkZXJzL3RoZW1lLXByb3ZpZGVyXCI7XG5pbXBvcnQgeyBUSEVNRV9JQ09OUyB9IGZyb20gXCJAL2xpYi90aGVtZS1pY29uc1wiO1xuaW1wb3J0IHsgVEhFTUVTIH0gZnJvbSBcIkAvbGliL3RoZW1lXCI7XG5pbXBvcnQgeyBjbiB9IGZyb20gXCJAL2xpYi91dGlsc1wiO1xuXG4vKipcbiAqIFRoZSB0aGVtZSwgYXMgb25lIGNob2ljZSBhbW9uZyB0aHJlZSwgc3BlbGxlZCBhcyBidXR0b25zLlxuICpcbiAqIEEgYHJhZGlvZ3JvdXBgIG9mIGByYWRpb2BzIHJhdGhlciB0aGFuIGEgcm93IG9mIHByZXNzZWQgYnV0dG9uczogdGhpcyBpcyBhXG4gKiBzaW5nbGUgY2hvaWNlIGFtb25nIGEgZmV3LCBhbmQgYGFyaWEtY2hlY2tlZGAgaXMgdGhlIGF0dHJpYnV0ZSB0aGF0IHNheXMgd2hpY2hcbiAqIG9uZSDigJQgXCJwcmVzc2VkXCIgd291bGQgYW5ub3VuY2UgYSB0b2dnbGUgYW5kIGxlYXZlIHRoZSBcIm9ubHkgb25lIG9mIHRoZXNlXCIgcGFydFxuICogZm9yIHRoZSByZWFkZXIgdG8gaW5mZXIuIFRoZSBmaWxsZWQgY2hpcCBpcyB0aGUgdmlzdWFsIGR1cGxpY2F0ZSBvZiB0aGF0IHNhbWVcbiAqIGZhY3QsIG5ldmVyIHRoZSBvbmx5IHBsYWNlIGl0IGlzIHNhaWQuXG4gKlxuICogSXQgZXhpc3RzIGFzIGl0cyBvd24gY29tcG9uZW50IGJlY2F1c2UgaXQgaGFzIHR3byBob21lcyDigJQgdGhlIHNldHRpbmdzIGNhcmRcbiAqIGFuZCB0aGUgbmF2J3MgbW9iaWxlIHBhbmVsIOKAlCBhbmQgdGhleSBhcmUgb24gc2NyZWVuICp0b2dldGhlciogb24gYSBwaG9uZSwgc29cbiAqIGEgY29waWVkIHBhaXIgd291bGQgYmUgdHdvIHRoaW5ncyB0byBrZWVwIGluIHN0ZXAgcmF0aGVyIHRoYW4gb25lLiBUaGUgbGFiZWxzXG4gKiBhbmQgdGhlIGdseXBocyBjb21lIGZyb20gYFRIRU1FU2AgYW5kIGBUSEVNRV9JQ09OU2AgZm9yIHRoZSBzYW1lIHJlYXNvbi5cbiAqXG4gKiBUaGUgbmF2J3MgYWNjb3VudCBtZW51IG9mZmVycyB0aGUgc2FtZSB0aHJlZSBjaG9pY2VzIGFuZCBpcyBkZWxpYmVyYXRlbHkgbm90XG4gKiB0aGlzIGNvbXBvbmVudDogYSBtZW51IGhhcyBpdHMgb3duIHJvbGVzIGZvciBhIHNldCBvZiBvcHRpb25zXG4gKiAoYG1lbnVpdGVtcmFkaW9gKSwgYW5kIHRob3NlIGl0ZW1zIG11c3QgYmUgYERyb3Bkb3duTWVudVJhZGlvSXRlbWBzIHRvIHNpdCBpblxuICogYSBtZW51IGF0IGFsbC4gU2VlIGB0aGVtZS1tZW51LWl0ZW1zLnRzeGAuXG4gKlxuICogTm90aGluZyBoZXJlIHN0b3JlcyBhbnl0aGluZzogdGhlIGNob2ljZSBnb2VzIHRvIGBUaGVtZVByb3ZpZGVyYCwgd2hpY2ggb3duc1xuICogYm90aCB0aGUgc3RvcmFnZSBhbmQgdGhlIGNsYXNzIG9uIGA8aHRtbD5gLlxuICovXG5leHBvcnQgZnVuY3Rpb24gVGhlbWVDaG9pY2VHcm91cCgpIHtcbiAgY29uc3QgeyB0aGVtZSwgc2V0VGhlbWUgfSA9IHVzZVRoZW1lKCk7XG5cbiAgLy8gR2VuZXJhdGVkIHJhdGhlciB0aGFuIHdyaXR0ZW4sIGJlY2F1c2UgdGhpcyBjb21wb25lbnQgY2FuIGJlIGluIHRoZVxuICAvLyBkb2N1bWVudCB0d2ljZSBhdCBvbmNlOiB0d28gZ3JvdXBzIHNoYXJpbmcgYSB3cml0dGVuIGBpZGAgd291bGQgbGVhdmUgb25lIG9mXG4gIC8vIHRoZW0gbmFtZWQgYnkgdGhlICpvdGhlciogb25lJ3MgaGVhZGluZy5cbiAgY29uc3QgbGFiZWxJZCA9IHVzZUlkKCk7XG5cbiAgcmV0dXJuIChcbiAgICA8ZGl2IGNsYXNzTmFtZT1cInNwYWNlLXktMlwiPlxuICAgICAgPHAgaWQ9e2xhYmVsSWR9IGNsYXNzTmFtZT1cInRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1uYXZ5LTgwMFwiPlxuICAgICAgICBUaGVtZVxuICAgICAgPC9wPlxuICAgICAgPGRpdiByb2xlPVwicmFkaW9ncm91cFwiIGFyaWEtbGFiZWxsZWRieT17bGFiZWxJZH0gY2xhc3NOYW1lPVwiZ3JpZCBncmlkLWNvbHMtMyBnYXAtMlwiPlxuICAgICAgICB7VEhFTUVTLm1hcCgob3B0aW9uKSA9PiB7XG4gICAgICAgICAgY29uc3QgSWNvbiA9IFRIRU1FX0lDT05TW29wdGlvbi5pZF07XG4gICAgICAgICAgY29uc3Qgc2VsZWN0ZWQgPSB0aGVtZSA9PT0gb3B0aW9uLmlkO1xuICAgICAgICAgIHJldHVybiAoXG4gICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgIGtleT17b3B0aW9uLmlkfVxuICAgICAgICAgICAgICB0eXBlPVwiYnV0dG9uXCJcbiAgICAgICAgICAgICAgcm9sZT1cInJhZGlvXCJcbiAgICAgICAgICAgICAgYXJpYS1jaGVja2VkPXtzZWxlY3RlZH1cbiAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0VGhlbWUob3B0aW9uLmlkKX1cbiAgICAgICAgICAgICAgY2xhc3NOYW1lPXtjbihcbiAgICAgICAgICAgICAgICBcImZsZXggbWluLWgtMTEgZmxleC1jb2wgaXRlbXMtY2VudGVyIGp1c3RpZnktY2VudGVyIGdhcC0xLjUgcm91bmRlZC14bCBib3JkZXIgcC0zIHRleHQtc20gZm9udC1tZWRpdW0gdHJhbnNpdGlvbi1jb2xvcnMgZm9jdXMtdmlzaWJsZTpvdXRsaW5lLW5vbmUgZm9jdXMtdmlzaWJsZTpyaW5nLTIgZm9jdXMtdmlzaWJsZTpyaW5nLWJyYW5kLWJsdWVcIixcbiAgICAgICAgICAgICAgICBzZWxlY3RlZFxuICAgICAgICAgICAgICAgICAgPyBcImJvcmRlci1icmFuZC1ibHVlIGJnLWJyYW5kLWJsdWUvMTAgdGV4dC1icmFuZC1ibHVlXCJcbiAgICAgICAgICAgICAgICAgIDogXCJib3JkZXItc3VyZmFjZS1ib3JkZXIgdGV4dC1uYXZ5LTcwMCBob3ZlcjpiZy1uYXZ5LTUwIGhvdmVyOnRleHQtbmF2eS04MDBcIixcbiAgICAgICAgICAgICAgKX1cbiAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgPEljb24gY2xhc3NOYW1lPVwiaC00IHctNFwiIGFyaWEtaGlkZGVuPVwidHJ1ZVwiIC8+XG4gICAgICAgICAgICAgIHtvcHRpb24ubGFiZWx9XG4gICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICApO1xuICAgICAgICB9KX1cbiAgICAgIDwvZGl2PlxuICAgIDwvZGl2PlxuICApO1xufVxuIl0sImZpbGUiOiIvc3JjL2NvbXBvbmVudHMvc2hhcmVkL3RoZW1lLWNob2ljZS1ncm91cC50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zaGFyZWQvdGhlbWUtY2hvaWNlLWdyb3VwLnRzeCIsIi9zcmMvY29tcG9uZW50cy9zaGFyZWQvdGhlbWUtY2hvaWNlLWdyb3VwLnRzeCIsW11d

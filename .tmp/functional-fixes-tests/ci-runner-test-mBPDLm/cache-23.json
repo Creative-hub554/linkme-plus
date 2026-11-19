@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "stages": {
+    "mutation-coverage": {
+      "hash": "f77886ee70add9204984c008ef4f46fb05510c1e171197446f523ebee1cbe0a8",
+      "startedHash": "f77886ee70add9204984c008ef4f46fb05510c1e171197446f523ebee1cbe0a8",
+      "pass": true,
+      "summary": "5 coverage gate(s) checked, no survivors",
+      "at": "2026-10-27T04:49:18.207Z"
+    }
+  }
+}

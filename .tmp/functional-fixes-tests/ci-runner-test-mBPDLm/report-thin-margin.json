@@ -1,0 +1,41 @@
+{
+  "gate": "pass",
+  "exitCode": 0,
+  "stages": [
+    {
+      "name": "mutation",
+      "label": "mutation sweep",
+      "pass": true,
+      "summary": "590 mutation(s) checked, no survivors — 1 thin-margin limb(s) — 63 of 114 decision(s) un-struck",
+      "details": [
+        {
+          "mark": "WARN THIN MARGIN",
+          "name": "src/test/convention-guards.ts",
+          "detail": "beat-seam: the step limb stops seeing a callback that was renamed out of it — one case alone notices it: \"catches the frame loop a surface opens beside the carousel\" (src/test/beat-seams.test.ts)"
+        }
+      ],
+      "raw": []
+    }
+  ],
+  "failed": [],
+  "skipped": [],
+  "stoppedEarly": false,
+  "keepGoing": false,
+  "maxFailures": null,
+  "cacheTtlMs": 604800000,
+  "unchanged": [],
+  "reused": [],
+  "expired": [],
+  "excluded": [],
+  "suspects": [],
+  "recorded": "slice",
+  "coverageStamp": null,
+  "annotations": [
+    {
+      "level": "warning",
+      "file": "src/test/convention-guards.ts",
+      "title": "mutation sweep",
+      "message": "beat-seam: the step limb stops seeing a callback that was renamed out of it — one case alone notices it: \"catches the frame loop a surface opens beside the carousel\" (src/test/beat-seams.test.ts)"
+    }
+  ]
+}

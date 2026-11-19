@@ -471,7 +471,7 @@ async function seed() {
   }));
   await db.insert(posts).values(postRows).onConflictDoNothing();
 
-  const mediaRows = planned.flatMap((post, index) => {
+  const mediaRows = planned.flatMap((post, index): { id: string; postId: string; url: string; altText: string; type: "image" | "video"; order: number }[] => {
     if (post.artworkIndex !== undefined) {
       return [
         {
@@ -479,7 +479,7 @@ async function seed() {
           postId: post.id,
           url: artworkUrls.get(post.artworkIndex) as string,
           altText: "Abstract artwork shared with this post",
-          type: "image/jpeg",
+          type: "image",
           order: 0,
         },
       ];
@@ -491,7 +491,7 @@ async function seed() {
           postId: post.id,
           url: videoUrls.get(post.videoIndex) as string,
           altText: "Sample video clip shared with this post",
-          type: "video/mp4",
+          type: "video",
           order: 0,
         },
       ];

@@ -1,0 +1,72 @@
+__vite_ssr_exportName__("ThemeSync", () => { try { return ThemeSync } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useEffect","useRef"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/auth-provider.tsx", {"importedNames":["useAuth"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/components/providers/theme-provider.tsx", {"importedNames":["useTheme"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/src/lib/theme-preferences.ts", {"importedNames":["fetchAccountAppearance","saveAccountAccent"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/src/lib/theme.ts", {"importedNames":["ACCENT_STORAGE_KEY","DEFAULT_ACCENT","appearanceSync","readPreference"]});
+"use client";
+
+
+
+
+
+/**
+* Keeps the accent the member chose and the accent on their profile in step.
+*
+* Renders nothing. It exists because the two halves live in places that cannot
+* see each other: the choice is in the browser (`ThemeProvider`) and the copy
+* that travels is on the account, which only `AuthProvider` knows about — so
+* this is the one component both can be read from, mounted once in the layout.
+*
+* Three jobs, and the first two are the whole feature:
+*
+*   1. **On sign-in, reconcile** — `appearanceSync` decides, and the account
+*      wins. That is what makes the accent follow a member to a machine that has
+*      never seen it, and it is also what seeds the account from the first
+*      device that had a local choice.
+*   2. **On sign-out, let it go.** The stored accent is cleared back to the
+*      default so the next person to sign in on this browser does not inherit
+*      the previous member's choice — and, worse, *publish* it to their own
+*      account on their first visit, which the "no account value yet" branch
+*      would otherwise do. Same reasoning as the notification provider clearing
+*      its inbox on sign-out.
+*   3. Nothing else. The picker writes its own changes (see
+*      `AppearanceSettings`), so there is no need to watch the accent for edits
+*      — watching would also make adopting a value from the account echo back a
+*      write of the value it just adopted.
+*
+* The light/dark choice is deliberately not here: it stays on the device.
+*/
+function ThemeSync() {
+	const { user } = (0,__vite_ssr_import_1__.useAuth)();
+	const { setAccent } = (0,__vite_ssr_import_2__.useTheme)();
+	const userId = user?.id ?? null;
+	const lastUserId = (0,__vite_ssr_import_0__.useRef)(null);
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		if (lastUserId.current && !userId) {
+			setAccent((0,__vite_ssr_import_4__.DEFAULT_ACCENT));
+		};
+		lastUserId.current = userId;
+	}, [userId, setAccent]);
+	(0,__vite_ssr_import_0__.useEffect)(() => {
+		if (!userId) return;
+		let cancelled = false;
+		void (async () => {
+			const appearance = await (0,__vite_ssr_import_3__.fetchAccountAppearance)();
+			// `null` is "could not read" (signed out, offline, the endpoint's own
+			// 503); an empty object is a readable account with nothing stored.
+			if (cancelled || appearance === null) return;
+			const decision = (0,__vite_ssr_import_4__.appearanceSync)((0,__vite_ssr_import_4__.readPreference)((0,__vite_ssr_import_4__.ACCENT_STORAGE_KEY)), appearance.accent);
+			if (decision.action === "adopt") setAccent(decision.accent);
+			else if (decision.action === "publish") void (0,__vite_ssr_import_3__.saveAccountAccent)(decision.accent);
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [userId, setAccent]);
+	return null;
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFOQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBbUNPLFNBQVMsWUFBWTtDQUMxQixNQUFNLEVBQUUsU0FBUyxtQ0FBUTtDQUN6QixNQUFNLEVBQUUsY0FBYyxvQ0FBUztDQUMvQixNQUFNLFNBQVMsTUFBTSxNQUFNO0NBQzNCLE1BQU0sYUFBYSxpQ0FBc0IsSUFBSTtDQUU3QywwQ0FBZ0I7RUFDZCxJQUFJLFdBQVcsV0FBVyxDQUFDLFFBQVE7R0FDakMsYUFBVSxxQ0FBYztFQUMxQjtFQUNBLFdBQVcsVUFBVTtDQUN2QixHQUFHLENBQUMsUUFBUSxTQUFTLENBQUM7Q0FFdEIsMENBQWdCO0VBQ2QsSUFBSSxDQUFDLFFBQVE7RUFDYixJQUFJLFlBQVk7RUFFaEIsTUFBTSxZQUFZO0dBQ2hCLE1BQU0sYUFBYSxNQUFNLGtEQUF1Qjs7O0dBR2hELElBQUksYUFBYSxlQUFlLE1BQU07R0FFdEMsTUFBTSxXQUFXLHlDQUFlLDRDQUFlLHlDQUFrQixHQUFHLFdBQVcsTUFBTTtHQUNyRixJQUFJLFNBQVMsV0FBVyxTQUFTLFVBQVUsU0FBUyxNQUFNO1FBQ3JELElBQUksU0FBUyxXQUFXLFdBQVcsS0FBSyw0Q0FBa0IsU0FBUyxNQUFNO0VBQ2hGLEVBQUMsQ0FBRTtFQUVILGFBQWE7R0FDWCxZQUFZO0VBQ2Q7Q0FDRixHQUFHLENBQUMsUUFBUSxTQUFTLENBQUM7Q0FFdEIsT0FBTztBQUNUIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJ0aGVtZS1zeW5jLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcblxuaW1wb3J0IHsgdXNlRWZmZWN0LCB1c2VSZWYgfSBmcm9tIFwicmVhY3RcIjtcbmltcG9ydCB7IHVzZUF1dGggfSBmcm9tIFwiQC9jb21wb25lbnRzL2F1dGgtcHJvdmlkZXJcIjtcbmltcG9ydCB7IHVzZVRoZW1lIH0gZnJvbSBcIkAvY29tcG9uZW50cy9wcm92aWRlcnMvdGhlbWUtcHJvdmlkZXJcIjtcbmltcG9ydCB7IGZldGNoQWNjb3VudEFwcGVhcmFuY2UsIHNhdmVBY2NvdW50QWNjZW50IH0gZnJvbSBcIkAvbGliL3RoZW1lLXByZWZlcmVuY2VzXCI7XG5pbXBvcnQgeyBBQ0NFTlRfU1RPUkFHRV9LRVksIERFRkFVTFRfQUNDRU5ULCBhcHBlYXJhbmNlU3luYywgcmVhZFByZWZlcmVuY2UgfSBmcm9tIFwiQC9saWIvdGhlbWVcIjtcblxuLyoqXG4gKiBLZWVwcyB0aGUgYWNjZW50IHRoZSBtZW1iZXIgY2hvc2UgYW5kIHRoZSBhY2NlbnQgb24gdGhlaXIgcHJvZmlsZSBpbiBzdGVwLlxuICpcbiAqIFJlbmRlcnMgbm90aGluZy4gSXQgZXhpc3RzIGJlY2F1c2UgdGhlIHR3byBoYWx2ZXMgbGl2ZSBpbiBwbGFjZXMgdGhhdCBjYW5ub3RcbiAqIHNlZSBlYWNoIG90aGVyOiB0aGUgY2hvaWNlIGlzIGluIHRoZSBicm93c2VyIChgVGhlbWVQcm92aWRlcmApIGFuZCB0aGUgY29weVxuICogdGhhdCB0cmF2ZWxzIGlzIG9uIHRoZSBhY2NvdW50LCB3aGljaCBvbmx5IGBBdXRoUHJvdmlkZXJgIGtub3dzIGFib3V0IOKAlCBzb1xuICogdGhpcyBpcyB0aGUgb25lIGNvbXBvbmVudCBib3RoIGNhbiBiZSByZWFkIGZyb20sIG1vdW50ZWQgb25jZSBpbiB0aGUgbGF5b3V0LlxuICpcbiAqIFRocmVlIGpvYnMsIGFuZCB0aGUgZmlyc3QgdHdvIGFyZSB0aGUgd2hvbGUgZmVhdHVyZTpcbiAqXG4gKiAgIDEuICoqT24gc2lnbi1pbiwgcmVjb25jaWxlKiog4oCUIGBhcHBlYXJhbmNlU3luY2AgZGVjaWRlcywgYW5kIHRoZSBhY2NvdW50XG4gKiAgICAgIHdpbnMuIFRoYXQgaXMgd2hhdCBtYWtlcyB0aGUgYWNjZW50IGZvbGxvdyBhIG1lbWJlciB0byBhIG1hY2hpbmUgdGhhdCBoYXNcbiAqICAgICAgbmV2ZXIgc2VlbiBpdCwgYW5kIGl0IGlzIGFsc28gd2hhdCBzZWVkcyB0aGUgYWNjb3VudCBmcm9tIHRoZSBmaXJzdFxuICogICAgICBkZXZpY2UgdGhhdCBoYWQgYSBsb2NhbCBjaG9pY2UuXG4gKiAgIDIuICoqT24gc2lnbi1vdXQsIGxldCBpdCBnby4qKiBUaGUgc3RvcmVkIGFjY2VudCBpcyBjbGVhcmVkIGJhY2sgdG8gdGhlXG4gKiAgICAgIGRlZmF1bHQgc28gdGhlIG5leHQgcGVyc29uIHRvIHNpZ24gaW4gb24gdGhpcyBicm93c2VyIGRvZXMgbm90IGluaGVyaXRcbiAqICAgICAgdGhlIHByZXZpb3VzIG1lbWJlcidzIGNob2ljZSDigJQgYW5kLCB3b3JzZSwgKnB1Ymxpc2gqIGl0IHRvIHRoZWlyIG93blxuICogICAgICBhY2NvdW50IG9uIHRoZWlyIGZpcnN0IHZpc2l0LCB3aGljaCB0aGUgXCJubyBhY2NvdW50IHZhbHVlIHlldFwiIGJyYW5jaFxuICogICAgICB3b3VsZCBvdGhlcndpc2UgZG8uIFNhbWUgcmVhc29uaW5nIGFzIHRoZSBub3RpZmljYXRpb24gcHJvdmlkZXIgY2xlYXJpbmdcbiAqICAgICAgaXRzIGluYm94IG9uIHNpZ24tb3V0LlxuICogICAzLiBOb3RoaW5nIGVsc2UuIFRoZSBwaWNrZXIgd3JpdGVzIGl0cyBvd24gY2hhbmdlcyAoc2VlXG4gKiAgICAgIGBBcHBlYXJhbmNlU2V0dGluZ3NgKSwgc28gdGhlcmUgaXMgbm8gbmVlZCB0byB3YXRjaCB0aGUgYWNjZW50IGZvciBlZGl0c1xuICogICAgICDigJQgd2F0Y2hpbmcgd291bGQgYWxzbyBtYWtlIGFkb3B0aW5nIGEgdmFsdWUgZnJvbSB0aGUgYWNjb3VudCBlY2hvIGJhY2sgYVxuICogICAgICB3cml0ZSBvZiB0aGUgdmFsdWUgaXQganVzdCBhZG9wdGVkLlxuICpcbiAqIFRoZSBsaWdodC9kYXJrIGNob2ljZSBpcyBkZWxpYmVyYXRlbHkgbm90IGhlcmU6IGl0IHN0YXlzIG9uIHRoZSBkZXZpY2UuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiBUaGVtZVN5bmMoKSB7XG4gIGNvbnN0IHsgdXNlciB9ID0gdXNlQXV0aCgpO1xuICBjb25zdCB7IHNldEFjY2VudCB9ID0gdXNlVGhlbWUoKTtcbiAgY29uc3QgdXNlcklkID0gdXNlcj8uaWQgPz8gbnVsbDtcbiAgY29uc3QgbGFzdFVzZXJJZCA9IHVzZVJlZjxzdHJpbmcgfCBudWxsPihudWxsKTtcblxuICB1c2VFZmZlY3QoKCkgPT4ge1xuICAgIGlmIChsYXN0VXNlcklkLmN1cnJlbnQgJiYgIXVzZXJJZCkge1xuICAgICAgc2V0QWNjZW50KERFRkFVTFRfQUNDRU5UKTtcbiAgICB9XG4gICAgbGFzdFVzZXJJZC5jdXJyZW50ID0gdXNlcklkO1xuICB9LCBbdXNlcklkLCBzZXRBY2NlbnRdKTtcblxuICB1c2VFZmZlY3QoKCkgPT4ge1xuICAgIGlmICghdXNlcklkKSByZXR1cm47XG4gICAgbGV0IGNhbmNlbGxlZCA9IGZhbHNlO1xuXG4gICAgdm9pZCAoYXN5bmMgKCkgPT4ge1xuICAgICAgY29uc3QgYXBwZWFyYW5jZSA9IGF3YWl0IGZldGNoQWNjb3VudEFwcGVhcmFuY2UoKTtcbiAgICAgIC8vIGBudWxsYCBpcyBcImNvdWxkIG5vdCByZWFkXCIgKHNpZ25lZCBvdXQsIG9mZmxpbmUsIHRoZSBlbmRwb2ludCdzIG93blxuICAgICAgLy8gNTAzKTsgYW4gZW1wdHkgb2JqZWN0IGlzIGEgcmVhZGFibGUgYWNjb3VudCB3aXRoIG5vdGhpbmcgc3RvcmVkLlxuICAgICAgaWYgKGNhbmNlbGxlZCB8fCBhcHBlYXJhbmNlID09PSBudWxsKSByZXR1cm47XG5cbiAgICAgIGNvbnN0IGRlY2lzaW9uID0gYXBwZWFyYW5jZVN5bmMocmVhZFByZWZlcmVuY2UoQUNDRU5UX1NUT1JBR0VfS0VZKSwgYXBwZWFyYW5jZS5hY2NlbnQpO1xuICAgICAgaWYgKGRlY2lzaW9uLmFjdGlvbiA9PT0gXCJhZG9wdFwiKSBzZXRBY2NlbnQoZGVjaXNpb24uYWNjZW50KTtcbiAgICAgIGVsc2UgaWYgKGRlY2lzaW9uLmFjdGlvbiA9PT0gXCJwdWJsaXNoXCIpIHZvaWQgc2F2ZUFjY291bnRBY2NlbnQoZGVjaXNpb24uYWNjZW50KTtcbiAgICB9KSgpO1xuXG4gICAgcmV0dXJuICgpID0+IHtcbiAgICAgIGNhbmNlbGxlZCA9IHRydWU7XG4gICAgfTtcbiAgfSwgW3VzZXJJZCwgc2V0QWNjZW50XSk7XG5cbiAgcmV0dXJuIG51bGw7XG59XG4iXSwiZmlsZSI6IkM6XFxXb3Jrc3BhY2VcXFdlYnNpdGVidWlsZGVydG9vbHNhaVxcUG9zdEJhc2UtcHJvamVjdFxcc3JjXFxjb21wb25lbnRzXFxwcm92aWRlcnNcXHRoZW1lLXN5bmMudHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9wcm92aWRlcnMvdGhlbWUtc3luYy50c3giLCJDOlxcV29ya3NwYWNlXFxXZWJzaXRlYnVpbGRlcnRvb2xzYWlcXFBvc3RCYXNlLXByb2plY3RcXHNyY1xcY29tcG9uZW50c1xccHJvdmlkZXJzXFx0aGVtZS1zeW5jLnRzeCIsW11d

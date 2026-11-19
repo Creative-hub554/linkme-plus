@@ -9,8 +9,7 @@ process.env.R2_PUBLIC_URL = "https://test.r2.dev";
 // environment it asked for (`// @vitest-environment jsdom` at the top of the
 // file), and the pure tests must not be handed browser globals they cannot use.
 //
-// Tests that mount components opt themselves into jsdom. That is the whole of
-// the setup they need beyond these two shims:
+// Tests that mount components opt themselves into jsdom.
 if (typeof window !== "undefined") {
   // React's `act()` refuses to run — and warns — unless it is told it is in a
   // test environment.
@@ -35,6 +34,21 @@ if (typeof window !== "undefined") {
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = function scrollIntoView() {};
   }
+
+  // Motion uses intersection observers for viewport animations. jsdom has no
+  // layout, so observe without synthesizing any viewport changes.
+  if (!globalThis.IntersectionObserver) {
+    class IntersectionObserverStub {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() { return []; }
+    }
+    (globalThis as { IntersectionObserver: unknown }).IntersectionObserver = IntersectionObserverStub;
+  }
+  // jsdom cannot play media. Preserve the browser's promise-returning play API.
+  HTMLMediaElement.prototype.play = () => Promise.resolve();
+  HTMLMediaElement.prototype.pause = () => {};
 
   // jsdom 30 has the `PointerEvent` type but none of pointer capture, and a
   // Radix select calls `target.hasPointerCapture(...)` the moment it is pressed

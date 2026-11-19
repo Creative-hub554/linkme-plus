@@ -96,39 +96,23 @@ export function FileUpload({
   };
 
   const uploadFile = async (uploadFile: UploadFile): Promise<{ url: string; key: string }> => {
-    // Step 1: Get presigned URL
-    const response = await fetch("/api/uploads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: uploadFile.file.name,
-        contentType: uploadFile.file.type,
-        purpose,
-        size: uploadFile.file.size,
-      }),
-    });
+    // The server receives the bytes, so it can enforce the type and size limits
+    // this component only describes. Nothing about the file is declared by the
+    // browser beyond the request that carries it.
+    const body = new FormData();
+    body.append("file", uploadFile.file);
+    body.append("purpose", purpose);
 
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Failed to get upload URL");
+    const response = await fetch("/api/uploads", { method: "POST", body });
+    const data = (await response.json().catch(() => null)) as
+      | { url?: string; key?: string; error?: string }
+      | null;
+
+    if (!response.ok || !data?.url || !data.key) {
+      throw new Error(data?.error || "Failed to upload file");
     }
 
-    const { uploadUrl, key, publicUrl } = await response.json();
-
-    // Step 2: Upload to R2
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      body: uploadFile.file,
-      headers: {
-        "Content-Type": uploadFile.file.type,
-      },
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error("Failed to upload file");
-    }
-
-    return { url: publicUrl, key };
+    return { url: data.url, key: data.key };
   };
 
   const uploadAll = async () => {
@@ -197,7 +181,7 @@ export function FileUpload({
           {purpose === "cover" && "JPG, PNG, WebP. Max 10MB. 1200x480 recommended."}
           {purpose === "cover-video" && "MP4, WebM. Max 100MB. 6-10 seconds."}
           {purpose === "post" && "JPG, PNG, GIF, WebP, MP4, WebM. Max 10MB images, 100MB video."}
-          {purpose === "listing" && "JPG, PNG, WebP. Max 10MB. Up to 10 images."}
+          {purpose === "listing" && "JPG, PNG, WebP, MP4, WebM. Max 10MB images, 100MB video."}
           {purpose === "document" && "PDF. Max 20MB."}
         </p>
         <input

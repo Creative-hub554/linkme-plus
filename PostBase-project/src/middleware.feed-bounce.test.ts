@@ -1,3 +1,4 @@
+vi.mock("@/lib/account-restrictions", () => ({ isRestrictedAccount: async () => false }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { mainNavItems } from "@/lib/nav-items";

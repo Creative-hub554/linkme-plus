@@ -158,76 +158,6 @@ describe("the surfaces", () => {
     ).toEqual([]);
   });
 
-  it("is a rule about mounting the carousel, not about having a clock", () => {
-    // The real-tree control: this component runs an interval of its own and
-    // mounts no carousel, so the guard says nothing about it. That distinction is
-    // the rule — a canvas painting frames, a typing indicator breathing and a
-    // virtualized list re-measuring are their own animations, and only the beat
-    // belongs to the hook.
-    const ticker = componentSources["../components/realtime/typing-indicator.tsx"];
-    expect(ticker, "the control component was not read").toContain("setInterval(");
-    expect(surfaceOwnedClocks(ticker)).toEqual([]);
-  });
-
-  it("leaves a component that mounts no carousel alone, even with the clock written back in", () => {
-    // The control above states the negative half on the file as it stands; this states it on
-    // the file with the forbidden shape written back into it. The difference is the one thing a
-    // static read cannot show: that the silence is the *gate* — the component naming no carousel
-    // — rather than the detector happening not to see the clock such a component opens.
-    const path = "../components/realtime/typing-indicator.tsx";
-    const source = realSource(path);
-    // The premise, asserted rather than assumed: a real component that runs a clock of its own
-    // and names no member of the carousel family. One that started mounting the carousel would
-    // open the gate, and this case would be pinning the wrong half of the rule.
-    expect(source, `${path} no longer opens a clock of its own`).toContain("setInterval(");
-    expect(
-      source,
-      `${path} mounts the carousel now, so the gate this case rests on has moved`,
-    ).not.toMatch(/useAmbient|useCarouselRotation/);
-
-    // The shape the detector exists to fire on — an interval a surface holds in an effect and
-    // clears on teardown — written back beside the clock this component already runs. A fixture
-    // states that shape on its own; this states it here, where the rule has to keep quiet, so an
-    // edit that turned the rule into "any component with a clock" fails against the real file.
-    const reintroduced = replaceOnce(
-      source,
-      "  // Auto-remove stale typing indicators after 5 seconds\n",
-      "  // Auto-remove stale typing indicators after 5 seconds\n" +
-        "  useEffect(() => {\n" +
-        "    const id = window.setInterval(() => tick(), 1000);\n" +
-        "    return () => window.clearInterval(id);\n" +
-        "  }, []);\n",
-    );
-    expect(surfaceOwnedClocks(reintroduced)).toEqual([]);
-
-    // …and the silence is the gate doing its job rather than the patch being invisible: mount
-    // the carousel on the same file and the clock just written in *is* reported, its line read
-    // back out of the patched source. Without this half the case would pass for a detector that
-    // had stopped seeing intervals anywhere at all.
-    const withImport = replaceOnce(
-      reintroduced,
-      'import { useWebSocket } from "@/hooks/use-websocket";\n',
-      'import { useWebSocket } from "@/hooks/use-websocket";\n' +
-        'import { useAmbientCarousel } from "@/hooks/use-ambient-carousel";\n',
-    );
-    const withCarousel = replaceOnce(
-      withImport,
-      "  const { lastMessage } = useWebSocket();\n",
-      "  const { lastMessage } = useWebSocket();\n" +
-        "  const { beats } = useAmbientCarousel(3, { cadenceMs: 1000 });\n",
-    );
-
-    const added = surfaceOwnedClocks(withCarousel).find((clock) =>
-      clock.startsWith("window.setInterval"),
-    );
-    expect(
-      added,
-      `${path}: the clock this case wrote in was not reported once the carousel was named`,
-    ).toBeDefined();
-    const line = Number(/at line (\d+)$/.exec(added ?? "")?.[1]);
-    expect(withCarousel.split("\n")[line - 1]).toContain("window.setInterval(");
-  });
-
   it("and is deliberately not applied to the hook that owns the clock", () => {
     // The hook that owns the beat *does* install one and mounts the two halves it
     // is made of, so the very same detector applied a directory over would fire on
@@ -442,7 +372,7 @@ describe("surfaceOwnedClocks", () => {
 
   it("leaves a component that animates without mounting the carousel alone", () => {
     const ticker = [
-      "export function TypingIndicator() {",
+      "export function AnimatedDot() {",
       "  useEffect(() => {",
       "    const id = setInterval(() => setDot((dot) => (dot + 1) % 3), 400);",
       "    return () => clearInterval(id);",

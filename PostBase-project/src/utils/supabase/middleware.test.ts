@@ -1,10 +1,15 @@
+const { isRestrictedAccount } = vi.hoisted(() => ({
+  isRestrictedAccount: vi.fn(async (_userId: string) => false),
+}));
+vi.mock("@/lib/account-restrictions", () => ({ isRestrictedAccount }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 /**
  * `updateSession` runs on every non-static request. It refreshes the Supabase
- * session and gates five protected paths, redirecting a signed-out reader to
- * `/login` while leaving everything else — and every signed-in reader — alone.
+ * session and gates every member-only path, redirecting a signed-out reader to
+ * `/login`, a restricted member to `/account-restricted`, and leaving everyone
+ * else alone.
  *
  * Supabase is mocked so `getUser` can answer both ways; `NextRequest` and
  * `NextResponse` are the real ones, because the point is the response this
@@ -35,6 +40,8 @@ beforeEach(() => {
   getUser.mockClear();
   getUser.mockResolvedValue({ data: { user: null } });
   createServerClient.mockClear();
+  isRestrictedAccount.mockClear();
+  isRestrictedAccount.mockResolvedValue(false);
 });
 
 function request(path: string) {
@@ -49,10 +56,19 @@ describe("updateSession", () => {
   });
 
   it("redirects a signed-out reader away from each protected path", async () => {
-    for (const path of ["/feed", "/profile", "/settings", "/messages", "/cover-studio"]) {
+    for (const path of ["/feed", "/profile", "/settings", "/messages", "/cover-studio", "/marketplace/saved", "/marketplace/new", "/marketplace/inventory", "/jobs/new", "/jobs/manage", "/advertising", "/admin"]) {
       const response = await updateSession(request(path));
       expect(response.headers.get("location"), `${path} should redirect`).toBe("http://localhost/login");
     }
+  });
+
+  it("sends a restricted member to the account-restricted notice, cookies intact", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "restricted-1" } } });
+    isRestrictedAccount.mockResolvedValue(true);
+    const response = await updateSession(request("/feed?tab=foryou"));
+    expect(isRestrictedAccount).toHaveBeenCalledWith("restricted-1");
+    expect(response.headers.get("location")).toBe("http://localhost/account-restricted");
+    expect(response.cookies.get("sb-token")?.value).toBe("refreshed");
   });
 
   it("lets a signed-in reader into a protected path", async () => {

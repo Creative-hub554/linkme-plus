@@ -31,6 +31,7 @@ interface PagePostMedia {
 }
 
 interface PagePost {
+  topicId?: string | null;
   id: string;
   content?: string | null;
   createdAt: string;
@@ -281,6 +282,7 @@ export default function PageView() {
               );
               return (
                 <PostCard
+                  topicId={post.topicId}
                   key={post.id}
                   id={post.id}
                   // The Page is the author a reader sees. The member who pressed

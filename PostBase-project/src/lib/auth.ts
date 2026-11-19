@@ -1,16 +1,19 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+import { isRestrictedAccount } from "@/lib/account-restrictions";
 
 export async function getSession() {
   const supabase = await createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user || await isRestrictedAccount(user.id)) return null;
   const { data: { session } } = await supabase.auth.getSession();
-  return session;
+  return session?.user.id === user.id ? session : null;
 }
 
 export async function getUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  return user && !(await isRestrictedAccount(user.id)) ? user : null;
 }
 
 export async function requireAuth(_request?: Request) {

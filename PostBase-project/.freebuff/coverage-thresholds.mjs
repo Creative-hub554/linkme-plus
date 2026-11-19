@@ -25,9 +25,9 @@
  * per-directory numbers set from a much weaker tree) was decorative next to the
  * numbers the report now prints every run, so the slack at both ends was closed
  * against them. `src/hooks/**` and `src/utils/**` were the last two rows with no
- * slack left, so the files that capped them — `src/hooks/use-presence.ts` and
- * `src/hooks/use-websocket.ts` in the hooks, the browser Supabase factory in the
- * utils — were covered, and both rows moved with them.
+ * slack left, so the files that capped them — the realtime hooks (since removed
+ * with that layer) and the browser Supabase factory in the utils — were covered,
+ * and both rows moved with them.
  *
  * They were re-based *downward* on 2026-10-05, deliberately and in the same
  * shape: the first hosted-CI run of `test:coverage` read the tree at

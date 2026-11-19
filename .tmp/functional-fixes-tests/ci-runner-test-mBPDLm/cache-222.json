@@ -1,0 +1,19 @@
+{
+  "version": 3,
+  "stages": {
+    "preflight": {
+      "hash": "c06c2f700b02b8d7f520d32c172c5ebb4b06d2e1f266340b44a5d6b50beb4b23",
+      "startedHash": "c06c2f700b02b8d7f520d32c172c5ebb4b06d2e1f266340b44a5d6b50beb4b23",
+      "pass": true,
+      "summary": "1 check(s), 0 warning(s)",
+      "at": "2026-10-27T04:52:53.314Z"
+    },
+    "mutation": {
+      "hash": "6f5edeb1aed0baa934471a350fc2b5555c330c009b303b73fc327356db02b740",
+      "startedHash": "6f5edeb1aed0baa934471a350fc2b5555c330c009b303b73fc327356db02b740",
+      "pass": true,
+      "summary": "1 mutation(s) checked, no survivors",
+      "at": "2026-10-27T04:52:54.191Z"
+    }
+  }
+}

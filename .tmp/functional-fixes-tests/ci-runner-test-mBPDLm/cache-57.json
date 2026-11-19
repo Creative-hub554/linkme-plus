@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "stages": {
+    "test": {
+      "hash": "186750753d7effaef90408103c1c629e0f7da0c7f1a92d106247edc576a2e3a4",
+      "startedHash": "186750753d7effaef90408103c1c629e0f7da0c7f1a92d106247edc576a2e3a4",
+      "pass": true,
+      "summary": "1 test(s) passed in 1 file(s)",
+      "at": "2026-10-27T04:50:22.764Z"
+    },
+    "preflight": {
+      "hash": "29352ea859e9a37c7b507871aff9b660ba51af33595d14fddb0443b99a924188",
+      "startedHash": "29352ea859e9a37c7b507871aff9b660ba51af33595d14fddb0443b99a924188",
+      "pass": true,
+      "summary": "1 check(s), 0 warning(s)",
+      "at": "2026-10-27T04:50:23.192Z"
+    },
+    "drift": {
+      "hash": "ffffd8f9ef328631441a1e6c53743ce9eaf50b42d0ec49edee7ac81d4aca5917",
+      "startedHash": "ffffd8f9ef328631441a1e6c53743ce9eaf50b42d0ec49edee7ac81d4aca5917",
+      "pass": true,
+      "summary": "7 gate file(s) pinned, all match",
+      "at": "2026-10-27T04:50:24.023Z"
+    },
+    "mutation-example": {
+      "hash": "e39abba5da49a610467004ac041699559a44ec1f32c02e6a2550f171c1be7197",
+      "startedHash": "e39abba5da49a610467004ac041699559a44ec1f32c02e6a2550f171c1be7197",
+      "pass": true,
+      "summary": "1 demonstration stamp(s) checked, no survivors",
+      "at": "2026-10-27T04:50:24.975Z"
+    },
+    "mutation-fifth": {
+      "hash": "f6d8c11e399fdcb67ca47670f4202c612bc1f4c2b51423cf6a6f58c03cc1eeb3",
+      "startedHash": "f6d8c11e399fdcb67ca47670f4202c612bc1f4c2b51423cf6a6f58c03cc1eeb3",
+      "pass": true,
+      "summary": "1 demonstration stamp(s) checked, no survivors",
+      "at": "2026-10-27T04:50:25.646Z"
+    },
+    "mutation-coverage": {
+      "hash": "1279211ac3c800454436a09860ca873bd27e0c2f76aa25d943f06061778ac837",
+      "startedHash": "1279211ac3c800454436a09860ca873bd27e0c2f76aa25d943f06061778ac837",
+      "pass": true,
+      "summary": "5 coverage gate(s) checked, no survivors",
+      "at": "2026-10-27T04:50:26.406Z"
+    },
+    "mutation-preflight": {
+      "hash": "8969b2cb9918bce6e7e9537cf141d58952bbd10f36650ce67ce26bc231c07e5d",
+      "startedHash": "8969b2cb9918bce6e7e9537cf141d58952bbd10f36650ce67ce26bc231c07e5d",
+      "pass": true,
+      "summary": "19 preflight mutation(s) checked, no survivors",
+      "at": "2026-10-27T04:50:27.080Z"
+    },
+    "mutation": {
+      "hash": "a4e3abd7d803681656936a5920594f4a8408a91be4fa12837af655b862ddf9b5",
+      "startedHash": "a4e3abd7d803681656936a5920594f4a8408a91be4fa12837af655b862ddf9b5",
+      "pass": true,
+      "summary": "1 mutation(s) checked, no survivors",
+      "at": "2026-10-27T04:50:28.187Z"
+    }
+  }
+}

@@ -49,6 +49,10 @@ const tabs = [
   // step of setting up a profile, so it is a section of one. Ahead of "More",
   // which stays the catch-all at the end of the row.
   { id: "cover", label: "Cover studio" },
+  // The theme studio, one slot over from Cover studio: the cover is what the
+  // profile looks like at the top, the theme is what it reads like beneath it.
+  // Still ahead of "More", which stays the catch-all at the end of the row.
+  { id: "theme", label: "Theme studio" },
   { id: "more", label: "More" },
 ] as const;
 

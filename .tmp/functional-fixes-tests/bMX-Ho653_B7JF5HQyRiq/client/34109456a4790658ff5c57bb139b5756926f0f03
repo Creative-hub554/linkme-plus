@@ -1,0 +1,35 @@
+__vite_ssr_exportName__("AudienceIcon", () => { try { return AudienceIcon } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Earth","Lock","Users","UserRoundCheck"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/social/audience-icon.tsx";
+
+/**
+* The one audience→icon map. The picker and the post card's pill both draw from
+* it, so an audience cannot end up with one symbol in the menu and another on
+* the post.
+*
+* Keyed by {@link PostAudience}, so a new audience is a compile error here until
+* somebody picks a symbol for it.
+*/
+const audienceIcons = {
+	public: __vite_ssr_import_0__.Earth,
+	followers: __vite_ssr_import_0__.Users,
+	private: __vite_ssr_import_0__.Lock,
+	// A different symbol from `followers`, which is the point: a post in a group
+	// and a post for your followers are told apart at a glance on the card.
+	group: __vite_ssr_import_0__.UserRoundCheck
+};
+function AudienceIcon({ audience, className }) {
+	const Icon = audienceIcons[audience];
+	return /* @__PURE__ */ (0,__vite_ssr_import_1__.jsxDEV)(Icon, { className }, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 31,
+		columnNumber: 10
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBOztBQUZBOzs7Ozs7Ozs7Ozs7QUFhQSxNQUFNLGdCQUFvRDtDQUN4RCxRQUFRO0NBQ1IsV0FBVztDQUNYLFNBQVM7OztDQUdULE9BQU87QUFDVDtBQUVPLFNBQVMsYUFBYSxFQUMzQixVQUNBLGFBSUM7Q0FDRCxNQUFNLE9BQU8sY0FBYztDQUMzQixPQUFPLGlEQUFDLE1BQUQsRUFBaUIsVUFBWTs7Ozs7QUFDdEMiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbImF1ZGllbmNlLWljb24udHN4Il0sInNvdXJjZXNDb250ZW50IjpbIlwidXNlIGNsaWVudFwiO1xuXG5pbXBvcnQgeyBFYXJ0aCwgTG9jaywgVXNlcnMsIFVzZXJSb3VuZENoZWNrIH0gZnJvbSBcImx1Y2lkZS1yZWFjdFwiO1xuaW1wb3J0IHR5cGUgeyBQb3N0QXVkaWVuY2UgfSBmcm9tIFwiQC9saWIvcG9zdC1hdWRpZW5jZXNcIjtcblxuLyoqXG4gKiBUaGUgb25lIGF1ZGllbmNl4oaSaWNvbiBtYXAuIFRoZSBwaWNrZXIgYW5kIHRoZSBwb3N0IGNhcmQncyBwaWxsIGJvdGggZHJhdyBmcm9tXG4gKiBpdCwgc28gYW4gYXVkaWVuY2UgY2Fubm90IGVuZCB1cCB3aXRoIG9uZSBzeW1ib2wgaW4gdGhlIG1lbnUgYW5kIGFub3RoZXIgb25cbiAqIHRoZSBwb3N0LlxuICpcbiAqIEtleWVkIGJ5IHtAbGluayBQb3N0QXVkaWVuY2V9LCBzbyBhIG5ldyBhdWRpZW5jZSBpcyBhIGNvbXBpbGUgZXJyb3IgaGVyZSB1bnRpbFxuICogc29tZWJvZHkgcGlja3MgYSBzeW1ib2wgZm9yIGl0LlxuICovXG5jb25zdCBhdWRpZW5jZUljb25zOiBSZWNvcmQ8UG9zdEF1ZGllbmNlLCB0eXBlb2YgRWFydGg+ID0ge1xuICBwdWJsaWM6IEVhcnRoLFxuICBmb2xsb3dlcnM6IFVzZXJzLFxuICBwcml2YXRlOiBMb2NrLFxuICAvLyBBIGRpZmZlcmVudCBzeW1ib2wgZnJvbSBgZm9sbG93ZXJzYCwgd2hpY2ggaXMgdGhlIHBvaW50OiBhIHBvc3QgaW4gYSBncm91cFxuICAvLyBhbmQgYSBwb3N0IGZvciB5b3VyIGZvbGxvd2VycyBhcmUgdG9sZCBhcGFydCBhdCBhIGdsYW5jZSBvbiB0aGUgY2FyZC5cbiAgZ3JvdXA6IFVzZXJSb3VuZENoZWNrLFxufTtcblxuZXhwb3J0IGZ1bmN0aW9uIEF1ZGllbmNlSWNvbih7XG4gIGF1ZGllbmNlLFxuICBjbGFzc05hbWUsXG59OiB7XG4gIGF1ZGllbmNlOiBQb3N0QXVkaWVuY2U7XG4gIGNsYXNzTmFtZT86IHN0cmluZztcbn0pIHtcbiAgY29uc3QgSWNvbiA9IGF1ZGllbmNlSWNvbnNbYXVkaWVuY2VdO1xuICByZXR1cm4gPEljb24gY2xhc3NOYW1lPXtjbGFzc05hbWV9IC8+O1xufVxuIl0sImZpbGUiOiIvc3JjL2NvbXBvbmVudHMvc29jaWFsL2F1ZGllbmNlLWljb24udHN4In0=
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zb2NpYWwvYXVkaWVuY2UtaWNvbi50c3giLCIvc3JjL2NvbXBvbmVudHMvc29jaWFsL2F1ZGllbmNlLWljb24udHN4IixbXV0=

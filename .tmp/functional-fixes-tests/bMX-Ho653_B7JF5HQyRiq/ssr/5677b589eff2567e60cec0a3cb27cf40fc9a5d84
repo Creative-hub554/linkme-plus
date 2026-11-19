@@ -1,0 +1,122 @@
+__vite_ssr_exportName__("SceneStrip", () => { try { return SceneStrip } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useRef"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/shared/scene-strip.tsx";
+
+/**
+* Where an arrow key walks to, wrapping at both ends — or `null` for a key the
+* strip does not answer, which is what keeps Tab, Enter and Space out of this.
+*
+* `from` is the dot the key was pressed on rather than the one showing, because
+* those two come apart: the carousel advances on its own, and a viewer who is
+* standing on a dot with the clock running should move from *their* dot, not from
+* wherever the rotation has got to.
+*/
+function nextSceneIndex(key, from, count) {
+	switch (key) {
+		case "ArrowRight": return (from + 1) % count;
+		case "ArrowLeft": return (from - 1 + count) % count;
+		case "Home": return 0;
+		case "End": return count - 1;
+		default: return null;
+	}
+}
+/**
+* A row of dots that picks which item a carousel is showing.
+*
+* It is drawn as colour alone — a filled dot against outlined ones — which is a
+* perfectly clear signal to anyone looking at the screen and no signal at all to
+* anyone who is not, the shape the WCAG "use of colour" rule warns about. The
+* two attributes that turn it into words are the whole reason this is one
+* component rather than a copied block:
+*
+* - `role="group"` with the `aria-label`: on a plain `div` an `aria-label` is
+*   ignored — it needs the role to have anything to attach to — which is how
+*   both of these strips once had no name at all.
+* - `aria-current` on the dot that is showing, which is the other half: the
+*   chosen scene is otherwise told apart by its colour.
+*
+* **The keyboard, then.** The dots are one control and not three: exactly one of
+* them is in the tab order, and it is the one showing, so tabbing into the strip
+* lands on the item a viewer would be looking at rather than on a fixed first
+* dot. Left and Right walk the selection from there and wrap at the ends, Home
+* and End jump to them, and each keystroke shows the scene it lands on — the same
+* thing a click does, because a pick that moved focus without picking would leave
+* a keyboard user selecting nothing. The strip is left as `role="group"` marked
+* with `aria-current` rather than re-roled into a tablist or a radiogroup: those
+* are the roles whose arrow keys a reader is told to expect, and adopting one is
+* a decision about what these dots *are* (tabs need panels, radios are chosen
+* rather than shown) that this component is not the place to make. What it does
+* instead is give the group the keyboard behaviour of one control and say so
+* here.
+*
+* The stop is the fourth thing it does not restate: `onSelect` is the `select` of
+* `@/hooks/use-ambient-carousel`, so a pick shows the item *and* takes the motion
+* away from the clock — whichever input reached it, click or arrow key — and no
+* caller writes that pairing itself.
+*
+* What stays with the caller is what is actually the caller's: the words
+* (`label`, `labelFor`), the two class recipes that make one strip a progress
+* bar on a card and the other a row of scene dots on glass, and everything
+* around the strip. `count` is passed rather than derived from a list because
+* the strip has no business knowing what the dots stand for.
+*/
+function SceneStrip({ label, count, selected, labelFor, onSelect, trackClassName, fillClassName, className }) {
+	const strip = (0,__vite_ssr_import_0__.useRef)(null);
+	function onKeyDown(event) {
+		const dots = Array.from(strip.current?.querySelectorAll("button") ?? []);
+		// The dot the key was pressed on, which is the dot that has the focus; a key
+		// that somehow arrives from elsewhere moves from the item showing instead.
+		const from = dots.indexOf(event.target);
+		const next = nextSceneIndex(event.key, from === -1 ? selected : from, count);
+		// Nothing else is this strip's to take: an unhandled key leaves Tab to move
+		// the focus on and Enter and Space to the button itself.
+		if (next === null) return;
+		event.preventDefault();
+		onSelect(next);
+		// The re-render moves the tab stop; the focus has to be moved by hand, or it
+		// would stay on the dot the viewer just walked away from.
+		dots[next]?.focus();
+	}
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("div", {
+		ref: strip,
+		role: "group",
+		"aria-label": label,
+		onKeyDown,
+		className: (0,__vite_ssr_import_1__.cn)("flex gap-1.5 px-1", className),
+		children: Array.from({ length: count }, (_, index) => {
+			const state = index === selected ? "selected" : index < selected ? "seen" : "upcoming";
+			return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("button", {
+				type: "button",
+				// One dot is tabbable and the rest are reachable with the arrow keys —
+				// see the note above on why the strip is one control rather than three.
+				tabIndex: index === selected ? 0 : -1,
+				"aria-label": labelFor(index),
+				"aria-current": index === selected ? "true" : undefined,
+				onClick: () => onSelect(index),
+				className: (0,__vite_ssr_import_1__.cn)("flex-1 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2", trackClassName),
+				children: /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("span", { className: (0,__vite_ssr_import_1__.cn)("block h-full rounded-full", fillClassName(state)) }, void 0, false, {
+					fileName: _jsxFileName,
+					lineNumber: 161,
+					columnNumber: 13
+				}, this)
+			}, index, false, {
+				fileName: _jsxFileName,
+				lineNumber: 147,
+				columnNumber: 11
+			}, this);
+		})
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 136,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7O0FBSEE7Ozs7Ozs7Ozs7Ozs7O0FBa0RBLFNBQVMsZUFBZSxLQUFhLE1BQWMsT0FBOEI7Q0FDL0UsUUFBUSxLQUFSO0VBQ0UsS0FBSyxjQUNILFFBQVEsT0FBTyxLQUFLO0VBQ3RCLEtBQUssYUFDSCxRQUFRLE9BQU8sSUFBSSxTQUFTO0VBQzlCLEtBQUssUUFDSCxPQUFPO0VBQ1QsS0FBSyxPQUNILE9BQU8sUUFBUTtFQUNqQixTQUNFLE9BQU87Q0FDWDtBQUNGOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQTBDTyxTQUFTLFdBQVcsRUFDekIsT0FDQSxPQUNBLFVBQ0EsVUFDQSxVQUNBLGdCQUNBLGVBQ0EsYUFDa0I7Q0FDbEIsTUFBTSxRQUFRLGlDQUF1QixJQUFJO0NBRXpDLFNBQVMsVUFBVSxPQUFzQztFQUN2RCxNQUFNLE9BQXNCLE1BQU0sS0FBSyxNQUFNLFNBQVMsaUJBQWlCLFFBQVEsS0FBSyxDQUFDLENBQUM7OztFQUd0RixNQUFNLE9BQU8sS0FBSyxRQUFRLE1BQU0sTUFBcUI7RUFDckQsTUFBTSxPQUFPLGVBQWUsTUFBTSxLQUFLLFNBQVMsQ0FBQyxJQUFJLFdBQVcsTUFBTSxLQUFLOzs7RUFHM0UsSUFBSSxTQUFTLE1BQU07RUFFbkIsTUFBTSxlQUFlO0VBQ3JCLFNBQVMsSUFBSTs7O0VBR2IsS0FBSyxLQUFLLEVBQUUsTUFBTTtDQUNwQjtDQUVBLE9BQ0UsaURBQUMsT0FBRDtFQUNFLEtBQUs7RUFDTCxNQUFLO0VBQ0wsY0FBWTtFQUNEO0VBQ1gsV0FBVyw2QkFBRyxxQkFBcUIsU0FBUztZQUUzQyxNQUFNLEtBQUssRUFBRSxRQUFRLE1BQU0sSUFBSSxHQUFHLFVBQVU7R0FDM0MsTUFBTSxRQUNKLFVBQVUsV0FBVyxhQUFhLFFBQVEsV0FBVyxTQUFTO0dBQ2hFLE9BQ0UsaURBQUMsVUFBRDtJQUVFLE1BQUs7OztJQUdMLFVBQVUsVUFBVSxXQUFXLElBQUksQ0FBQztJQUNwQyxjQUFZLFNBQVMsS0FBSztJQUMxQixnQkFBYyxVQUFVLFdBQVcsU0FBUztJQUM1QyxlQUFlLFNBQVMsS0FBSztJQUM3QixXQUFXLDZCQUNULHVGQUNBLGNBQ0Y7Y0FFQSxpREFBQyxRQUFELEVBQU0sV0FBVyw2QkFBRyw2QkFBNkIsY0FBYyxLQUFLLENBQUMsRUFBSTs7Ozs7R0FDbkUsR0FkRDs7OztVQWNDO0VBRVosQ0FBQztDQUNFOzs7OztBQUVUIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJzY2VuZS1zdHJpcC50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCB7IHVzZVJlZiwgdHlwZSBLZXlib2FyZEV2ZW50IH0gZnJvbSBcInJlYWN0XCI7XG5pbXBvcnQgeyBjbiB9IGZyb20gXCJAL2xpYi91dGlsc1wiO1xuXG4vKipcbiAqIFdoaWNoIGl0ZW0gaW4gYSBzdHJpcCBhIGRvdCBzdGFuZHMgZm9yLlxuICpcbiAqIFRocmVlIHN0YXRlcywgbm90IHR3bzogYHNlZW5gIGlzIGFuIGl0ZW0gdGhlIGNhcm91c2VsIGhhcyBhbHJlYWR5IHNob3duIGFuZFxuICogbW92ZWQgcGFzdCDigJQgb24gdGhlIGxhbmRpbmcgcHJldmlldyB0aGUgZG90cyByZWFkIGFzIGEgcHJvZ3Jlc3MgYmFyLCBmaWxsZWRcbiAqIGFuZCBkaW1tZWQgYmVoaW5kIHRoZSBjdXJyZW50IG9uZSDigJQgd2hlcmUgYHVwY29taW5nYCBpcyBvbmUgaXQgaGFzIG5vdFxuICogcmVhY2hlZC4gQSBkb3QgdGhhdCBvbmx5IGtuZXcgXCJjdXJyZW50IG9yIG5vdFwiIGNvdWxkIG5vdCBkcmF3IGVpdGhlci5cbiAqL1xuZXhwb3J0IHR5cGUgU2NlbmVTdHJpcFN0YXRlID0gXCJzZWxlY3RlZFwiIHwgXCJzZWVuXCIgfCBcInVwY29taW5nXCI7XG5cbmV4cG9ydCBpbnRlcmZhY2UgU2NlbmVTdHJpcFByb3BzIHtcbiAgLyoqIFdoYXQgdGhlIHN0cmlwIGlzIGNob29zaW5nIGJldHdlZW4uIE5hbWVzIHRoZSBncm91cCwgc28gdGhlIGRvdHMgYXJlIG5vdCBhbiBhbm9ueW1vdXMgc2V0LiAqL1xuICBsYWJlbDogc3RyaW5nO1xuICAvKiogSG93IG1hbnkgaXRlbXMgdGhlIHN0cmlwIHN0YW5kcyBmb3IuICovXG4gIGNvdW50OiBudW1iZXI7XG4gIC8qKiBXaGljaCBpdGVtIGlzIHNob3dpbmcuICovXG4gIHNlbGVjdGVkOiBudW1iZXI7XG4gIC8qKlxuICAgKiBUaGUgYWNjZXNzaWJsZSBuYW1lIG9mIHRoZSBpdGVtIGF0IGBpbmRleGAg4oCUIHRoZSBkb3RzIGNhcnJ5IG5vIHZpc2libGUgdGV4dC5cbiAgICpcbiAgICogSXQgc2F5cyB3aGF0IHRoZSBkb3Qgc3dpdGNoZXMgKip0byoqLCBuZXZlciB3aGVyZSBpdCBzaXRzIGluIHRoZSByb3cuIEJvdGhcbiAgICogY2FsbGVycyBuYW1lIHRoZWlycyBhZnRlciB0aGVpciBjb250ZW50IOKAlCBcIlNob3cgTWFyY3VzIFJpdmVyYSdzIHByZXZpZXdcIixcbiAgICogXCJTaG93IOKAnEZpbmQgeW91ciBwZW9wbGUu4oCdXCIg4oCUIGJlY2F1c2UgXCJTaG93IHNjZW5lIDJcIiB0ZWxscyBhIHJlYWRlciBob3cgYSBkb3RcbiAgICogaXMgbnVtYmVyZWQsIHdoaWNoIGlzIG5vdCBhbnl0aGluZyB0aGV5IHdvdWxkIGNob29zZSBiZXR3ZWVuLlxuICAgKi9cbiAgbGFiZWxGb3I6IChpbmRleDogbnVtYmVyKSA9PiBzdHJpbmc7XG4gIC8qKiBDYWxsZWQgd2l0aCB0aGUgaW5kZXggYSB2aWV3ZXIgcGlja2VkLiAqL1xuICBvblNlbGVjdDogKGluZGV4OiBudW1iZXIpID0+IHZvaWQ7XG4gIC8qKiBUaGUgdHJhY2sgZXZlcnkgZG90IHNpdHMgaW46IGl0cyBoZWlnaHQsIHJlc3RpbmcgY29sb3VyIGFuZCBmb2N1cyByaW5nLiAqL1xuICB0cmFja0NsYXNzTmFtZTogc3RyaW5nO1xuICAvKiogV2hhdCBmaWxscyB0aGUgdHJhY2ssIGJ5IHRoZSBzdGF0ZSBvZiBpdHMgZG90LiAqL1xuICBmaWxsQ2xhc3NOYW1lOiAoc3RhdGU6IFNjZW5lU3RyaXBTdGF0ZSkgPT4gc3RyaW5nO1xuICAvKiogVGhlIHN0cmlwJ3Mgb3duIHBsYWNlIG9uIHRoZSBwYWdlIOKAlCBtYXJnaW5zIGFuZCB0aGUgbGlrZS4gKi9cbiAgY2xhc3NOYW1lPzogc3RyaW5nO1xufVxuXG4vKipcbiAqIFdoZXJlIGFuIGFycm93IGtleSB3YWxrcyB0bywgd3JhcHBpbmcgYXQgYm90aCBlbmRzIOKAlCBvciBgbnVsbGAgZm9yIGEga2V5IHRoZVxuICogc3RyaXAgZG9lcyBub3QgYW5zd2VyLCB3aGljaCBpcyB3aGF0IGtlZXBzIFRhYiwgRW50ZXIgYW5kIFNwYWNlIG91dCBvZiB0aGlzLlxuICpcbiAqIGBmcm9tYCBpcyB0aGUgZG90IHRoZSBrZXkgd2FzIHByZXNzZWQgb24gcmF0aGVyIHRoYW4gdGhlIG9uZSBzaG93aW5nLCBiZWNhdXNlXG4gKiB0aG9zZSB0d28gY29tZSBhcGFydDogdGhlIGNhcm91c2VsIGFkdmFuY2VzIG9uIGl0cyBvd24sIGFuZCBhIHZpZXdlciB3aG8gaXNcbiAqIHN0YW5kaW5nIG9uIGEgZG90IHdpdGggdGhlIGNsb2NrIHJ1bm5pbmcgc2hvdWxkIG1vdmUgZnJvbSAqdGhlaXIqIGRvdCwgbm90IGZyb21cbiAqIHdoZXJldmVyIHRoZSByb3RhdGlvbiBoYXMgZ290IHRvLlxuICovXG5mdW5jdGlvbiBuZXh0U2NlbmVJbmRleChrZXk6IHN0cmluZywgZnJvbTogbnVtYmVyLCBjb3VudDogbnVtYmVyKTogbnVtYmVyIHwgbnVsbCB7XG4gIHN3aXRjaCAoa2V5KSB7XG4gICAgY2FzZSBcIkFycm93UmlnaHRcIjpcbiAgICAgIHJldHVybiAoZnJvbSArIDEpICUgY291bnQ7XG4gICAgY2FzZSBcIkFycm93TGVmdFwiOlxuICAgICAgcmV0dXJuIChmcm9tIC0gMSArIGNvdW50KSAlIGNvdW50O1xuICAgIGNhc2UgXCJIb21lXCI6XG4gICAgICByZXR1cm4gMDtcbiAgICBjYXNlIFwiRW5kXCI6XG4gICAgICByZXR1cm4gY291bnQgLSAxO1xuICAgIGRlZmF1bHQ6XG4gICAgICByZXR1cm4gbnVsbDtcbiAgfVxufVxuXG4vKipcbiAqIEEgcm93IG9mIGRvdHMgdGhhdCBwaWNrcyB3aGljaCBpdGVtIGEgY2Fyb3VzZWwgaXMgc2hvd2luZy5cbiAqXG4gKiBJdCBpcyBkcmF3biBhcyBjb2xvdXIgYWxvbmUg4oCUIGEgZmlsbGVkIGRvdCBhZ2FpbnN0IG91dGxpbmVkIG9uZXMg4oCUIHdoaWNoIGlzIGFcbiAqIHBlcmZlY3RseSBjbGVhciBzaWduYWwgdG8gYW55b25lIGxvb2tpbmcgYXQgdGhlIHNjcmVlbiBhbmQgbm8gc2lnbmFsIGF0IGFsbCB0b1xuICogYW55b25lIHdobyBpcyBub3QsIHRoZSBzaGFwZSB0aGUgV0NBRyBcInVzZSBvZiBjb2xvdXJcIiBydWxlIHdhcm5zIGFib3V0LiBUaGVcbiAqIHR3byBhdHRyaWJ1dGVzIHRoYXQgdHVybiBpdCBpbnRvIHdvcmRzIGFyZSB0aGUgd2hvbGUgcmVhc29uIHRoaXMgaXMgb25lXG4gKiBjb21wb25lbnQgcmF0aGVyIHRoYW4gYSBjb3BpZWQgYmxvY2s6XG4gKlxuICogLSBgcm9sZT1cImdyb3VwXCJgIHdpdGggdGhlIGBhcmlhLWxhYmVsYDogb24gYSBwbGFpbiBgZGl2YCBhbiBgYXJpYS1sYWJlbGAgaXNcbiAqICAgaWdub3JlZCDigJQgaXQgbmVlZHMgdGhlIHJvbGUgdG8gaGF2ZSBhbnl0aGluZyB0byBhdHRhY2ggdG8g4oCUIHdoaWNoIGlzIGhvd1xuICogICBib3RoIG9mIHRoZXNlIHN0cmlwcyBvbmNlIGhhZCBubyBuYW1lIGF0IGFsbC5cbiAqIC0gYGFyaWEtY3VycmVudGAgb24gdGhlIGRvdCB0aGF0IGlzIHNob3dpbmcsIHdoaWNoIGlzIHRoZSBvdGhlciBoYWxmOiB0aGVcbiAqICAgY2hvc2VuIHNjZW5lIGlzIG90aGVyd2lzZSB0b2xkIGFwYXJ0IGJ5IGl0cyBjb2xvdXIuXG4gKlxuICogKipUaGUga2V5Ym9hcmQsIHRoZW4uKiogVGhlIGRvdHMgYXJlIG9uZSBjb250cm9sIGFuZCBub3QgdGhyZWU6IGV4YWN0bHkgb25lIG9mXG4gKiB0aGVtIGlzIGluIHRoZSB0YWIgb3JkZXIsIGFuZCBpdCBpcyB0aGUgb25lIHNob3dpbmcsIHNvIHRhYmJpbmcgaW50byB0aGUgc3RyaXBcbiAqIGxhbmRzIG9uIHRoZSBpdGVtIGEgdmlld2VyIHdvdWxkIGJlIGxvb2tpbmcgYXQgcmF0aGVyIHRoYW4gb24gYSBmaXhlZCBmaXJzdFxuICogZG90LiBMZWZ0IGFuZCBSaWdodCB3YWxrIHRoZSBzZWxlY3Rpb24gZnJvbSB0aGVyZSBhbmQgd3JhcCBhdCB0aGUgZW5kcywgSG9tZVxuICogYW5kIEVuZCBqdW1wIHRvIHRoZW0sIGFuZCBlYWNoIGtleXN0cm9rZSBzaG93cyB0aGUgc2NlbmUgaXQgbGFuZHMgb24g4oCUIHRoZSBzYW1lXG4gKiB0aGluZyBhIGNsaWNrIGRvZXMsIGJlY2F1c2UgYSBwaWNrIHRoYXQgbW92ZWQgZm9jdXMgd2l0aG91dCBwaWNraW5nIHdvdWxkIGxlYXZlXG4gKiBhIGtleWJvYXJkIHVzZXIgc2VsZWN0aW5nIG5vdGhpbmcuIFRoZSBzdHJpcCBpcyBsZWZ0IGFzIGByb2xlPVwiZ3JvdXBcImAgbWFya2VkXG4gKiB3aXRoIGBhcmlhLWN1cnJlbnRgIHJhdGhlciB0aGFuIHJlLXJvbGVkIGludG8gYSB0YWJsaXN0IG9yIGEgcmFkaW9ncm91cDogdGhvc2VcbiAqIGFyZSB0aGUgcm9sZXMgd2hvc2UgYXJyb3cga2V5cyBhIHJlYWRlciBpcyB0b2xkIHRvIGV4cGVjdCwgYW5kIGFkb3B0aW5nIG9uZSBpc1xuICogYSBkZWNpc2lvbiBhYm91dCB3aGF0IHRoZXNlIGRvdHMgKmFyZSogKHRhYnMgbmVlZCBwYW5lbHMsIHJhZGlvcyBhcmUgY2hvc2VuXG4gKiByYXRoZXIgdGhhbiBzaG93bikgdGhhdCB0aGlzIGNvbXBvbmVudCBpcyBub3QgdGhlIHBsYWNlIHRvIG1ha2UuIFdoYXQgaXQgZG9lc1xuICogaW5zdGVhZCBpcyBnaXZlIHRoZSBncm91cCB0aGUga2V5Ym9hcmQgYmVoYXZpb3VyIG9mIG9uZSBjb250cm9sIGFuZCBzYXkgc29cbiAqIGhlcmUuXG4gKlxuICogVGhlIHN0b3AgaXMgdGhlIGZvdXJ0aCB0aGluZyBpdCBkb2VzIG5vdCByZXN0YXRlOiBgb25TZWxlY3RgIGlzIHRoZSBgc2VsZWN0YCBvZlxuICogYEAvaG9va3MvdXNlLWFtYmllbnQtY2Fyb3VzZWxgLCBzbyBhIHBpY2sgc2hvd3MgdGhlIGl0ZW0gKmFuZCogdGFrZXMgdGhlIG1vdGlvblxuICogYXdheSBmcm9tIHRoZSBjbG9jayDigJQgd2hpY2hldmVyIGlucHV0IHJlYWNoZWQgaXQsIGNsaWNrIG9yIGFycm93IGtleSDigJQgYW5kIG5vXG4gKiBjYWxsZXIgd3JpdGVzIHRoYXQgcGFpcmluZyBpdHNlbGYuXG4gKlxuICogV2hhdCBzdGF5cyB3aXRoIHRoZSBjYWxsZXIgaXMgd2hhdCBpcyBhY3R1YWxseSB0aGUgY2FsbGVyJ3M6IHRoZSB3b3Jkc1xuICogKGBsYWJlbGAsIGBsYWJlbEZvcmApLCB0aGUgdHdvIGNsYXNzIHJlY2lwZXMgdGhhdCBtYWtlIG9uZSBzdHJpcCBhIHByb2dyZXNzXG4gKiBiYXIgb24gYSBjYXJkIGFuZCB0aGUgb3RoZXIgYSByb3cgb2Ygc2NlbmUgZG90cyBvbiBnbGFzcywgYW5kIGV2ZXJ5dGhpbmdcbiAqIGFyb3VuZCB0aGUgc3RyaXAuIGBjb3VudGAgaXMgcGFzc2VkIHJhdGhlciB0aGFuIGRlcml2ZWQgZnJvbSBhIGxpc3QgYmVjYXVzZVxuICogdGhlIHN0cmlwIGhhcyBubyBidXNpbmVzcyBrbm93aW5nIHdoYXQgdGhlIGRvdHMgc3RhbmQgZm9yLlxuICovXG5leHBvcnQgZnVuY3Rpb24gU2NlbmVTdHJpcCh7XG4gIGxhYmVsLFxuICBjb3VudCxcbiAgc2VsZWN0ZWQsXG4gIGxhYmVsRm9yLFxuICBvblNlbGVjdCxcbiAgdHJhY2tDbGFzc05hbWUsXG4gIGZpbGxDbGFzc05hbWUsXG4gIGNsYXNzTmFtZSxcbn06IFNjZW5lU3RyaXBQcm9wcykge1xuICBjb25zdCBzdHJpcCA9IHVzZVJlZjxIVE1MRGl2RWxlbWVudD4obnVsbCk7XG5cbiAgZnVuY3Rpb24gb25LZXlEb3duKGV2ZW50OiBLZXlib2FyZEV2ZW50PEhUTUxEaXZFbGVtZW50Pikge1xuICAgIGNvbnN0IGRvdHM6IEhUTUxFbGVtZW50W10gPSBBcnJheS5mcm9tKHN0cmlwLmN1cnJlbnQ/LnF1ZXJ5U2VsZWN0b3JBbGwoXCJidXR0b25cIikgPz8gW10pO1xuICAgIC8vIFRoZSBkb3QgdGhlIGtleSB3YXMgcHJlc3NlZCBvbiwgd2hpY2ggaXMgdGhlIGRvdCB0aGF0IGhhcyB0aGUgZm9jdXM7IGEga2V5XG4gICAgLy8gdGhhdCBzb21laG93IGFycml2ZXMgZnJvbSBlbHNld2hlcmUgbW92ZXMgZnJvbSB0aGUgaXRlbSBzaG93aW5nIGluc3RlYWQuXG4gICAgY29uc3QgZnJvbSA9IGRvdHMuaW5kZXhPZihldmVudC50YXJnZXQgYXMgSFRNTEVsZW1lbnQpO1xuICAgIGNvbnN0IG5leHQgPSBuZXh0U2NlbmVJbmRleChldmVudC5rZXksIGZyb20gPT09IC0xID8gc2VsZWN0ZWQgOiBmcm9tLCBjb3VudCk7XG4gICAgLy8gTm90aGluZyBlbHNlIGlzIHRoaXMgc3RyaXAncyB0byB0YWtlOiBhbiB1bmhhbmRsZWQga2V5IGxlYXZlcyBUYWIgdG8gbW92ZVxuICAgIC8vIHRoZSBmb2N1cyBvbiBhbmQgRW50ZXIgYW5kIFNwYWNlIHRvIHRoZSBidXR0b24gaXRzZWxmLlxuICAgIGlmIChuZXh0ID09PSBudWxsKSByZXR1cm47XG5cbiAgICBldmVudC5wcmV2ZW50RGVmYXVsdCgpO1xuICAgIG9uU2VsZWN0KG5leHQpO1xuICAgIC8vIFRoZSByZS1yZW5kZXIgbW92ZXMgdGhlIHRhYiBzdG9wOyB0aGUgZm9jdXMgaGFzIHRvIGJlIG1vdmVkIGJ5IGhhbmQsIG9yIGl0XG4gICAgLy8gd291bGQgc3RheSBvbiB0aGUgZG90IHRoZSB2aWV3ZXIganVzdCB3YWxrZWQgYXdheSBmcm9tLlxuICAgIGRvdHNbbmV4dF0/LmZvY3VzKCk7XG4gIH1cblxuICByZXR1cm4gKFxuICAgIDxkaXZcbiAgICAgIHJlZj17c3RyaXB9XG4gICAgICByb2xlPVwiZ3JvdXBcIlxuICAgICAgYXJpYS1sYWJlbD17bGFiZWx9XG4gICAgICBvbktleURvd249e29uS2V5RG93bn1cbiAgICAgIGNsYXNzTmFtZT17Y24oXCJmbGV4IGdhcC0xLjUgcHgtMVwiLCBjbGFzc05hbWUpfVxuICAgID5cbiAgICAgIHtBcnJheS5mcm9tKHsgbGVuZ3RoOiBjb3VudCB9LCAoXywgaW5kZXgpID0+IHtcbiAgICAgICAgY29uc3Qgc3RhdGU6IFNjZW5lU3RyaXBTdGF0ZSA9XG4gICAgICAgICAgaW5kZXggPT09IHNlbGVjdGVkID8gXCJzZWxlY3RlZFwiIDogaW5kZXggPCBzZWxlY3RlZCA/IFwic2VlblwiIDogXCJ1cGNvbWluZ1wiO1xuICAgICAgICByZXR1cm4gKFxuICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgIGtleT17aW5kZXh9XG4gICAgICAgICAgICB0eXBlPVwiYnV0dG9uXCJcbiAgICAgICAgICAgIC8vIE9uZSBkb3QgaXMgdGFiYmFibGUgYW5kIHRoZSByZXN0IGFyZSByZWFjaGFibGUgd2l0aCB0aGUgYXJyb3cga2V5cyDigJRcbiAgICAgICAgICAgIC8vIHNlZSB0aGUgbm90ZSBhYm92ZSBvbiB3aHkgdGhlIHN0cmlwIGlzIG9uZSBjb250cm9sIHJhdGhlciB0aGFuIHRocmVlLlxuICAgICAgICAgICAgdGFiSW5kZXg9e2luZGV4ID09PSBzZWxlY3RlZCA/IDAgOiAtMX1cbiAgICAgICAgICAgIGFyaWEtbGFiZWw9e2xhYmVsRm9yKGluZGV4KX1cbiAgICAgICAgICAgIGFyaWEtY3VycmVudD17aW5kZXggPT09IHNlbGVjdGVkID8gXCJ0cnVlXCIgOiB1bmRlZmluZWR9XG4gICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiBvblNlbGVjdChpbmRleCl9XG4gICAgICAgICAgICBjbGFzc05hbWU9e2NuKFxuICAgICAgICAgICAgICBcImZsZXgtMSBvdmVyZmxvdy1oaWRkZW4gcm91bmRlZC1mdWxsIGZvY3VzLXZpc2libGU6b3V0bGluZS1ub25lIGZvY3VzLXZpc2libGU6cmluZy0yXCIsXG4gICAgICAgICAgICAgIHRyYWNrQ2xhc3NOYW1lLFxuICAgICAgICAgICAgKX1cbiAgICAgICAgICA+XG4gICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9e2NuKFwiYmxvY2sgaC1mdWxsIHJvdW5kZWQtZnVsbFwiLCBmaWxsQ2xhc3NOYW1lKHN0YXRlKSl9IC8+XG4gICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICk7XG4gICAgICB9KX1cbiAgICA8L2Rpdj5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3NoYXJlZC9zY2VuZS1zdHJpcC50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zaGFyZWQvc2NlbmUtc3RyaXAudHN4IiwiL3NyYy9jb21wb25lbnRzL3NoYXJlZC9zY2VuZS1zdHJpcC50c3giLFtdXQ==

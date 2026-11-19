@@ -11,6 +11,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const conversationId = url.searchParams.get("id");
+  if (conversationId && !isUuid(conversationId)) return errorResponse("Invalid conversation ID");
+  const readStartedAt = new Date();
 
   try {
     if (conversationId) {
@@ -77,7 +79,7 @@ export async function GET(request: Request) {
       // Mark as read
       await db
         .update(conversationMembers)
-        .set({ lastReadAt: new Date() })
+        .set({ lastReadAt: readStartedAt })
         .where(
           and(
             eq(conversationMembers.conversationId, conversationId),
@@ -98,6 +100,7 @@ export async function GET(request: Request) {
         id: conversations.id,
         createdAt: conversations.createdAt,
         lastReadAt: conversationMembers.lastReadAt,
+        unreadCount: sql<number>`(select count(*)::int from messages as unread where unread.conversation_id = ${conversations.id} and unread.sender_id <> ${session.user.id} and (${conversationMembers.lastReadAt} is null or unread.created_at > ${conversationMembers.lastReadAt}))`,
       })
       .from(conversations)
       .innerJoin(

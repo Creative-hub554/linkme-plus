@@ -8,6 +8,7 @@ import { ImageIcon, VideoIcon, SmileIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PostAudienceSelect } from "@/components/social/post-audience-select";
 import type { PostAudience } from "@/lib/post-audiences";
+import { PostTopicSelect } from "@/components/social/post-topic-select";
 
 export type ComposerFocusTarget = "inside" | "outside" | "off-document";
 
@@ -47,7 +48,7 @@ interface PostComposerProps {
     name?: string | null;
     image?: string | null;
   };
-  onSubmit?: (content: string, image?: File, audience?: PostAudience) => void;
+  onSubmit?: (content: string, image?: File, audience?: PostAudience, topicId?: string) => void;
   /** Text to restore into the composer, e.g. after a failed publish. */
   draft?: string | null;
   /** Called once the restored draft has been placed in the textarea. */
@@ -56,6 +57,7 @@ interface PostComposerProps {
 
 export function PostComposer({ user, onSubmit, draft, onDraftUsed }: PostComposerProps) {
   const [content, setContent] = useState("");
+  const [topicId, setTopicId] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -88,8 +90,8 @@ export function PostComposer({ user, onSubmit, draft, onDraftUsed }: PostCompose
   };
 
   const handleSubmit = () => {
-    if (!content.trim() && !image) return;
-    onSubmit?.(content, image ?? undefined, audience);
+    if ((!content.trim() && !image) || !topicId) return;
+    onSubmit?.(content, image ?? undefined, audience, topicId);
     setContent("");
     setImage(null);
     setImagePreview(null);
@@ -175,6 +177,7 @@ export function PostComposer({ user, onSubmit, draft, onDraftUsed }: PostCompose
                 </button>
               </div>
             )}
+            {isExpanded && <PostTopicSelect value={topicId} onChange={setTopicId} />}
             {isExpanded && (
               <div className="flex flex-wrap items-center gap-2 mt-3">
                 <input
@@ -206,7 +209,7 @@ export function PostComposer({ user, onSubmit, draft, onDraftUsed }: PostCompose
                   size="sm"
                   className={cn("ml-auto")}
                   onClick={handleSubmit}
-                  disabled={!content.trim() && !image}
+                  disabled={(!content.trim() && !image) || !topicId}
                 >
                   Post
                 </Button>

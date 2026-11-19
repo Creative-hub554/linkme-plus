@@ -8,10 +8,10 @@
  * So the file is stored first (`POST /api/posts/media` puts it in R2 and answers
  * with its public URL, and that URL is what the post records).
  *
- * The upload goes through our own route rather than the presigned one at
- * `/api/uploads`, because a browser PUT to the media bucket is refused: the
- * bucket returns no CORS headers, so the preflight fails and the file never
- * leaves the page.
+ * The upload goes through our own route rather than straight to the bucket: a
+ * browser PUT to the media bucket is refused (no CORS headers), and a
+ * server-side read is what lets the file's type and size be checked rather than
+ * taken from the page.
  *
  * Kept out of the composer because the composer deliberately knows nothing
  * about the network: it hands over the text and the file and clears itself, and
@@ -19,6 +19,7 @@
  * publishing fails.
  */
 import type { PostAudience } from "@/lib/post-audiences";
+import { isFeedTopic } from "@/lib/feed-topics";
 
 /** Media as the API stores it. */
 export interface PublishedMedia {
@@ -40,6 +41,7 @@ export interface PublishedPost {
 }
 
 export interface PublishPostInput {
+  topicId?: string;
   content: string;
   /** Attachment chosen in the composer, if any. */
   file?: File | null;
@@ -84,6 +86,7 @@ export async function uploadPostAttachment(file: File): Promise<{ url: string; t
  * they wrote.
  */
 export async function publishPost({
+  topicId,
   content,
   file,
   audience = "public",
@@ -92,6 +95,7 @@ export async function publishPost({
   if (!trimmed && !file) {
     throw new Error("Write something, or attach a photo or video.");
   }
+  if (!isFeedTopic(topicId)) throw new Error("Choose a post category before publishing.");
 
   const media: PublishedMedia[] = [];
   if (file) {
@@ -108,6 +112,7 @@ export async function publishPost({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content: trimmed,
+      topicId,
       type: file ? attachmentType(file) : "text",
       visibility: audience,
       media,

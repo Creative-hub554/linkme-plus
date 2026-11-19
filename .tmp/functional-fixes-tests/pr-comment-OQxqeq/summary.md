@@ -1,0 +1,7 @@
+
+## Probe reply — ⚠️ the comment was redacted before posting
+
+The 'Reply on the pull request' step's body needed 1 substitution
+before it could go up: a name that looks like a secret, a URL carrying credentials, or a
+private key written out. Each was replaced with `<redacted>`, and the comment was posted
+with the substitutions in place — the run's artifact keeps the body as it was written.

@@ -8,6 +8,7 @@ import { toPostAudience } from "@/lib/post-audiences";
 import { deleteStoredObjects } from "@/lib/r2";
 import { clampLimit, decodeCursor, encodeCursor, isUuid, type CursorPosition } from "@/lib/cursor-pagination";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
+import { isFeedTopic, parseFeedPreferences, defaultFeedPreferences, feedPreferenceScope } from "@/lib/feed-topics";
 
 /** Ceiling on `?ids=` lookups, so a crafted request cannot ask for the world. */
 const MAX_LOOKUP_IDS = 25;
@@ -72,7 +73,18 @@ export async function GET(request: Request) {
   }
 
   const rawCursor = url.searchParams.get("cursor");
-  const cursor: CursorPosition | null = decodeCursor(rawCursor);
+  const homeFeed = url.searchParams.get("feed") === "true";
+  let preferences = defaultFeedPreferences;
+  if (homeFeed) {
+    try {
+      const [profile] = await db.select({ appearance: profiles.appearance }).from(profiles).where(eq(profiles.userId, session.user.id));
+      preferences = parseFeedPreferences((profile?.appearance as { feed?: unknown } | null)?.feed) ?? defaultFeedPreferences;
+    } catch { return errorResponse("Feed preferences are temporarily unavailable", 503); }
+  }
+  const scope = feedPreferenceScope(preferences);
+  const position = homeFeed && rawCursor ? rawCursor.slice(rawCursor.indexOf("~") + 1) : rawCursor;
+  if (homeFeed && rawCursor && !rawCursor.startsWith(`${scope}~`)) return errorResponse("Feed preferences changed. Refresh your feed.", 400);
+  const cursor: CursorPosition | null = decodeCursor(position);
   if (rawCursor && !cursor) {
     return errorResponse("Invalid cursor", 400);
   }
@@ -86,6 +98,9 @@ export async function GET(request: Request) {
         sql`${posts.deletedAt} IS NULL`,
         visiblePostsCondition(session.user.id),
       ];
+      if (homeFeed && preferences.topics.length) conditions.push(inArray(posts.topicId, preferences.topics));
+      if (homeFeed && preferences.format === "shorts") conditions.push(eq(posts.type, "short_video"));
+      if (homeFeed && preferences.format === "posts") conditions.push(sql`${posts.type} <> 'short_video'`);
       // A member's timeline is what *they* said: posts they published as a Page
       // are the Page's voice and are listed on the Page instead. See
       // `@/lib/db/author-timeline`, which also covers the feed's post-follow
@@ -112,6 +127,7 @@ export async function GET(request: Request) {
           id: posts.id,
           content: posts.content,
           type: posts.type,
+          topicId: posts.topicId,
           visibility: posts.visibility,
           createdAt: posts.createdAt,
           // Only ever read as "has this post been edited" — the feed marks it
@@ -206,7 +222,7 @@ export async function GET(request: Request) {
 
     const { postsWithMedia, nextCursor } = await loadFeed();
 
-    return cursorPaginatedResponse(postsWithMedia, limit, nextCursor);
+    return cursorPaginatedResponse(postsWithMedia, limit, homeFeed && nextCursor ? `${scope}~${nextCursor}` : nextCursor);
   } catch (err) {
     console.error("Get posts error:", err);
     return errorResponse("Failed to fetch posts", 500);
@@ -219,7 +235,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { content, type = "text", visibility = "public", hashtags, mentions, media, pageId, groupId } = body;
+    const { content, type = "text", visibility = "public", hashtags, mentions, media, pageId, groupId, topicId } = body;
 
     if (!content && (!media || media.length === 0)) {
       return errorResponse("Content or media is required");
@@ -301,6 +317,9 @@ export async function POST(request: Request) {
       console.warn("Profile provisioning failed before post insert:", profileError);
     }
 
+    if (!isFeedTopic(topicId)) return errorResponse("Choose a post category before publishing", 400);
+    // Shorts will only be accepted through a verified media-processing workflow.
+    if (type === "short_video") return errorResponse("Short video publishing requires verified media processing", 409);
     // Create post
     const [newPost] = await withDbRetry(() =>
       db
@@ -311,6 +330,7 @@ export async function POST(request: Request) {
           groupId: groupForPost,
           content,
           type,
+          topicId,
           visibility: groupForPost ? "group" : selectedVisibility,
           hashtags: hashtags || [],
           mentions: mentions || [],
@@ -346,7 +366,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, content, visibility, hashtags } = body;
+    const { id, content, visibility, hashtags, topicId } = body;
 
     if (!id) {
       return errorResponse("Post ID is required");
@@ -364,6 +384,8 @@ export async function PUT(request: Request) {
     if (!existing) {
       return errorResponse("Post not found or unauthorized", 404);
     }
+    const nextTopic = topicId ?? existing.topicId;
+    if (!isFeedTopic(nextTopic)) return errorResponse("Choose a post category before saving", 400);
 
     // A group post's audience is the group. Whatever the edit sends, the row
     // keeps it: only the author can reach this line at all, but "my own post" is
@@ -376,6 +398,7 @@ export async function PUT(request: Request) {
       .update(posts)
       .set({
         content: content ?? existing.content,
+        topicId: nextTopic,
         visibility: nextVisibility,
         hashtags: hashtags ?? existing.hashtags,
         editedAt: new Date(),

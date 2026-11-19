@@ -70,7 +70,7 @@ beforeEach(() => {
 describe("POST /api/jobs/applications", () => {
   it("records the applicant as the session's user, not the body's", async () => {
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [])
       .insertReturns(jobApplications, [{ id: APPLICATION_ID, status: "pending" }]);
 
@@ -113,11 +113,19 @@ describe("POST /api/jobs/applications", () => {
     expect(fakeDb.reads).not.toContain("job_applications");
   });
 
+  it("refuses an application to an active job that has not passed review", async () => {
+    fakeDb.selectReturns(jobs, [{ id: JOB_ID, status: "active", reviewStatus: "pending_review" }]);
+    const response = await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }));
+    expect(response.status).toBe(409);
+    expectGatedNone("writes");
+    expect(fakeDb.reads).not.toContain("job_applications");
+  });
+
   it("refuses a second application to the same job, writing nothing", async () => {
     // The duplicate check is the route's own guard: a row already there for
     // (job, user) means the request stops before the insert.
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [{ id: APPLICATION_ID }]);
 
     const response = await POST(
@@ -153,10 +161,79 @@ describe("POST /api/jobs/applications", () => {
     expectGatedNone("writes");
   });
 
+  it("refuses a cover letter that is not a string, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, coverLetter: 123 }),
+    );
+
+    expect(response.status).toBe(400);
+    // Not the presence guard and not the job read: the message is this guard's.
+    expect(await response.json()).toEqual({ error: "Invalid cover letter" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a cover letter longer than 10000 characters, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", {
+        jobId: JOB_ID,
+        coverLetter: "a".repeat(10001),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid cover letter" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a CV URL that cannot be parsed, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, cvUrl: "not a url" }),
+    );
+
+    expect(response.status).toBe(400);
+    // The parse throws inside the route's own try, and its own catch answers this
+    // message — not the application write's generic 500.
+    expect(await response.json()).toEqual({ error: "Invalid CV URL" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("refuses a CV URL whose protocol is not http or https, writing nothing", async () => {
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", {
+        jobId: JOB_ID,
+        cvUrl: "ftp://test.r2.dev/cv/applicant-1.pdf",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "CV URL must use HTTP or HTTPS" });
+    expectGatedNone("reads");
+    expectGatedNone("writes");
+  });
+
+  it("treats an empty CV URL as no CV at all", async () => {
+    fakeDb
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active" }])
+      .selectReturns(jobApplications, [])
+      .insertReturns(jobApplications, [{ id: APPLICATION_ID, status: "pending" }]);
+
+    const response = await POST(
+      jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID, cvUrl: "" }),
+    );
+
+    expect(response.status).toBe(201);
+    expectGatedSequence("writes", [
+      { table: "job_applications", values: expect.objectContaining({ jobId: JOB_ID, cvUrl: "" }) },
+    ]);
+  });
+
   it("answers 500 and writes nothing when the application insert fails", async () => {
     const silence = vi.spyOn(console, "error").mockImplementation(() => {});
     fakeDb
-      .selectReturns(jobs, [{ id: JOB_ID }])
+      .selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved" }])
       .selectReturns(jobApplications, [])
       .failNextInsert(jobApplications, new Error("database unavailable"));
     try {
@@ -449,4 +526,15 @@ describe("GET /api/jobs/applications", () => {
       silence.mockRestore();
     }
   });
+});
+it("rejects applications after a job closes or its deadline passes", async () => {
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "closed" }]);
+  expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active", deadline: new Date("2020-01-01") }]);
+  expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+it("answers a concurrent application conflict without reporting a second success", async () => {
+  fakeDb.selectReturns(jobs, [{ id: JOB_ID, reviewStatus: "approved", status: "active" }]).selectReturns(jobApplications, []).insertReturns(jobApplications, []);
+  expect((await POST(jsonRequest("POST", "/api/jobs/applications", { jobId: JOB_ID }))).status).toBe(409);
 });

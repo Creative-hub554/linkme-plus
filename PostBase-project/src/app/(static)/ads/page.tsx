@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AdvertisingPage() {
@@ -8,6 +9,7 @@ export default function AdvertisingPage() {
         <p className="text-muted-foreground mt-2">Reach communities, not just feeds</p>
       </div>
 
+      <Link href="/advertising" className="inline-block rounded-lg bg-brand-blue px-4 py-2 font-semibold text-white">Create or manage campaigns</Link>
       <Card>
         <CardHeader>
           <CardTitle level={2} className="text-base">

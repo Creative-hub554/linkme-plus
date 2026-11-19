@@ -38,6 +38,8 @@ import {
   marketplaceListings,
   productVariants,
   savedListings,
+  users,
+  accountSubscriptions,
 } from "@/lib/db/schema";
 import { fakeDb, resetFakeDb } from "@/test/fake-db";
 import { expectGatedInsert, expectGatedNone, expectGatedSequence } from "@/test/expect-gated";
@@ -60,6 +62,29 @@ beforeEach(() => {
   resetFakeDb();
   vi.clearAllMocks();
   session.userId = "seller-1";
+  fakeDb.selectReturns(users, [{ id: "seller-1" }]);
+});
+
+it("blocks the 51st stored product before any insert", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ total: 50 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  const response = await POST(jsonRequest("POST", "/api/marketplace", { title: "One too many" }));
+  expect(response.status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+
+it("blocks publication of a 31st public product without deleting its draft", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ id: LISTING_ID, sellerId: "seller-1", status: "draft" }]);
+  fakeDb.selectReturns(marketplaceListings, [{ total: 40 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  const response = await PUT(jsonRequest("PUT", "/api/marketplace", { id: LISTING_ID, status: "active" }));
+  expect(response.status).toBe(409);
+  expect(fakeDb.writes).toEqual([]);
+});
+
+it("uses a paid seller tier without counting stock units or variants", async () => {
+  fakeDb.selectReturns(accountSubscriptions, [{ tier: "pro" }]);
+  fakeDb.selectReturns(marketplaceListings, [{ total: 50 }]).selectReturns(marketplaceListings, [{ total: 30 }]);
+  fakeDb.insertReturns(marketplaceListings, [{ id: LISTING_ID }]);
+  expect((await POST(jsonRequest("POST", "/api/marketplace", { title: "A Pro product" }))).status).toBe(201);
 });
 
 describe("GET /api/marketplace", () => {
@@ -78,6 +103,23 @@ describe("GET /api/marketplace", () => {
     } finally {
       silence.mockRestore();
     }
+  });
+
+  it("refuses a price filter that is not a non-negative safe integer", async () => {
+    for (const query of [
+      "minPrice=abc",
+      "minPrice=-1",
+      "minPrice=1.5",
+      "maxPrice=2147483648",
+      "maxPrice=abc",
+    ]) {
+      const response = await GET(new Request(`http://localhost/api/marketplace?${query}`));
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid price filter" });
+    }
+    // Refused before either read, so no cast reaches the database.
+    expectGatedNone("reads");
   });
 
   it("returns one listing by id, with its media, inventory, variants and saved flag", async () => {
@@ -290,6 +332,40 @@ describe("GET /api/marketplace list read — the category name", () => {
   });
 });
 
+describe("GET /api/marketplace sorting", () => {
+  /**
+   * The product grid is ordered by the `sort` parameter: newest by default,
+   * or by the effective price (min, falling back to max) in either direction.
+   * An unknown value is a bad request, not a silently unsorted page.
+   */
+
+  it("rejects a sort value outside the allowlist with 400", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/marketplace?sort=popular"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid sort. Use newest, price_asc, or price_desc.",
+    });
+  });
+
+  it("binds the effective price expression for a price sort", async () => {
+    fakeDb
+      .selectReturns(marketplaceListings, [{ id: LISTING_ID, title: "Camera" }])
+      .selectReturns(marketplaceListings, [{ total: 1 }]);
+
+    const response = await GET(
+      new Request("http://localhost/api/marketplace?sort=price_desc"),
+    );
+
+    expect(response.status).toBe(200);
+    // The sort rides the query the page was read under, ordering on the
+    // effective price so a range-only listing sorts by something real.
+    expect(fakeDb.selectWheres[0]).toContain("coalesce");
+  });
+});
+
 describe("GET /api/marketplace list read — the viewer's saved flags", () => {
   /**
    * The list is what a card is rendered from, so the viewer's own `isSaved`
@@ -316,11 +392,13 @@ describe("GET /api/marketplace list read — the viewer's saved flags", () => {
     expect(body.data[1].isSaved).toBe(false);
     // The flags are the third read (page, count, flags) — one read, not one
     // per row — and it is bound to the viewer and the page's ids, the way the
-    // category filter above is pinned by its own shape.
+    // category filter above is pinned by its own shape. The fourth read is the
+    // page's media, batched once for the hover swipe previews.
     expect(fakeDb.reads).toEqual([
       "marketplace_listings",
       "marketplace_listings",
       "saved_listings",
+      "listing_media",
     ]);
     expect(fakeDb.selectWheres[2]).toContain("saved_listings");
     expect(fakeDb.selectParams[2]).toContain("seller-1");
@@ -390,6 +468,16 @@ describe("GET /api/marketplace as a visitor", () => {
     expect(body.data[0].title).toBe("Camera");
   });
 
+  it("answers 401 to mine=true without a session, reading nothing", async () => {
+    session.userId = null;
+
+    const response = await GET(new Request("http://localhost/api/marketplace?mine=true"));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+    expectGatedNone("reads");
+  });
+
   it("reads one listing for a visitor and answers isSaved false without the saved read", async () => {
     session.userId = null;
     fakeDb
@@ -457,7 +545,7 @@ describe("POST /api/marketplace", () => {
       values: expect.objectContaining({ sellerId: "seller-1", title: "Camera", status: "draft" }),
     });
     expectGatedInsert(listingMedia, {
-      values: [{ listingId: LISTING_ID, url: MEDIA_URL, altText: "Front", order: 0 }],
+      values: [{ listingId: LISTING_ID, url: MEDIA_URL, altText: "Front", type: "image", order: 0 }],
     });
     expectGatedInsert(productVariants, {
       values: [
@@ -490,6 +578,25 @@ describe("POST /api/marketplace", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid category id" });
+    expectGatedNone("writes");
+  });
+
+  it("refuses a price that is not a non-negative safe integer, writing nothing", async () => {
+    for (const price of [
+      { priceMin: -1 },
+      { priceMin: 1.5 },
+      { priceMin: 2147483648 },
+      { priceMax: -1 },
+      { priceMax: 1.5 },
+      { priceMax: 2147483648 },
+    ]) {
+      const response = await POST(
+        jsonRequest("POST", "/api/marketplace", { title: "Camera", ...price }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid price" });
+    }
     expectGatedNone("writes");
   });
 
@@ -657,4 +764,22 @@ describe("DELETE /api/marketplace", () => {
       silence.mockRestore();
     }
   });
+});
+it("applies search and price bounds to both listings and their count", async () => {
+  fakeDb.selectReturns(marketplaceListings, []).selectReturns(marketplaceListings, [{ total: 0 }]);
+  expect((await GET(new Request("http://localhost/api/marketplace?q=camera&minPrice=10&maxPrice=100&location=London"))).status).toBe(200);
+  expect(fakeDb.selectWheres[0]).toContain("ilike");
+  expect(fakeDb.selectParams[0]).toContain("%camera%");
+  expect(fakeDb.selectParams[0]).toContain(10);
+  expect(fakeDb.selectParams[0]).toContain(100);
+  expect(fakeDb.selectParams[1]).toEqual(fakeDb.selectParams[0]);
+});
+it("never returns a seller's private inventory cost to a buyer", async () => {
+  fakeDb.selectReturns(marketplaceListings, [{ id: LISTING_ID, sellerId: "someone-else", title: "Camera" }]).selectReturns(listingMedia, []).selectReturns(inventoryItems, [{ quantity: 5, unitCost: 40, sku: "PRIVATE", lowStockThreshold: 2 }]).selectReturns(productVariants, []).selectReturns(savedListings, []);
+  const response = await GET(new Request(`http://localhost/api/marketplace?id=${LISTING_ID}`));
+  expect((await response.json()).inventory).toEqual({ quantity: 5, lowStockThreshold: 2 });
+});
+it("refuses invalid price bounds before reading the database", async () => {
+  expect((await GET(new Request("http://localhost/api/marketplace?minPrice=100&maxPrice=10"))).status).toBe(400);
+  expect(fakeDb.reads).toEqual([]);
 });

@@ -38,37 +38,23 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   );
 
   const uploadFile = useCallback(async (upload: UploadProgress): Promise<{ url: string; key: string }> => {
-    // Get presigned URL
-    const response = await fetch("/api/uploads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: upload.file.name,
-        contentType: upload.file.type,
-        purpose,
-        size: upload.file.size,
-      }),
-    });
+    // One request: the server reads the bytes, decides the type and size for
+    // itself, and answers with the URL it stored. There is no second step and
+    // nothing the browser says about the file is taken on trust.
+    const body = new FormData();
+    body.append("file", upload.file);
+    body.append("purpose", purpose);
 
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Failed to get upload URL");
+    const response = await fetch("/api/uploads", { method: "POST", body });
+    const data = (await response.json().catch(() => null)) as
+      | { url?: string; key?: string; error?: string }
+      | null;
+
+    if (!response.ok || !data?.url || !data.key) {
+      throw new Error(data?.error || "Failed to upload file");
     }
 
-    const { uploadUrl, key, publicUrl } = await response.json();
-
-    // Upload to R2
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      body: upload.file,
-      headers: { "Content-Type": upload.file.type },
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error("Failed to upload file");
-    }
-
-    return { url: publicUrl, key };
+    return { url: data.url, key: data.key };
   }, [purpose]);
 
   const uploadAll = useCallback(async () => {

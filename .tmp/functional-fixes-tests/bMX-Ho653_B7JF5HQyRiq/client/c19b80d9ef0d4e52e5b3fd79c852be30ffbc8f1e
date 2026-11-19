@@ -1,0 +1,47 @@
+__vite_ssr_exportName__("DisclosureButton", () => { try { return DisclosureButton } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js");
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/ui/icon-button.tsx", {"importedNames":["IconButton"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/ui/disclosure-button.tsx";
+
+/**
+* A control that opens and closes a region, and says which way it is.
+*
+* The defect this exists to end: the nav's mobile menu button was a hamburger
+* that became an ×, with no `aria-expanded` and no name, so nothing about it
+* announced that there was a panel or that one had just opened. Whether that was
+* open lived in a `useState` the button rendered and never reported.
+*
+* Here there is one boolean. `open` sets `aria-expanded`, names the region
+* through `aria-controls`, and the caller cannot pass either attribute — so a
+* disclosure drawn with this component always reports its own state, and the
+* only way to write one that does not is to stop using the component, which the
+* rendered audit catches.
+*
+* The region is usually mounted only while open, so `aria-controls` names an id
+* that is absent when closed. That is what the app did by hand before this
+* component existed and it is what most React popovers do; `aria-expanded` is
+* the attribute assistive technology actually reads, and it is always present
+* and always right.
+*/
+const DisclosureButton = __vite_ssr_import_0__.forwardRef(function DisclosureButton({ open, controls, ...props }, ref) {
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)((0,__vite_ssr_import_1__.IconButton), {
+		ref,
+		...props,
+		// Derived after the spread, so the state the caller passed is the one
+		// that reaches the DOM.
+		"aria-expanded": open,
+		"aria-controls": controls
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 41,
+		columnNumber: 7
+	}, this);
+});
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7O0FBSEE7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFxQ08sTUFBTSxtQkFBbUIsc0JBQU0sV0FDcEMsU0FBUyxpQkFBaUIsRUFBRSxNQUFNLFVBQVUsR0FBRyxTQUFTLEtBQUs7Q0FDM0QsT0FDRSxvREFBQyxtQ0FBRDtFQUNPO0VBQ0wsR0FBSTs7O0VBR0osaUJBQWU7RUFDZixpQkFBZTtDQUNoQjs7Ozs7QUFFTCxDQUNGIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJkaXNjbG9zdXJlLWJ1dHRvbi50c3giXSwic291cmNlc0NvbnRlbnQiOlsiXCJ1c2UgY2xpZW50XCI7XG5cbmltcG9ydCAqIGFzIFJlYWN0IGZyb20gXCJyZWFjdFwiO1xuaW1wb3J0IHsgSWNvbkJ1dHRvbiwgdHlwZSBJY29uQnV0dG9uUHJvcHMgfSBmcm9tIFwiQC9jb21wb25lbnRzL3VpL2ljb24tYnV0dG9uXCI7XG5cbi8qKlxuICogYGhyZWZgIGlzIG1pc3NpbmcgYmVjYXVzZSBhIGRpc2Nsb3N1cmUgaXMgbm90IGEgZGVzdGluYXRpb24sIGFuZCB0aGUgdHdvXG4gKiBhdHRyaWJ1dGVzIGl0IG93bnMgYXJlIG1pc3NpbmcgYmVjYXVzZSB0aGV5IGFyZSB0aGUgd2hvbGUgcmVhc29uIGl0IGV4aXN0cy5cbiAqL1xuZXhwb3J0IGludGVyZmFjZSBEaXNjbG9zdXJlQnV0dG9uUHJvcHNcbiAgZXh0ZW5kcyBPbWl0PEljb25CdXR0b25Qcm9wcywgXCJhcmlhLWV4cGFuZGVkXCIgfCBcImFyaWEtY29udHJvbHNcIiB8IFwiaHJlZlwiPiB7XG4gIC8qKiBXaGV0aGVyIHRoZSByZWdpb24gdGhpcyBjb250cm9sIG93bnMgaXMgb3Blbi4gSXQgKmlzKiBgYXJpYS1leHBhbmRlZGAuICovXG4gIG9wZW46IGJvb2xlYW47XG4gIC8qKiBUaGUgYGlkYCBvZiB0aGUgcmVnaW9uLiBJdCAqaXMqIGBhcmlhLWNvbnRyb2xzYC4gKi9cbiAgY29udHJvbHM6IHN0cmluZztcbn1cblxuLyoqXG4gKiBBIGNvbnRyb2wgdGhhdCBvcGVucyBhbmQgY2xvc2VzIGEgcmVnaW9uLCBhbmQgc2F5cyB3aGljaCB3YXkgaXQgaXMuXG4gKlxuICogVGhlIGRlZmVjdCB0aGlzIGV4aXN0cyB0byBlbmQ6IHRoZSBuYXYncyBtb2JpbGUgbWVudSBidXR0b24gd2FzIGEgaGFtYnVyZ2VyXG4gKiB0aGF0IGJlY2FtZSBhbiDDlywgd2l0aCBubyBgYXJpYS1leHBhbmRlZGAgYW5kIG5vIG5hbWUsIHNvIG5vdGhpbmcgYWJvdXQgaXRcbiAqIGFubm91bmNlZCB0aGF0IHRoZXJlIHdhcyBhIHBhbmVsIG9yIHRoYXQgb25lIGhhZCBqdXN0IG9wZW5lZC4gV2hldGhlciB0aGF0IHdhc1xuICogb3BlbiBsaXZlZCBpbiBhIGB1c2VTdGF0ZWAgdGhlIGJ1dHRvbiByZW5kZXJlZCBhbmQgbmV2ZXIgcmVwb3J0ZWQuXG4gKlxuICogSGVyZSB0aGVyZSBpcyBvbmUgYm9vbGVhbi4gYG9wZW5gIHNldHMgYGFyaWEtZXhwYW5kZWRgLCBuYW1lcyB0aGUgcmVnaW9uXG4gKiB0aHJvdWdoIGBhcmlhLWNvbnRyb2xzYCwgYW5kIHRoZSBjYWxsZXIgY2Fubm90IHBhc3MgZWl0aGVyIGF0dHJpYnV0ZSDigJQgc28gYVxuICogZGlzY2xvc3VyZSBkcmF3biB3aXRoIHRoaXMgY29tcG9uZW50IGFsd2F5cyByZXBvcnRzIGl0cyBvd24gc3RhdGUsIGFuZCB0aGVcbiAqIG9ubHkgd2F5IHRvIHdyaXRlIG9uZSB0aGF0IGRvZXMgbm90IGlzIHRvIHN0b3AgdXNpbmcgdGhlIGNvbXBvbmVudCwgd2hpY2ggdGhlXG4gKiByZW5kZXJlZCBhdWRpdCBjYXRjaGVzLlxuICpcbiAqIFRoZSByZWdpb24gaXMgdXN1YWxseSBtb3VudGVkIG9ubHkgd2hpbGUgb3Blbiwgc28gYGFyaWEtY29udHJvbHNgIG5hbWVzIGFuIGlkXG4gKiB0aGF0IGlzIGFic2VudCB3aGVuIGNsb3NlZC4gVGhhdCBpcyB3aGF0IHRoZSBhcHAgZGlkIGJ5IGhhbmQgYmVmb3JlIHRoaXNcbiAqIGNvbXBvbmVudCBleGlzdGVkIGFuZCBpdCBpcyB3aGF0IG1vc3QgUmVhY3QgcG9wb3ZlcnMgZG87IGBhcmlhLWV4cGFuZGVkYCBpc1xuICogdGhlIGF0dHJpYnV0ZSBhc3Npc3RpdmUgdGVjaG5vbG9neSBhY3R1YWxseSByZWFkcywgYW5kIGl0IGlzIGFsd2F5cyBwcmVzZW50XG4gKiBhbmQgYWx3YXlzIHJpZ2h0LlxuICovXG5leHBvcnQgY29uc3QgRGlzY2xvc3VyZUJ1dHRvbiA9IFJlYWN0LmZvcndhcmRSZWY8SFRNTEJ1dHRvbkVsZW1lbnQsIERpc2Nsb3N1cmVCdXR0b25Qcm9wcz4oXG4gIGZ1bmN0aW9uIERpc2Nsb3N1cmVCdXR0b24oeyBvcGVuLCBjb250cm9scywgLi4ucHJvcHMgfSwgcmVmKSB7XG4gICAgcmV0dXJuIChcbiAgICAgIDxJY29uQnV0dG9uXG4gICAgICAgIHJlZj17cmVmfVxuICAgICAgICB7Li4ucHJvcHN9XG4gICAgICAgIC8vIERlcml2ZWQgYWZ0ZXIgdGhlIHNwcmVhZCwgc28gdGhlIHN0YXRlIHRoZSBjYWxsZXIgcGFzc2VkIGlzIHRoZSBvbmVcbiAgICAgICAgLy8gdGhhdCByZWFjaGVzIHRoZSBET00uXG4gICAgICAgIGFyaWEtZXhwYW5kZWQ9e29wZW59XG4gICAgICAgIGFyaWEtY29udHJvbHM9e2NvbnRyb2xzfVxuICAgICAgLz5cbiAgICApO1xuICB9LFxuKTtcbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3VpL2Rpc2Nsb3N1cmUtYnV0dG9uLnRzeCJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy91aS9kaXNjbG9zdXJlLWJ1dHRvbi50c3giLCIvc3JjL2NvbXBvbmVudHMvdWkvZGlzY2xvc3VyZS1idXR0b24udHN4IixbXV0=

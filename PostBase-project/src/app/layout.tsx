@@ -1,7 +1,7 @@
+import { PageTransition } from "@/components/layout/page-transition";
 import "@/lib/weak-ref-polyfill";
 import type { Metadata } from "next";
-import { MainNav } from "@/components/layout/main-nav";
-import { BottomNav } from "@/components/layout/bottom-nav";
+import { SiteFrame } from "@/components/layout/site-frame";
 import { Footer } from "@/components/layout/footer";
 import { AuthProvider } from "@/components/auth-provider";
 import { NotificationProvider } from "@/components/providers/notification-provider";
@@ -47,15 +47,13 @@ export default function RootLayout({
                 `ThemeProvider`, because it is the one place both the account
                 and the applied accent can be read — see its own comment. */}
             <ThemeSync />
+            <PageTransition />
             <NotificationProvider>
               {/* One tooltip provider for the whole app. Radix needs it above every
                   tooltip, and a single one also means hovering one control is enough
                   for the next tooltip to open without waiting again. */}
               <TooltipProvider>
-                <MainNav />
-                <main className="mx-auto max-w-7xl px-4 py-6 pb-20 md:pb-6">{children}</main>
-                <Footer />
-                <BottomNav />
+                <SiteFrame footer={<Footer />}>{children}</SiteFrame>
               </TooltipProvider>
             </NotificationProvider>
           </AuthProvider>

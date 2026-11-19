@@ -68,7 +68,10 @@ export const signUp = async (email: string, password: string, metadata?: Record<
   return supabase.auth.signUp({
     email,
     password,
-    options: { data: metadata },
+    options: {
+      data: metadata,
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
   });
 };
 

@@ -1,0 +1,46 @@
+__vite_ssr_exportName__("Avatar", () => { try { return Avatar } catch {} });
+__vite_ssr_exportName__("AvatarImage", () => { try { return AvatarImage } catch {} });
+__vite_ssr_exportName__("AvatarFallback", () => { try { return AvatarFallback } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/react/index.js");
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/@radix-ui/react-avatar/dist/index.mjs");
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/src/lib/utils.ts", {"importedNames":["cn"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/ui/avatar.tsx";
+
+const Avatar = __vite_ssr_import_0__.forwardRef(({ className, ...props }, ref) => /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)(__vite_ssr_import_1__.Root, {
+	ref,
+	className: (0,__vite_ssr_import_2__.cn)("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className),
+	...props
+}, void 0, false, {
+	fileName: _jsxFileName,
+	lineNumber: 9,
+	columnNumber: 3
+}, this));
+Avatar.displayName = __vite_ssr_import_1__.Root.displayName;
+const AvatarImage = __vite_ssr_import_0__.forwardRef(({ className, ...props }, ref) => /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)(__vite_ssr_import_1__.Image, {
+	ref,
+	className: (0,__vite_ssr_import_2__.cn)("aspect-square h-full w-full", className),
+	...props
+}, void 0, false, {
+	fileName: _jsxFileName,
+	lineNumber: 24,
+	columnNumber: 3
+}, this));
+AvatarImage.displayName = __vite_ssr_import_1__.Image.displayName;
+const AvatarFallback = __vite_ssr_import_0__.forwardRef(({ className, ...props }, ref) => /* @__PURE__ */ (0,__vite_ssr_import_3__.jsxDEV)(__vite_ssr_import_1__.Fallback, {
+	ref,
+	className: (0,__vite_ssr_import_2__.cn)("flex h-full w-full items-center justify-center rounded-full bg-muted", className),
+	...props
+}, void 0, false, {
+	fileName: _jsxFileName,
+	lineNumber: 36,
+	columnNumber: 3
+}, this));
+AvatarFallback.displayName = __vite_ssr_import_1__.Fallback.displayName;
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7O0FBQUE7QUFDQTtBQUNBOzs7Ozs7O0FBRUEsTUFBTSxTQUFTLHNCQUFNLFlBR2xCLEVBQUUsV0FBVyxHQUFHLFNBQVMsUUFDMUIsaURBQUMsc0JBQWdCLE1BQWpCO0NBQ087Q0FDTCxXQUFXLDZCQUNULGlFQUNBLFNBQ0Y7Q0FDQSxHQUFJO0FBQ0w7Ozs7UUFDRjtBQUNELE9BQU8sY0FBYyxzQkFBZ0IsS0FBSztBQUUxQyxNQUFNLGNBQWMsc0JBQU0sWUFHdkIsRUFBRSxXQUFXLEdBQUcsU0FBUyxRQUMxQixpREFBQyxzQkFBZ0IsT0FBakI7Q0FDTztDQUNMLFdBQVcsNkJBQUcsK0JBQStCLFNBQVM7Q0FDdEQsR0FBSTtBQUNMOzs7O1FBQ0Y7QUFDRCxZQUFZLGNBQWMsc0JBQWdCLE1BQU07QUFFaEQsTUFBTSxpQkFBaUIsc0JBQU0sWUFHMUIsRUFBRSxXQUFXLEdBQUcsU0FBUyxRQUMxQixpREFBQyxzQkFBZ0IsVUFBakI7Q0FDTztDQUNMLFdBQVcsNkJBQ1Qsd0VBQ0EsU0FDRjtDQUNBLEdBQUk7QUFDTDs7OztRQUNGO0FBQ0QsZUFBZSxjQUFjLHNCQUFnQixTQUFTIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJhdmF0YXIudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCAqIGFzIFJlYWN0IGZyb20gXCJyZWFjdFwiO1xuaW1wb3J0ICogYXMgQXZhdGFyUHJpbWl0aXZlIGZyb20gXCJAcmFkaXgtdWkvcmVhY3QtYXZhdGFyXCI7XG5pbXBvcnQgeyBjbiB9IGZyb20gXCJAL2xpYi91dGlsc1wiO1xuXG5jb25zdCBBdmF0YXIgPSBSZWFjdC5mb3J3YXJkUmVmPFxuICBSZWFjdC5FbGVtZW50UmVmPHR5cGVvZiBBdmF0YXJQcmltaXRpdmUuUm9vdD4sXG4gIFJlYWN0LkNvbXBvbmVudFByb3BzV2l0aG91dFJlZjx0eXBlb2YgQXZhdGFyUHJpbWl0aXZlLlJvb3Q+XG4+KCh7IGNsYXNzTmFtZSwgLi4ucHJvcHMgfSwgcmVmKSA9PiAoXG4gIDxBdmF0YXJQcmltaXRpdmUuUm9vdFxuICAgIHJlZj17cmVmfVxuICAgIGNsYXNzTmFtZT17Y24oXG4gICAgICBcInJlbGF0aXZlIGZsZXggaC0xMCB3LTEwIHNocmluay0wIG92ZXJmbG93LWhpZGRlbiByb3VuZGVkLWZ1bGxcIixcbiAgICAgIGNsYXNzTmFtZVxuICAgICl9XG4gICAgey4uLnByb3BzfVxuICAvPlxuKSk7XG5BdmF0YXIuZGlzcGxheU5hbWUgPSBBdmF0YXJQcmltaXRpdmUuUm9vdC5kaXNwbGF5TmFtZTtcblxuY29uc3QgQXZhdGFySW1hZ2UgPSBSZWFjdC5mb3J3YXJkUmVmPFxuICBSZWFjdC5FbGVtZW50UmVmPHR5cGVvZiBBdmF0YXJQcmltaXRpdmUuSW1hZ2U+LFxuICBSZWFjdC5Db21wb25lbnRQcm9wc1dpdGhvdXRSZWY8dHlwZW9mIEF2YXRhclByaW1pdGl2ZS5JbWFnZT5cbj4oKHsgY2xhc3NOYW1lLCAuLi5wcm9wcyB9LCByZWYpID0+IChcbiAgPEF2YXRhclByaW1pdGl2ZS5JbWFnZVxuICAgIHJlZj17cmVmfVxuICAgIGNsYXNzTmFtZT17Y24oXCJhc3BlY3Qtc3F1YXJlIGgtZnVsbCB3LWZ1bGxcIiwgY2xhc3NOYW1lKX1cbiAgICB7Li4ucHJvcHN9XG4gIC8+XG4pKTtcbkF2YXRhckltYWdlLmRpc3BsYXlOYW1lID0gQXZhdGFyUHJpbWl0aXZlLkltYWdlLmRpc3BsYXlOYW1lO1xuXG5jb25zdCBBdmF0YXJGYWxsYmFjayA9IFJlYWN0LmZvcndhcmRSZWY8XG4gIFJlYWN0LkVsZW1lbnRSZWY8dHlwZW9mIEF2YXRhclByaW1pdGl2ZS5GYWxsYmFjaz4sXG4gIFJlYWN0LkNvbXBvbmVudFByb3BzV2l0aG91dFJlZjx0eXBlb2YgQXZhdGFyUHJpbWl0aXZlLkZhbGxiYWNrPlxuPigoeyBjbGFzc05hbWUsIC4uLnByb3BzIH0sIHJlZikgPT4gKFxuICA8QXZhdGFyUHJpbWl0aXZlLkZhbGxiYWNrXG4gICAgcmVmPXtyZWZ9XG4gICAgY2xhc3NOYW1lPXtjbihcbiAgICAgIFwiZmxleCBoLWZ1bGwgdy1mdWxsIGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWNlbnRlciByb3VuZGVkLWZ1bGwgYmctbXV0ZWRcIixcbiAgICAgIGNsYXNzTmFtZVxuICAgICl9XG4gICAgey4uLnByb3BzfVxuICAvPlxuKSk7XG5BdmF0YXJGYWxsYmFjay5kaXNwbGF5TmFtZSA9IEF2YXRhclByaW1pdGl2ZS5GYWxsYmFjay5kaXNwbGF5TmFtZTtcblxuZXhwb3J0IHsgQXZhdGFyLCBBdmF0YXJJbWFnZSwgQXZhdGFyRmFsbGJhY2sgfTtcbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3VpL2F2YXRhci50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy91aS9hdmF0YXIudHN4IiwiL3NyYy9jb21wb25lbnRzL3VpL2F2YXRhci50c3giLFtdXQ==

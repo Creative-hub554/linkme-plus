@@ -1,0 +1,48 @@
+__vite_ssr_exportName__("default", () => { try { return AccountRestrictedPage } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/src/lib/auth-client.ts", {"importedNames":["signOut"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/src/components/ui/button.tsx", {"importedNames":["Button"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/app/(static)/account-restricted/page.tsx";
+
+function AccountRestrictedPage() {
+	return /* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("div", {
+		className: "mx-auto my-12 max-w-lg space-y-5 rounded-xl border bg-card p-6",
+		children: [
+			/* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("h1", {
+				className: "text-2xl font-bold",
+				children: "Account restricted"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 7,
+				columnNumber: 7
+			}, this),
+			/* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)("p", { children: "Your account is currently suspended or banned. Contact the platform team if you believe this is a mistake." }, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 8,
+				columnNumber: 7
+			}, this),
+			/* @__PURE__ */ (0,__vite_ssr_import_2__.jsxDEV)((0,__vite_ssr_import_1__.Button), {
+				onClick: async () => {
+					await (0,__vite_ssr_import_0__.signOut)();
+					window.location.assign("/login");
+				},
+				children: "Sign out"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 12,
+				columnNumber: 7
+			}, this)
+		]
+	}, void 0, true, {
+		fileName: _jsxFileName,
+		lineNumber: 6,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUNBO0FBQ0E7O0FBRkE7Ozs7O0FBR2UsU0FBUyx3QkFBd0I7Q0FDOUMsT0FDRSxpREFBQyxPQUFEO0VBQUssV0FBVTtZQUFmO0dBQ0UsaURBQUMsTUFBRDtJQUFJLFdBQVU7Y0FBcUI7R0FBc0I7Ozs7O0dBQ3pELGlEQUFDLEtBQUQsWUFBRyw2R0FHQTs7Ozs7R0FDSCxvREFBQywrQkFBRDtJQUNFLFNBQVMsWUFBWTtLQUNuQixNQUFNLG1DQUFRO0tBQ2QsT0FBTyxTQUFTLE9BQU8sUUFBUTtJQUNqQztjQUNEO0dBRU87Ozs7O0VBQ0w7Ozs7OztBQUVUIiwibmFtZXMiOltdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJwYWdlLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBjbGllbnRcIjtcbmltcG9ydCB7IHNpZ25PdXQgfSBmcm9tIFwiQC9saWIvYXV0aC1jbGllbnRcIjtcbmltcG9ydCB7IEJ1dHRvbiB9IGZyb20gXCJAL2NvbXBvbmVudHMvdWkvYnV0dG9uXCI7XG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBBY2NvdW50UmVzdHJpY3RlZFBhZ2UoKSB7XG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9XCJteC1hdXRvIG15LTEyIG1heC13LWxnIHNwYWNlLXktNSByb3VuZGVkLXhsIGJvcmRlciBiZy1jYXJkIHAtNlwiPlxuICAgICAgPGgxIGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZFwiPkFjY291bnQgcmVzdHJpY3RlZDwvaDE+XG4gICAgICA8cD5cbiAgICAgICAgWW91ciBhY2NvdW50IGlzIGN1cnJlbnRseSBzdXNwZW5kZWQgb3IgYmFubmVkLiBDb250YWN0IHRoZSBwbGF0Zm9ybSB0ZWFtXG4gICAgICAgIGlmIHlvdSBiZWxpZXZlIHRoaXMgaXMgYSBtaXN0YWtlLlxuICAgICAgPC9wPlxuICAgICAgPEJ1dHRvblxuICAgICAgICBvbkNsaWNrPXthc3luYyAoKSA9PiB7XG4gICAgICAgICAgYXdhaXQgc2lnbk91dCgpO1xuICAgICAgICAgIHdpbmRvdy5sb2NhdGlvbi5hc3NpZ24oXCIvbG9naW5cIik7XG4gICAgICAgIH19XG4gICAgICA+XG4gICAgICAgIFNpZ24gb3V0XG4gICAgICA8L0J1dHRvbj5cbiAgICA8L2Rpdj5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiQzpcXFdvcmtzcGFjZVxcV2Vic2l0ZWJ1aWxkZXJ0b29sc2FpXFxQb3N0QmFzZS1wcm9qZWN0XFxzcmNcXGFwcFxcKHN0YXRpYylcXGFjY291bnQtcmVzdHJpY3RlZFxccGFnZS50c3gifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvYXBwLyhzdGF0aWMpL2FjY291bnQtcmVzdHJpY3RlZC9wYWdlLnRzeCIsIkM6XFxXb3Jrc3BhY2VcXFdlYnNpdGVidWlsZGVydG9vbHNhaVxcUG9zdEJhc2UtcHJvamVjdFxcc3JjXFxhcHBcXChzdGF0aWMpXFxhY2NvdW50LXJlc3RyaWN0ZWRcXHBhZ2UudHN4IixbXV0=

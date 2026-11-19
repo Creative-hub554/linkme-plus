@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ReportPostDialog } from "@/components/social/report-post-dialog";
 import { PostOptionsMenu } from "@/components/social/post-options-menu";
 import type { PostEdit } from "@/components/social/post-edit-dialog";
+import { feedTopics } from "@/lib/feed-topics";
 
 interface Author {
   name: string;
@@ -37,6 +38,7 @@ export interface PostActivity {
 }
 
 interface PostCardProps {
+  topicId?: string | null;
   id: string;
   author: Author;
   content: string;
@@ -107,7 +109,7 @@ function useReconciledCount(authoritative: number) {
 
 const stickers = ["❤️", "😂", "🔥", "👏", "🎉", "😍"];
 
-export function PostCard({ id, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false }: PostCardProps) {
+export function PostCard({ id, topicId, author, content, image, mediaType, time, likes: initialLikes, comments: initialComments, shares, liked: initialLiked = false, saved: initialSaved = false, visibility, groupName, pending = false, activity, onDelete, onUpdate, edited = false }: PostCardProps) {
   const [liked, setLiked] = useState(initialLiked);
   const [reaction, setReaction] = useState<string | null>(initialLiked ? "like" : null);
   const [saved, setSaved] = useState(initialSaved);
@@ -296,12 +298,13 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
   };
 
   return (
-    <Card
+    <Card data-community-post=""
       id={`post-${id}`}
       aria-busy={pending || undefined}
       className={cn("overflow-visible border-surface-border/90 shadow-sm transition-shadow", pending ? "opacity-70" : "hover:shadow-md")}
     >
       <CardContent className="p-4 sm:p-5">
+        {topicId && <span className="text-xs text-muted-foreground">{feedTopics.find(topic => topic.id === topicId)?.en}</span>}
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10 shrink-0 ring-2 ring-brand-blue/10">
             <AvatarImage src={author.avatar} alt={`${author.name}'s profile picture`} />
@@ -344,6 +347,7 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
               </div>
               {!pending && (onDelete
                 ? <PostOptionsMenu
+                  topicId={topicId}
                     postId={id}
                     content={content}
                     visibility={visibility}
@@ -357,7 +361,7 @@ export function PostCard({ id, author, content, image, mediaType, time, likes: i
             {content && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-navy-700">{content}</p>}
             {image && <div className="relative mt-4 overflow-hidden rounded-lg border border-surface-border bg-ink-800">{isVideo ? <video src={image} controls preload="metadata" className="max-h-[520px] w-full object-cover" aria-label="Post video" /> : <img src={image} alt="Image shared in this post" loading="lazy" className="max-h-[520px] w-full object-cover" />}{isVideo && <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-navy-900/70 px-2 py-1 text-[11px] font-medium text-white"><Play className="h-3 w-3 fill-current" /> Video</span>}</div>}
 
-            <div className="relative mt-4 flex items-center gap-1 border-t border-surface-border pt-2">
+            <div className="relative mt-4 flex flex-wrap items-center gap-1 border-t border-surface-border pt-2">
               <IconButton size="sm" label={reactionLabel} className={cn("h-9 px-3 text-xs", reaction && "text-red-500 hover:text-red-600")} onClick={() => void updateReaction("like")} disabled={reactionLoading || pending}>
                 {reactionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Heart className={cn("mr-1.5 h-4 w-4", reaction === "like" && "fill-current")} />}{likes}
               </IconButton>

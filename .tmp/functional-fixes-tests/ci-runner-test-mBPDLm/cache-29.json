@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "stages": {
+    "mutation-preflight": {
+      "hash": "a38b644c9c379745f24262818b26875fe8f3694c09c8371cbc14a79cc78d4de8",
+      "startedHash": "a38b644c9c379745f24262818b26875fe8f3694c09c8371cbc14a79cc78d4de8",
+      "pass": true,
+      "summary": "2 preflight mutation(s) checked, no survivors",
+      "at": "2026-10-27T04:49:24.650Z"
+    }
+  }
+}

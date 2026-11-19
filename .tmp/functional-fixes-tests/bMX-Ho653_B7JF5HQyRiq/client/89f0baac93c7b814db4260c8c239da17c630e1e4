@@ -1,0 +1,165 @@
+__vite_ssr_exportName__("postAudiences", () => { try { return postAudiences } catch {} });
+__vite_ssr_exportName__("audienceLabel", () => { try { return audienceLabel } catch {} });
+__vite_ssr_exportName__("composerAudiences", () => { try { return composerAudiences } catch {} });
+__vite_ssr_exportName__("audienceRule", () => { try { return audienceRule } catch {} });
+__vite_ssr_exportName__("audienceRuleFor", () => { try { return audienceRuleFor } catch {} });
+__vite_ssr_exportName__("isPostAudience", () => { try { return isPostAudience } catch {} });
+__vite_ssr_exportName__("toPostAudience", () => { try { return toPostAudience } catch {} });
+__vite_ssr_exportName__("canReadPost", () => { try { return canReadPost } catch {} });
+/**
+* The audiences a post can be published to, and what each one means.
+*
+* This is the only list in the codebase. Everything that needs to know which
+* audiences exist derives from it: the `visibility` enum in the database, the
+* rule below (and so both its SQL rendering and its in-process evaluation), the
+* post card's pill, and the API's reading of what a client may send. Before this
+* module they were five separate lists, which is how the picker could offer an
+* audience the predicate did not enforce. The composer's picker is the one
+* deliberate subset of the list — see {@link composerAudiences} for why.
+*
+* Deliberately free of drizzle and React, so both the server and the UI can
+* import it.
+*/
+/**
+* Every audience a post can be published to.
+*
+* `group` is here because a post published into a group is a post whose readers
+* are that group's members, and an audience is exactly what this module is for —
+* so the feed, the group's own page and every other query learns who may read it
+* from the same rule, rather than each growing its own membership check.
+*
+* It is deliberately not offered in a picker: see {@link composerAudiences}.
+*/
+const postAudiences = [
+	"public",
+	"followers",
+	"private",
+	"group"
+];
+/**
+* What each audience is called where a member reads it — the picker's trigger,
+* its menu, and the pill on a post all say the same thing.
+*/
+const audienceLabel = {
+	public: "Public",
+	followers: "Followers",
+	private: "Only me",
+	group: "Group members"
+};
+/**
+* The audiences a composer's picker may offer, which is not the same list as
+* {@link postAudiences}.
+*
+* `group` is missing on purpose. It is not a choice a member makes about a post
+* — it is what publishing *into a group* means, and the group is what the
+* composer was opened in. Offering it beside Public and Private would let
+* somebody pick "Group members" for a post with no group on it, which is a post
+* then readable by nobody at all, its author aside. A surface that can honour an
+* audience is a surface that may offer it.
+*/
+const composerAudiences = [
+	"public",
+	"followers",
+	"private"
+];
+/**
+* The audience rule: what a `visibility` means, in one place.
+*
+* {@link visiblePostsCondition} renders it to SQL for the queries;
+* {@link canReadPost} evaluates it in process, so a test or an in-process fake
+* can answer for the server without restating the rule and drifting from it.
+*
+* Keyed by {@link PostAudience}, so an audience added to the list above fails
+* the build until somebody decides who it admits. Two flags describe the two
+* kinds of admittance, and they are mutually exclusive (asserted in the tests)
+* because the renderers read them in that order.
+*
+* Only *what* an audience admits belongs here. *How* to ask the database about
+* it — the shape of the follow-edge subquery — belongs in the renderer, since
+* no other form can express it.
+*/
+const audienceRule = {
+	public: {
+		admitsAnyone: true,
+		requiresFollow: false,
+		requiresGroupMembership: false
+	},
+	followers: {
+		admitsAnyone: false,
+		requiresFollow: true,
+		requiresGroupMembership: false
+	},
+	private: {
+		admitsAnyone: false,
+		requiresFollow: false,
+		requiresGroupMembership: false
+	},
+	group: {
+		admitsAnyone: false,
+		requiresFollow: false,
+		requiresGroupMembership: true
+	}
+};
+/** The rule for a stored `visibility`, or `null` for a value we do not know. */
+function audienceRuleFor(visibility) {
+	return audienceRule[visibility] ?? null;
+};
+/**
+* Whether a value off the wire is an audience this code knows.
+*
+* Built from the list rather than checking the names one by one, so narrowing
+* and the rule can never disagree about which audiences exist.
+*/
+function isPostAudience(value) {
+	return typeof value === "string" && postAudiences.includes(value);
+};
+/**
+* Narrows whatever a post carries into an audience the UI can show.
+*
+* Posts reach the UI from the API, from Realtime and from the database enum, so
+* the value is only trusted after being checked. Anything unrecognised reads as
+* `public` — the first audience, which is the same fallback the API's create
+* path uses.
+*/
+function toPostAudience(value) {
+	return isPostAudience(value) ? value : postAudiences[0];
+};
+/**
+* {@link audienceRule} evaluated in process: whether `viewer` may read a post.
+*
+* The author, then whatever the audience admits. The author is admitted by every
+* audience, and on a Page's post that means the admin who pressed publish — the
+* person the row belongs to, which is also what the edit and delete checks
+* compare against.
+*
+* A `followers` post is gated on following **its subject**: the member for a
+* post they published as themselves, the Page for one published as a Page. The
+* two are not interchangeable — a member who follows the admin of a Page cannot
+* read that Page's followers-only posts, and following the Page does not admit
+* the member's own — which is why `pageId` decides the edge rather than either
+* edge being enough.
+*
+* A `group` post is gated on belonging to **its group**, which the viewer says
+* by handing over the ids they are a member of. An empty set is the honest
+* answer for a viewer whose memberships were not looked up, and it fails closed.
+*
+* A `visibility` nobody knows matches no clause of `visiblePostsCondition`
+* either, so both sides fail closed to the author alone.
+*/
+function canReadPost(viewerId, post, viewerFollows, viewerGroupIds = new Set()) {
+	if (post.authorId === viewerId) return true;
+	const rule = audienceRuleFor(post.visibility);
+	if (!rule) return false;
+	if (rule.admitsAnyone) return true;
+	if (rule.requiresGroupMembership) {
+		// A `group` post with no group is readable by nobody but its author: there
+		// is no set of members it belongs to. Fail closed rather than fall through.
+		return Boolean(post.groupId) && viewerGroupIds.has(post.groupId);
+	};
+	if (!rule.requiresFollow) return false;
+	return post.pageId ? viewerFollows.page : viewerFollows.author;
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUF5Qk8sTUFBTSxnQkFBZ0I7Q0FBQztDQUFVO0NBQWE7Q0FBVztBQUFPOzs7OztBQVFoRSxNQUFNLGdCQUE4QztDQUN6RCxRQUFRO0NBQ1IsV0FBVztDQUNYLFNBQVM7Q0FDVCxPQUFPO0FBQ1Q7Ozs7Ozs7Ozs7OztBQWFPLE1BQU0sb0JBQW9DO0NBQUM7Q0FBVTtDQUFhO0FBQVM7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBd0MzRSxNQUFNLGVBQWU7Q0FDMUIsUUFBUTtFQUFFLGNBQWM7RUFBTSxnQkFBZ0I7RUFBTyx5QkFBeUI7Q0FBTTtDQUNwRixXQUFXO0VBQUUsY0FBYztFQUFPLGdCQUFnQjtFQUFNLHlCQUF5QjtDQUFNO0NBQ3ZGLFNBQVM7RUFBRSxjQUFjO0VBQU8sZ0JBQWdCO0VBQU8seUJBQXlCO0NBQU07Q0FDdEYsT0FBTztFQUFFLGNBQWM7RUFBTyxnQkFBZ0I7RUFBTyx5QkFBeUI7Q0FBSztBQUNyRjs7QUFHTyxTQUFTLGdCQUFnQixZQUF5QztDQUN2RSxPQUFRLGFBQTBELGVBQWU7QUFDbkY7Ozs7Ozs7QUFRTyxTQUFTLGVBQWUsT0FBdUM7Q0FDcEUsT0FBTyxPQUFPLFVBQVUsWUFBYSxjQUFvQyxTQUFTLEtBQUs7QUFDekY7Ozs7Ozs7OztBQVVPLFNBQVMsZUFBZSxPQUE4QjtDQUMzRCxPQUFPLGVBQWUsS0FBSyxJQUFJLFFBQVEsY0FBYztBQUN2RDs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFvQ08sU0FBUyxZQUNkLFVBQ0EsTUFDQSxlQUNBLGlCQUFzQyxJQUFJLElBQUksR0FDckM7Q0FDVCxJQUFJLEtBQUssYUFBYSxVQUFVLE9BQU87Q0FFdkMsTUFBTSxPQUFPLGdCQUFnQixLQUFLLFVBQVU7Q0FDNUMsSUFBSSxDQUFDLE1BQU0sT0FBTztDQUNsQixJQUFJLEtBQUssY0FBYyxPQUFPO0NBQzlCLElBQUksS0FBSyx5QkFBeUI7OztFQUdoQyxPQUFPLFFBQVEsS0FBSyxPQUFPLEtBQUssZUFBZSxJQUFJLEtBQUssT0FBaUI7Q0FDM0U7Q0FDQSxJQUFJLENBQUMsS0FBSyxnQkFBZ0IsT0FBTztDQUVqQyxPQUFPLEtBQUssU0FBUyxjQUFjLE9BQU8sY0FBYztBQUMxRCIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsicG9zdC1hdWRpZW5jZXMudHMiXSwic291cmNlc0NvbnRlbnQiOlsiLyoqXG4gKiBUaGUgYXVkaWVuY2VzIGEgcG9zdCBjYW4gYmUgcHVibGlzaGVkIHRvLCBhbmQgd2hhdCBlYWNoIG9uZSBtZWFucy5cbiAqXG4gKiBUaGlzIGlzIHRoZSBvbmx5IGxpc3QgaW4gdGhlIGNvZGViYXNlLiBFdmVyeXRoaW5nIHRoYXQgbmVlZHMgdG8ga25vdyB3aGljaFxuICogYXVkaWVuY2VzIGV4aXN0IGRlcml2ZXMgZnJvbSBpdDogdGhlIGB2aXNpYmlsaXR5YCBlbnVtIGluIHRoZSBkYXRhYmFzZSwgdGhlXG4gKiBydWxlIGJlbG93IChhbmQgc28gYm90aCBpdHMgU1FMIHJlbmRlcmluZyBhbmQgaXRzIGluLXByb2Nlc3MgZXZhbHVhdGlvbiksIHRoZVxuICogcG9zdCBjYXJkJ3MgcGlsbCwgYW5kIHRoZSBBUEkncyByZWFkaW5nIG9mIHdoYXQgYSBjbGllbnQgbWF5IHNlbmQuIEJlZm9yZSB0aGlzXG4gKiBtb2R1bGUgdGhleSB3ZXJlIGZpdmUgc2VwYXJhdGUgbGlzdHMsIHdoaWNoIGlzIGhvdyB0aGUgcGlja2VyIGNvdWxkIG9mZmVyIGFuXG4gKiBhdWRpZW5jZSB0aGUgcHJlZGljYXRlIGRpZCBub3QgZW5mb3JjZS4gVGhlIGNvbXBvc2VyJ3MgcGlja2VyIGlzIHRoZSBvbmVcbiAqIGRlbGliZXJhdGUgc3Vic2V0IG9mIHRoZSBsaXN0IOKAlCBzZWUge0BsaW5rIGNvbXBvc2VyQXVkaWVuY2VzfSBmb3Igd2h5LlxuICpcbiAqIERlbGliZXJhdGVseSBmcmVlIG9mIGRyaXp6bGUgYW5kIFJlYWN0LCBzbyBib3RoIHRoZSBzZXJ2ZXIgYW5kIHRoZSBVSSBjYW5cbiAqIGltcG9ydCBpdC5cbiAqL1xuXG4vKipcbiAqIEV2ZXJ5IGF1ZGllbmNlIGEgcG9zdCBjYW4gYmUgcHVibGlzaGVkIHRvLlxuICpcbiAqIGBncm91cGAgaXMgaGVyZSBiZWNhdXNlIGEgcG9zdCBwdWJsaXNoZWQgaW50byBhIGdyb3VwIGlzIGEgcG9zdCB3aG9zZSByZWFkZXJzXG4gKiBhcmUgdGhhdCBncm91cCdzIG1lbWJlcnMsIGFuZCBhbiBhdWRpZW5jZSBpcyBleGFjdGx5IHdoYXQgdGhpcyBtb2R1bGUgaXMgZm9yIOKAlFxuICogc28gdGhlIGZlZWQsIHRoZSBncm91cCdzIG93biBwYWdlIGFuZCBldmVyeSBvdGhlciBxdWVyeSBsZWFybnMgd2hvIG1heSByZWFkIGl0XG4gKiBmcm9tIHRoZSBzYW1lIHJ1bGUsIHJhdGhlciB0aGFuIGVhY2ggZ3Jvd2luZyBpdHMgb3duIG1lbWJlcnNoaXAgY2hlY2suXG4gKlxuICogSXQgaXMgZGVsaWJlcmF0ZWx5IG5vdCBvZmZlcmVkIGluIGEgcGlja2VyOiBzZWUge0BsaW5rIGNvbXBvc2VyQXVkaWVuY2VzfS5cbiAqL1xuZXhwb3J0IGNvbnN0IHBvc3RBdWRpZW5jZXMgPSBbXCJwdWJsaWNcIiwgXCJmb2xsb3dlcnNcIiwgXCJwcml2YXRlXCIsIFwiZ3JvdXBcIl0gYXMgY29uc3Q7XG5cbmV4cG9ydCB0eXBlIFBvc3RBdWRpZW5jZSA9ICh0eXBlb2YgcG9zdEF1ZGllbmNlcylbbnVtYmVyXTtcblxuLyoqXG4gKiBXaGF0IGVhY2ggYXVkaWVuY2UgaXMgY2FsbGVkIHdoZXJlIGEgbWVtYmVyIHJlYWRzIGl0IOKAlCB0aGUgcGlja2VyJ3MgdHJpZ2dlcixcbiAqIGl0cyBtZW51LCBhbmQgdGhlIHBpbGwgb24gYSBwb3N0IGFsbCBzYXkgdGhlIHNhbWUgdGhpbmcuXG4gKi9cbmV4cG9ydCBjb25zdCBhdWRpZW5jZUxhYmVsOiBSZWNvcmQ8UG9zdEF1ZGllbmNlLCBzdHJpbmc+ID0ge1xuICBwdWJsaWM6IFwiUHVibGljXCIsXG4gIGZvbGxvd2VyczogXCJGb2xsb3dlcnNcIixcbiAgcHJpdmF0ZTogXCJPbmx5IG1lXCIsXG4gIGdyb3VwOiBcIkdyb3VwIG1lbWJlcnNcIixcbn07XG5cbi8qKlxuICogVGhlIGF1ZGllbmNlcyBhIGNvbXBvc2VyJ3MgcGlja2VyIG1heSBvZmZlciwgd2hpY2ggaXMgbm90IHRoZSBzYW1lIGxpc3QgYXNcbiAqIHtAbGluayBwb3N0QXVkaWVuY2VzfS5cbiAqXG4gKiBgZ3JvdXBgIGlzIG1pc3Npbmcgb24gcHVycG9zZS4gSXQgaXMgbm90IGEgY2hvaWNlIGEgbWVtYmVyIG1ha2VzIGFib3V0IGEgcG9zdFxuICog4oCUIGl0IGlzIHdoYXQgcHVibGlzaGluZyAqaW50byBhIGdyb3VwKiBtZWFucywgYW5kIHRoZSBncm91cCBpcyB3aGF0IHRoZVxuICogY29tcG9zZXIgd2FzIG9wZW5lZCBpbi4gT2ZmZXJpbmcgaXQgYmVzaWRlIFB1YmxpYyBhbmQgUHJpdmF0ZSB3b3VsZCBsZXRcbiAqIHNvbWVib2R5IHBpY2sgXCJHcm91cCBtZW1iZXJzXCIgZm9yIGEgcG9zdCB3aXRoIG5vIGdyb3VwIG9uIGl0LCB3aGljaCBpcyBhIHBvc3RcbiAqIHRoZW4gcmVhZGFibGUgYnkgbm9ib2R5IGF0IGFsbCwgaXRzIGF1dGhvciBhc2lkZS4gQSBzdXJmYWNlIHRoYXQgY2FuIGhvbm91ciBhblxuICogYXVkaWVuY2UgaXMgYSBzdXJmYWNlIHRoYXQgbWF5IG9mZmVyIGl0LlxuICovXG5leHBvcnQgY29uc3QgY29tcG9zZXJBdWRpZW5jZXM6IFBvc3RBdWRpZW5jZVtdID0gW1wicHVibGljXCIsIFwiZm9sbG93ZXJzXCIsIFwicHJpdmF0ZVwiXTtcblxuLyoqXG4gKiBXaG8gb25lIGF1ZGllbmNlIGFkbWl0cyAqKmJleW9uZCB0aGUgcG9zdCdzIGF1dGhvcioqLiBUaGUgYXV0aG9yIGlzIGFkbWl0dGVkXG4gKiBieSBldmVyeSBhdWRpZW5jZSwgd2hpY2ggaXMgd2h5IHRoYXQgaXMgbm90IHJlcGVhdGVkIHBlciByb3cuXG4gKi9cbmludGVyZmFjZSBBdWRpZW5jZVJ1bGUge1xuICAvKiogUmVhZGFibGUgYnkgYW55IHNpZ25lZC1pbiBtZW1iZXIuICovXG4gIGFkbWl0c0FueW9uZTogYm9vbGVhbjtcbiAgLyoqXG4gICAqIFJlYWRhYmxlIGJ5IGEgbWVtYmVyIGZvbGxvd2luZyAqKnRoZSBwb3N0J3Mgc3ViamVjdCoqIOKAlCB0aGUgbWVtYmVyIHdob1xuICAgKiBwdWJsaXNoZWQgaXQsIG9yIHRoZSBQYWdlIGl0IHdhcyBwdWJsaXNoZWQgYXMuIFdoaWNoIGVkZ2UgdGhhdCBpcyBpcyBhXG4gICAqIHByb3BlcnR5IG9mIHRoZSBwb3N0IHJhdGhlciB0aGFuIG9mIHRoZSBhdWRpZW5jZSwgc28gaXQgaXMgZGVjaWRlZCBpblxuICAgKiB7QGxpbmsgY2FuUmVhZFBvc3R9IChhbmQsIGZvciBTUUwsIGluIHRoZSByZW5kZXJlcikgcmF0aGVyIHRoYW4gaGVyZS5cbiAgICovXG4gIHJlcXVpcmVzRm9sbG93OiBib29sZWFuO1xuICAvKipcbiAgICogUmVhZGFibGUgYnkgYSBtZW1iZXIgb2YgKip0aGUgZ3JvdXAgdGhlIHBvc3Qgd2FzIHB1Ymxpc2hlZCBpbnRvKiosIHJlYWQgZnJvbVxuICAgKiB0aGUgcG9zdCdzIGBncm91cElkYC4gTGlrZSBgcmVxdWlyZXNGb2xsb3dgLCAqd2hpY2gqIGdyb3VwIGlzIGEgcHJvcGVydHkgb2ZcbiAgICogdGhlIHBvc3QgcmF0aGVyIHRoYW4gb2YgdGhlIGF1ZGllbmNlLCBhbmQgaXMgbG9va2VkIHVwIGJ5IHRoZSBjYWxsZXIuXG4gICAqL1xuICByZXF1aXJlc0dyb3VwTWVtYmVyc2hpcDogYm9vbGVhbjtcbn1cblxuLyoqXG4gKiBUaGUgYXVkaWVuY2UgcnVsZTogd2hhdCBhIGB2aXNpYmlsaXR5YCBtZWFucywgaW4gb25lIHBsYWNlLlxuICpcbiAqIHtAbGluayB2aXNpYmxlUG9zdHNDb25kaXRpb259IHJlbmRlcnMgaXQgdG8gU1FMIGZvciB0aGUgcXVlcmllcztcbiAqIHtAbGluayBjYW5SZWFkUG9zdH0gZXZhbHVhdGVzIGl0IGluIHByb2Nlc3MsIHNvIGEgdGVzdCBvciBhbiBpbi1wcm9jZXNzIGZha2VcbiAqIGNhbiBhbnN3ZXIgZm9yIHRoZSBzZXJ2ZXIgd2l0aG91dCByZXN0YXRpbmcgdGhlIHJ1bGUgYW5kIGRyaWZ0aW5nIGZyb20gaXQuXG4gKlxuICogS2V5ZWQgYnkge0BsaW5rIFBvc3RBdWRpZW5jZX0sIHNvIGFuIGF1ZGllbmNlIGFkZGVkIHRvIHRoZSBsaXN0IGFib3ZlIGZhaWxzXG4gKiB0aGUgYnVpbGQgdW50aWwgc29tZWJvZHkgZGVjaWRlcyB3aG8gaXQgYWRtaXRzLiBUd28gZmxhZ3MgZGVzY3JpYmUgdGhlIHR3b1xuICoga2luZHMgb2YgYWRtaXR0YW5jZSwgYW5kIHRoZXkgYXJlIG11dHVhbGx5IGV4Y2x1c2l2ZSAoYXNzZXJ0ZWQgaW4gdGhlIHRlc3RzKVxuICogYmVjYXVzZSB0aGUgcmVuZGVyZXJzIHJlYWQgdGhlbSBpbiB0aGF0IG9yZGVyLlxuICpcbiAqIE9ubHkgKndoYXQqIGFuIGF1ZGllbmNlIGFkbWl0cyBiZWxvbmdzIGhlcmUuICpIb3cqIHRvIGFzayB0aGUgZGF0YWJhc2UgYWJvdXRcbiAqIGl0IOKAlCB0aGUgc2hhcGUgb2YgdGhlIGZvbGxvdy1lZGdlIHN1YnF1ZXJ5IOKAlCBiZWxvbmdzIGluIHRoZSByZW5kZXJlciwgc2luY2VcbiAqIG5vIG90aGVyIGZvcm0gY2FuIGV4cHJlc3MgaXQuXG4gKi9cbmV4cG9ydCBjb25zdCBhdWRpZW5jZVJ1bGUgPSB7XG4gIHB1YmxpYzogeyBhZG1pdHNBbnlvbmU6IHRydWUsIHJlcXVpcmVzRm9sbG93OiBmYWxzZSwgcmVxdWlyZXNHcm91cE1lbWJlcnNoaXA6IGZhbHNlIH0sXG4gIGZvbGxvd2VyczogeyBhZG1pdHNBbnlvbmU6IGZhbHNlLCByZXF1aXJlc0ZvbGxvdzogdHJ1ZSwgcmVxdWlyZXNHcm91cE1lbWJlcnNoaXA6IGZhbHNlIH0sXG4gIHByaXZhdGU6IHsgYWRtaXRzQW55b25lOiBmYWxzZSwgcmVxdWlyZXNGb2xsb3c6IGZhbHNlLCByZXF1aXJlc0dyb3VwTWVtYmVyc2hpcDogZmFsc2UgfSxcbiAgZ3JvdXA6IHsgYWRtaXRzQW55b25lOiBmYWxzZSwgcmVxdWlyZXNGb2xsb3c6IGZhbHNlLCByZXF1aXJlc0dyb3VwTWVtYmVyc2hpcDogdHJ1ZSB9LFxufSBhcyBjb25zdCBzYXRpc2ZpZXMgUmVjb3JkPFBvc3RBdWRpZW5jZSwgQXVkaWVuY2VSdWxlPjtcblxuLyoqIFRoZSBydWxlIGZvciBhIHN0b3JlZCBgdmlzaWJpbGl0eWAsIG9yIGBudWxsYCBmb3IgYSB2YWx1ZSB3ZSBkbyBub3Qga25vdy4gKi9cbmV4cG9ydCBmdW5jdGlvbiBhdWRpZW5jZVJ1bGVGb3IodmlzaWJpbGl0eTogc3RyaW5nKTogQXVkaWVuY2VSdWxlIHwgbnVsbCB7XG4gIHJldHVybiAoYXVkaWVuY2VSdWxlIGFzIFJlY29yZDxzdHJpbmcsIEF1ZGllbmNlUnVsZSB8IHVuZGVmaW5lZD4pW3Zpc2liaWxpdHldID8/IG51bGw7XG59XG5cbi8qKlxuICogV2hldGhlciBhIHZhbHVlIG9mZiB0aGUgd2lyZSBpcyBhbiBhdWRpZW5jZSB0aGlzIGNvZGUga25vd3MuXG4gKlxuICogQnVpbHQgZnJvbSB0aGUgbGlzdCByYXRoZXIgdGhhbiBjaGVja2luZyB0aGUgbmFtZXMgb25lIGJ5IG9uZSwgc28gbmFycm93aW5nXG4gKiBhbmQgdGhlIHJ1bGUgY2FuIG5ldmVyIGRpc2FncmVlIGFib3V0IHdoaWNoIGF1ZGllbmNlcyBleGlzdC5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGlzUG9zdEF1ZGllbmNlKHZhbHVlOiB1bmtub3duKTogdmFsdWUgaXMgUG9zdEF1ZGllbmNlIHtcbiAgcmV0dXJuIHR5cGVvZiB2YWx1ZSA9PT0gXCJzdHJpbmdcIiAmJiAocG9zdEF1ZGllbmNlcyBhcyByZWFkb25seSBzdHJpbmdbXSkuaW5jbHVkZXModmFsdWUpO1xufVxuXG4vKipcbiAqIE5hcnJvd3Mgd2hhdGV2ZXIgYSBwb3N0IGNhcnJpZXMgaW50byBhbiBhdWRpZW5jZSB0aGUgVUkgY2FuIHNob3cuXG4gKlxuICogUG9zdHMgcmVhY2ggdGhlIFVJIGZyb20gdGhlIEFQSSwgZnJvbSBSZWFsdGltZSBhbmQgZnJvbSB0aGUgZGF0YWJhc2UgZW51bSwgc29cbiAqIHRoZSB2YWx1ZSBpcyBvbmx5IHRydXN0ZWQgYWZ0ZXIgYmVpbmcgY2hlY2tlZC4gQW55dGhpbmcgdW5yZWNvZ25pc2VkIHJlYWRzIGFzXG4gKiBgcHVibGljYCDigJQgdGhlIGZpcnN0IGF1ZGllbmNlLCB3aGljaCBpcyB0aGUgc2FtZSBmYWxsYmFjayB0aGUgQVBJJ3MgY3JlYXRlXG4gKiBwYXRoIHVzZXMuXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiB0b1Bvc3RBdWRpZW5jZSh2YWx1ZTogdW5rbm93bik6IFBvc3RBdWRpZW5jZSB7XG4gIHJldHVybiBpc1Bvc3RBdWRpZW5jZSh2YWx1ZSkgPyB2YWx1ZSA6IHBvc3RBdWRpZW5jZXNbMF07XG59XG5cbi8qKlxuICogVGhlIGZvbGxvdyBlZGdlcyBhIHZpZXdlciBtYXkgaG9sZCwgZm9yIHRoZSB0d28ga2luZHMgb2Ygc3ViamVjdCBhIHBvc3QgY2FuXG4gKiBoYXZlLiBCb3RoIGFyZSByZXBvcnRlZCBiZWNhdXNlIHRoZSBjYWxsZXIgaGFzIHRvIHJlYWQgdGhlIHBvc3QgdG8ga25vdyB3aGljaFxuICogb25lIHRvIGxvb2sgdXAsIGFuZCBvbmUgcm91bmQgdHJpcCBhbnN3ZXJzIGJvdGguXG4gKi9cbmV4cG9ydCBpbnRlcmZhY2UgRm9sbG93RWRnZXMge1xuICAvKiogVGhlIHZpZXdlciBmb2xsb3dzIHRoZSBtZW1iZXIgd2hvIHB1Ymxpc2hlZCB0aGUgcG9zdC4gKi9cbiAgYXV0aG9yOiBib29sZWFuO1xuICAvKiogVGhlIHZpZXdlciBmb2xsb3dzIHRoZSBQYWdlIHRoZSBwb3N0IHdhcyBwdWJsaXNoZWQgYXMuICovXG4gIHBhZ2U6IGJvb2xlYW47XG59XG5cbi8qKlxuICoge0BsaW5rIGF1ZGllbmNlUnVsZX0gZXZhbHVhdGVkIGluIHByb2Nlc3M6IHdoZXRoZXIgYHZpZXdlcmAgbWF5IHJlYWQgYSBwb3N0LlxuICpcbiAqIFRoZSBhdXRob3IsIHRoZW4gd2hhdGV2ZXIgdGhlIGF1ZGllbmNlIGFkbWl0cy4gVGhlIGF1dGhvciBpcyBhZG1pdHRlZCBieSBldmVyeVxuICogYXVkaWVuY2UsIGFuZCBvbiBhIFBhZ2UncyBwb3N0IHRoYXQgbWVhbnMgdGhlIGFkbWluIHdobyBwcmVzc2VkIHB1Ymxpc2gg4oCUIHRoZVxuICogcGVyc29uIHRoZSByb3cgYmVsb25ncyB0bywgd2hpY2ggaXMgYWxzbyB3aGF0IHRoZSBlZGl0IGFuZCBkZWxldGUgY2hlY2tzXG4gKiBjb21wYXJlIGFnYWluc3QuXG4gKlxuICogQSBgZm9sbG93ZXJzYCBwb3N0IGlzIGdhdGVkIG9uIGZvbGxvd2luZyAqKml0cyBzdWJqZWN0Kio6IHRoZSBtZW1iZXIgZm9yIGFcbiAqIHBvc3QgdGhleSBwdWJsaXNoZWQgYXMgdGhlbXNlbHZlcywgdGhlIFBhZ2UgZm9yIG9uZSBwdWJsaXNoZWQgYXMgYSBQYWdlLiBUaGVcbiAqIHR3byBhcmUgbm90IGludGVyY2hhbmdlYWJsZSDigJQgYSBtZW1iZXIgd2hvIGZvbGxvd3MgdGhlIGFkbWluIG9mIGEgUGFnZSBjYW5ub3RcbiAqIHJlYWQgdGhhdCBQYWdlJ3MgZm9sbG93ZXJzLW9ubHkgcG9zdHMsIGFuZCBmb2xsb3dpbmcgdGhlIFBhZ2UgZG9lcyBub3QgYWRtaXRcbiAqIHRoZSBtZW1iZXIncyBvd24g4oCUIHdoaWNoIGlzIHdoeSBgcGFnZUlkYCBkZWNpZGVzIHRoZSBlZGdlIHJhdGhlciB0aGFuIGVpdGhlclxuICogZWRnZSBiZWluZyBlbm91Z2guXG4gKlxuICogQSBgZ3JvdXBgIHBvc3QgaXMgZ2F0ZWQgb24gYmVsb25naW5nIHRvICoqaXRzIGdyb3VwKiosIHdoaWNoIHRoZSB2aWV3ZXIgc2F5c1xuICogYnkgaGFuZGluZyBvdmVyIHRoZSBpZHMgdGhleSBhcmUgYSBtZW1iZXIgb2YuIEFuIGVtcHR5IHNldCBpcyB0aGUgaG9uZXN0XG4gKiBhbnN3ZXIgZm9yIGEgdmlld2VyIHdob3NlIG1lbWJlcnNoaXBzIHdlcmUgbm90IGxvb2tlZCB1cCwgYW5kIGl0IGZhaWxzIGNsb3NlZC5cbiAqXG4gKiBBIGB2aXNpYmlsaXR5YCBub2JvZHkga25vd3MgbWF0Y2hlcyBubyBjbGF1c2Ugb2YgYHZpc2libGVQb3N0c0NvbmRpdGlvbmBcbiAqIGVpdGhlciwgc28gYm90aCBzaWRlcyBmYWlsIGNsb3NlZCB0byB0aGUgYXV0aG9yIGFsb25lLlxuICovXG5leHBvcnQgZnVuY3Rpb24gY2FuUmVhZFBvc3QoXG4gIHZpZXdlcklkOiBzdHJpbmcsXG4gIHBvc3Q6IHsgYXV0aG9ySWQ6IHN0cmluZzsgcGFnZUlkPzogc3RyaW5nIHwgbnVsbDsgZ3JvdXBJZD86IHN0cmluZyB8IG51bGw7IHZpc2liaWxpdHk6IHN0cmluZyB9LFxuICB2aWV3ZXJGb2xsb3dzOiBGb2xsb3dFZGdlcyxcbiAgdmlld2VyR3JvdXBJZHM6IFJlYWRvbmx5U2V0PHN0cmluZz4gPSBuZXcgU2V0KCksXG4pOiBib29sZWFuIHtcbiAgaWYgKHBvc3QuYXV0aG9ySWQgPT09IHZpZXdlcklkKSByZXR1cm4gdHJ1ZTtcblxuICBjb25zdCBydWxlID0gYXVkaWVuY2VSdWxlRm9yKHBvc3QudmlzaWJpbGl0eSk7XG4gIGlmICghcnVsZSkgcmV0dXJuIGZhbHNlO1xuICBpZiAocnVsZS5hZG1pdHNBbnlvbmUpIHJldHVybiB0cnVlO1xuICBpZiAocnVsZS5yZXF1aXJlc0dyb3VwTWVtYmVyc2hpcCkge1xuICAgIC8vIEEgYGdyb3VwYCBwb3N0IHdpdGggbm8gZ3JvdXAgaXMgcmVhZGFibGUgYnkgbm9ib2R5IGJ1dCBpdHMgYXV0aG9yOiB0aGVyZVxuICAgIC8vIGlzIG5vIHNldCBvZiBtZW1iZXJzIGl0IGJlbG9uZ3MgdG8uIEZhaWwgY2xvc2VkIHJhdGhlciB0aGFuIGZhbGwgdGhyb3VnaC5cbiAgICByZXR1cm4gQm9vbGVhbihwb3N0Lmdyb3VwSWQpICYmIHZpZXdlckdyb3VwSWRzLmhhcyhwb3N0Lmdyb3VwSWQgYXMgc3RyaW5nKTtcbiAgfVxuICBpZiAoIXJ1bGUucmVxdWlyZXNGb2xsb3cpIHJldHVybiBmYWxzZTtcblxuICByZXR1cm4gcG9zdC5wYWdlSWQgPyB2aWV3ZXJGb2xsb3dzLnBhZ2UgOiB2aWV3ZXJGb2xsb3dzLmF1dGhvcjtcbn1cbiJdLCJmaWxlIjoiL3NyYy9saWIvcG9zdC1hdWRpZW5jZXMudHMifQ==
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvbGliL3Bvc3QtYXVkaWVuY2VzLnRzIiwiL3NyYy9saWIvcG9zdC1hdWRpZW5jZXMudHMiLFtdXQ==

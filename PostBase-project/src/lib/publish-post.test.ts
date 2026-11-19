@@ -101,7 +101,7 @@ describe("uploadPostAttachment", () => {
 describe("publishPost", () => {
   it("refuses an empty post with nothing attached", async () => {
     stubFetch(() => undefined);
-    await expect(publishPost({ content: "   " })).rejects.toThrow(
+    await expect(publishPost({ topicId: "community", content: "   " })).rejects.toThrow(
       "Write something, or attach a photo or video.",
     );
     // Nothing was uploaded and nothing was posted.
@@ -116,7 +116,7 @@ describe("publishPost", () => {
     );
 
     const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
-    const result = await publishPost({ content: "  hello world  ", file, audience: "followers" });
+    const result = await publishPost({ topicId: "community", content: "  hello world  ", file, audience: "followers" });
 
     expect(result.post).toEqual({ id: "post-1" });
     // The upload went first, and its URL — not the local file — is what the
@@ -124,6 +124,7 @@ describe("publishPost", () => {
     expect(calls.map((call) => call.url)).toEqual(["/api/posts/media", "/api/posts"]);
     expect(calls[1].body).toEqual({
       content: "hello world",
+      topicId: "community",
       type: "image",
       visibility: "followers",
       media: [{ url: "https://cdn.example.com/posts/1.jpg", type: "image/jpeg", altText: "Post image" }],
@@ -141,7 +142,7 @@ describe("publishPost", () => {
     );
 
     const file = new File(["x"], "clip.mp4", { type: "video/mp4" });
-    await publishPost({ content: "watch this", file });
+    await publishPost({ topicId: "community", content: "watch this", file });
 
     expect(calls[1].body).toMatchObject({
       type: "video",
@@ -153,11 +154,12 @@ describe("publishPost", () => {
   it("creates a text post with no media when no file is attached", async () => {
     stubFetch(() => json({ post: { id: "post-3" } }, 201));
 
-    const result = await publishPost({ content: "just words" });
+    const result = await publishPost({ topicId: "community", content: "just words" });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({
       content: "just words",
+      topicId: "community",
       type: "text",
       visibility: "public",
       media: [],
@@ -167,12 +169,12 @@ describe("publishPost", () => {
 
   it("rejects when the create fails or answers without a post id", async () => {
     stubFetch(() => json({ error: "boom" }, 500));
-    await expect(publishPost({ content: "hello" })).rejects.toThrow(
+    await expect(publishPost({ topicId: "community", content: "hello" })).rejects.toThrow(
       "We couldn't publish your post. Please try again.",
     );
 
     stubFetch(() => json({ post: {} }, 201));
-    await expect(publishPost({ content: "hello" })).rejects.toThrow(
+    await expect(publishPost({ topicId: "community", content: "hello" })).rejects.toThrow(
       "We couldn't publish your post. Please try again.",
     );
   });

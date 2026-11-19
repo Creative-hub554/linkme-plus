@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface, type MountedSurface } from "@/test/render";
 import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fetch";
@@ -9,12 +10,13 @@ import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fe
  * The rendered audit shows that the populated feed can be mounted at all; this
  * is the other half — the handlers behind the controls. Publishing walks the
  * optimistic-post path (create, confirm, or roll back and hand the text back),
- * the sentinel pages the next cursor in, the refresh button re-reads page one,
+ * the sentinel pages the next cursor in, realtime inserts appear automatically,
  * and the two error surfaces — a failed first page and a failed publish — say
- * what happened. The realtime subscription is a no-op channel: the live paths
+ * what happened. The other realtime paths
  * are a separate subject, and everything here is reachable without them.
  */
 const mocks = vi.hoisted(() => ({
+  insert: undefined as ((event: { new: { id: string; author_id: string } }) => void) | undefined,
   user: { id: "user-1", email: "theo@example.com", name: "Theo Wu" },
   replace: vi.fn(),
   searchParams: new URLSearchParams(""),
@@ -36,7 +38,14 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 vi.mock("@/utils/supabase/client", () => {
-  const channel = { on: () => channel, subscribe: () => channel, unsubscribe: () => {} };
+  const channel = {
+    on: (_kind: string, filter: { event: string }, handler: typeof mocks.insert) => {
+      if (filter.event === "INSERT") mocks.insert = handler;
+      return channel;
+    },
+    subscribe: () => channel,
+    unsubscribe: () => {},
+  };
   return { createClient: () => ({ channel: () => channel, removeChannel: () => {} }) };
 });
 
@@ -175,7 +184,13 @@ beforeEach(() => {
 
 describe("the feed page", () => {
   test("shows the feed and pages the next cursor in", async () => {
-    const { ui } = await mountFeed({});
+    const { ui } = await mountFeed({
+      "/api/posts": (request) => {
+        const cursor = request.query.get("cursor");
+        if (cursor === "cursor-1") return { data: firstPage.data, pagination: { nextCursor: "cursor-2" } };
+        return cursor === "cursor-2" ? secondPage : firstPage;
+      },
+    });
     await ui.waitFor(() => ui.container.textContent?.includes("First post") ?? false, {
       description: "the first page of posts",
     });
@@ -184,6 +199,7 @@ describe("the feed page", () => {
       description: "the second page of posts",
     });
     expect(ui.container.textContent).toContain("You're all caught up.");
+    expect(ui.container.querySelectorAll("#post-post-1")).toHaveLength(1);
   });
 
   test("publishes a post and confirms the optimistic card", async () => {
@@ -195,6 +211,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "A brand new thought");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("A brand new thought") ?? false, {
       description: "the published post",
@@ -212,6 +229,7 @@ describe("the feed page", () => {
     const fileInput = ui.container.querySelector('input[type=file][accept="image/*"]') as HTMLInputElement;
     await ui.chooseFiles(fileInput, [new File([new Uint8Array(8)], "shot.png", { type: "image/png" })]);
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => requests.calls.some((call) => call.pathname === "/api/posts/media"), {
       description: "the attachment upload",
@@ -227,6 +245,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "This one will not land");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't publish your post") ?? false, {
       description: "the publish failure",
@@ -244,6 +263,7 @@ describe("the feed page", () => {
     await ui.focus(textarea);
     await ui.type(textarea, "Fails");
     const postButton = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Post");
+    await selectPostTopic();
     await ui.click(postButton as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't publish your post") ?? false, {
       description: "the publish error",
@@ -252,18 +272,20 @@ describe("the feed page", () => {
     expect(ui.container.textContent).not.toContain("couldn't publish your post");
   });
 
-  test("re-reads page one from the refresh control", async () => {
-    const { ui, requests } = await mountFeed({});
-    await ui.waitFor(() => ui.container.textContent?.includes("First post") ?? false, {
-      description: "the feed",
+  test("shows a realtime post once without a refresh", async () => {
+    const { ui } = await mountFeed({
+      "/api/posts": (request) => request.query.has("ids")
+        ? { data: [post("live-1", "A live update", { createdAt: "2026-10-01T09:00:00.000Z" })] }
+        : { ...firstPage, pagination: { nextCursor: null } },
     });
-    const refresh = [...ui.container.querySelectorAll("button")].find((button) => button.textContent?.includes("Refresh feed"));
-    await ui.click(refresh as HTMLElement);
-    await ui.waitFor(() => requests.calls.filter((call) => call.pathname === "/api/posts").length >= 3, {
-      description: "a refresh read",
-    });
+    await ui.waitFor(() => Boolean(mocks.insert) && (ui.container.textContent?.includes("First post") ?? false));
+    const event = { new: { id: "live-1", author_id: "user-2" } };
+    mocks.insert!(event);
+    mocks.insert!(event);
+    await ui.waitFor(() => ui.container.textContent?.includes("A live update") ?? false);
+    expect(ui.container.querySelectorAll("#post-live-1")).toHaveLength(1);
+    expect(ui.container.textContent?.indexOf("A live update")).toBeLessThan(ui.container.textContent?.indexOf("First post") ?? -1);
   });
-
   test("says the feed is unavailable and retries from the top", async () => {
     let attempt = 0;
     const { ui } = await mountFeed({
@@ -339,6 +361,7 @@ describe("the feed page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited post");
+    await selectPostTopic();
     await ui.click(dialogButton("Save changes"));
     await ui.waitFor(() => ui.container.textContent?.includes("My edited post") ?? false, {
       description: "the edited card",
@@ -356,6 +379,7 @@ describe("the feed page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited post");
+    await selectPostTopic();
     await ui.click(dialogButton("Save changes"));
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't save your changes") ?? false, {
       description: "the update failure",

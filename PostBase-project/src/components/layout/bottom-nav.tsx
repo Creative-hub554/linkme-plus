@@ -19,7 +19,7 @@ export function BottomNav() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-card md:hidden">
+    <nav aria-label="Primary mobile navigation" className={cn("fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-card md:hidden", ["/feed", "/jobs", "/marketplace"].some((root) => pathname === root || pathname.startsWith(root + "/")) && "community-bottom-nav")}>
       <div className="flex items-center justify-around py-2">
         {visibleNavItems(mainNavItems, isAuthenticated).map((item) => {
           const isActive = isNavItemActive(pathname, item);
@@ -36,7 +36,7 @@ export function BottomNav() {
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.label}
+              {item.href === "/feed" ? "Feed" : item.label}
             </Link>
           );
         })}

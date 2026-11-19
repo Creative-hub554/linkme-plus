@@ -1,11 +1,11 @@
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db";
-
-// The Durable Object class must be exported from the Worker entry for
-// wrangler.jsonc's `WebSocketRoom` binding to resolve; nothing else imports it.
-export { WebSocketRoom } from "../src/lib/durable-objects/websocket-room";
+import { purgeExpiredEvidence } from "../src/lib/evidence-retention";
 
 const worker = {
+  async scheduled(_event: { scheduledTime: number; cron: string }, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runWithDb(() => purgeExpiredEvidence()));
+  },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // A Worker request may not reuse sockets opened by an earlier request, so
     // the database client is scoped to this request instead of living in a

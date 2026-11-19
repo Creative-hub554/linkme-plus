@@ -1,0 +1,33 @@
+__vite_ssr_exportName__("normalizeSearchQuery", () => { try { return normalizeSearchQuery } catch {} });
+__vite_ssr_exportName__("searchHref", () => { try { return searchHref } catch {} });
+/**
+* What counts as a search query, and where a search goes.
+*
+* Two places read a query — the form that starts one and the page that renders
+* one — and they have to agree. They disagree in two ways if each trims for
+* itself. A page that took `?q=%20` for a query would search for a space, and
+* the API wraps the term in `%` before matching, so that matches everything. A
+* form that navigated from a blank box would replace the page the reader was
+* reading with an empty search. Both are cheap to get wrong and invisible until
+* somebody does it.
+*/
+/** The query a reader meant, with the typing noise removed. `""` means none. */
+function normalizeSearchQuery(raw) {
+	return (raw ?? "").trim();
+};
+/**
+* The search page's address for a query, or `null` when there is nothing to
+* search for.
+*
+* `null` rather than `/search` so a caller has to decide what a blank box means
+* instead of navigating by default — the caller that has somewhere to be can
+* send the reader to `/search` itself, and the one that does not can stay put.
+*/
+function searchHref(raw) {
+	const query = normalizeSearchQuery(raw);
+	return query ? `/search?q=${encodeURIComponent(query)}` : null;
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTs7Ozs7Ozs7Ozs7Ozs7QUFhTyxTQUFTLHFCQUFxQixLQUF3QztDQUMzRSxRQUFRLE9BQU8sR0FBRSxDQUFFLEtBQUs7QUFDMUI7Ozs7Ozs7OztBQVVPLFNBQVMsV0FBVyxLQUErQztDQUN4RSxNQUFNLFFBQVEscUJBQXFCLEdBQUc7Q0FDdEMsT0FBTyxRQUFRLGFBQWEsbUJBQW1CLEtBQUssTUFBTTtBQUM1RCIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsic2VhcmNoLXF1ZXJ5LnRzIl0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogV2hhdCBjb3VudHMgYXMgYSBzZWFyY2ggcXVlcnksIGFuZCB3aGVyZSBhIHNlYXJjaCBnb2VzLlxuICpcbiAqIFR3byBwbGFjZXMgcmVhZCBhIHF1ZXJ5IOKAlCB0aGUgZm9ybSB0aGF0IHN0YXJ0cyBvbmUgYW5kIHRoZSBwYWdlIHRoYXQgcmVuZGVyc1xuICogb25lIOKAlCBhbmQgdGhleSBoYXZlIHRvIGFncmVlLiBUaGV5IGRpc2FncmVlIGluIHR3byB3YXlzIGlmIGVhY2ggdHJpbXMgZm9yXG4gKiBpdHNlbGYuIEEgcGFnZSB0aGF0IHRvb2sgYD9xPSUyMGAgZm9yIGEgcXVlcnkgd291bGQgc2VhcmNoIGZvciBhIHNwYWNlLCBhbmRcbiAqIHRoZSBBUEkgd3JhcHMgdGhlIHRlcm0gaW4gYCVgIGJlZm9yZSBtYXRjaGluZywgc28gdGhhdCBtYXRjaGVzIGV2ZXJ5dGhpbmcuIEFcbiAqIGZvcm0gdGhhdCBuYXZpZ2F0ZWQgZnJvbSBhIGJsYW5rIGJveCB3b3VsZCByZXBsYWNlIHRoZSBwYWdlIHRoZSByZWFkZXIgd2FzXG4gKiByZWFkaW5nIHdpdGggYW4gZW1wdHkgc2VhcmNoLiBCb3RoIGFyZSBjaGVhcCB0byBnZXQgd3JvbmcgYW5kIGludmlzaWJsZSB1bnRpbFxuICogc29tZWJvZHkgZG9lcyBpdC5cbiAqL1xuXG4vKiogVGhlIHF1ZXJ5IGEgcmVhZGVyIG1lYW50LCB3aXRoIHRoZSB0eXBpbmcgbm9pc2UgcmVtb3ZlZC4gYFwiXCJgIG1lYW5zIG5vbmUuICovXG5leHBvcnQgZnVuY3Rpb24gbm9ybWFsaXplU2VhcmNoUXVlcnkocmF3OiBzdHJpbmcgfCBudWxsIHwgdW5kZWZpbmVkKTogc3RyaW5nIHtcbiAgcmV0dXJuIChyYXcgPz8gXCJcIikudHJpbSgpO1xufVxuXG4vKipcbiAqIFRoZSBzZWFyY2ggcGFnZSdzIGFkZHJlc3MgZm9yIGEgcXVlcnksIG9yIGBudWxsYCB3aGVuIHRoZXJlIGlzIG5vdGhpbmcgdG9cbiAqIHNlYXJjaCBmb3IuXG4gKlxuICogYG51bGxgIHJhdGhlciB0aGFuIGAvc2VhcmNoYCBzbyBhIGNhbGxlciBoYXMgdG8gZGVjaWRlIHdoYXQgYSBibGFuayBib3ggbWVhbnNcbiAqIGluc3RlYWQgb2YgbmF2aWdhdGluZyBieSBkZWZhdWx0IOKAlCB0aGUgY2FsbGVyIHRoYXQgaGFzIHNvbWV3aGVyZSB0byBiZSBjYW5cbiAqIHNlbmQgdGhlIHJlYWRlciB0byBgL3NlYXJjaGAgaXRzZWxmLCBhbmQgdGhlIG9uZSB0aGF0IGRvZXMgbm90IGNhbiBzdGF5IHB1dC5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHNlYXJjaEhyZWYocmF3OiBzdHJpbmcgfCBudWxsIHwgdW5kZWZpbmVkKTogc3RyaW5nIHwgbnVsbCB7XG4gIGNvbnN0IHF1ZXJ5ID0gbm9ybWFsaXplU2VhcmNoUXVlcnkocmF3KTtcbiAgcmV0dXJuIHF1ZXJ5ID8gYC9zZWFyY2g/cT0ke2VuY29kZVVSSUNvbXBvbmVudChxdWVyeSl9YCA6IG51bGw7XG59XG4iXSwiZmlsZSI6Ii9zcmMvbGliL3NlYXJjaC1xdWVyeS50cyJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvbGliL3NlYXJjaC1xdWVyeS50cyIsIi9zcmMvbGliL3NlYXJjaC1xdWVyeS50cyIsW11d

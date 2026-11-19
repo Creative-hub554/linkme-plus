@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
 import {
@@ -275,6 +276,7 @@ describe("a public Page", () => {
       { description: "the picker to show Followers" },
     );
 
+    await selectPostTopic();
     await ui.click(buttonReading(ui.container, "Publish as Northwind Studio"));
     const sent = () =>
       calls.some(
@@ -290,6 +292,7 @@ describe("a public Page", () => {
     // the audience the admin chose for the Page rather than to their own.
     expect(published?.body).toEqual({
       content: "Only for the Page's followers",
+      topicId: "community",
       pageId: "page-1",
       visibility: "followers",
     });

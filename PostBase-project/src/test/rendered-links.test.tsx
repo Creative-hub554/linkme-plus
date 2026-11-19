@@ -122,6 +122,7 @@ vi.mock("@/utils/supabase/client", () => {
       channel: () => channel,
       removeChannel: () => {},
       auth: {
+        getUser: async () => ({ data: { user: { id: "user-1" } }, error: null }),
         getSession: async () => ({ data: { session: null } }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
         mfa: { listFactors: async () => ({ data: { totp: [] }, error: null }) },
@@ -129,14 +130,6 @@ vi.mock("@/utils/supabase/client", () => {
     }),
   };
 });
-
-// The messages page mounts the presence indicator, whose real hook opens a
-// WebSocket the stubbed browser cannot answer — error noise on every run. The
-// seam is the same one the hook's own tests mock: a connected socket that says
-// nothing.
-vi.mock("@/hooks/use-websocket", () => ({
-  useWebSocket: () => ({ isConnected: true, send: () => {}, lastMessage: null }),
-}));
 
 /**
  * The bell is mounted for real — it is in the nav, and its panel's
@@ -260,8 +253,17 @@ const post = {
 
 /** What each endpoint answers with, so the populated states are what get judged. */
 const CANNED: Record<string, StubPayload> = {
-  "/api/marketplace": { data: [listing] },
-  "/api/jobs": { data: [job] },
+  "/api/admin/users": { data: [{ id: "user-2", username: "maya_designs", role: "member", restrictionKind: null, restrictedUntil: null }], hasMore: false },
+  "/api/advertising": { campaigns: [], placements: [{ id: "placement-1", name: "Feed banner", location: "feed", dailyRate: 10000, currency: "KHR" }], settings: { merchantName: "Merchant", qrImageUrl: "https://example.com/qr.png", currency: "KHR" }, isAdmin: false, hasMore: false },
+  "/api/advertising/sources": { listings: [], posts: [] },
+  "/api/marketplace/inventory": { inventory: { id: "inventory-1", quantity: 5, lowStockThreshold: 2, sku: "CAMERA", unitCost: 100 }, movements: [] },
+  "/api/jobs/applications": { data: [], pagination: { hasMore: false } },
+  "/api/marketplace": { pagination: { hasMore: false }, data: [listing], listing: { ...listing, sellerId: "user-2", status: "active" }, media: [] },
+  "/api/jobs": { pagination: { hasMore: false }, data: [job], job: { ...job, status: "active" }, hasApplied: false },
+  "/api/marketplace/categories": { categories: [{ id: "category-1", name: "Electronics" }] },
+  "/api/companies": { companies: [{ id: "company-1", name: "Studio" }], pages: [] },
+  "/api/admin/overview": { stats: { users: 4, posts: 8, pendingReports: 1 }, users: [{ id: "user-2", username: "maya_designs", role: "member", createdAt: "2026-09-20T09:00:00.000Z" }], actions: [] },
+  "/api/admin/reports": { data: [{ id: "report-1", targetId: "post-1", targetType: "post", reason: "Spam", status: "pending", createdAt: "2026-09-20T09:00:00.000Z" }], pagination: { hasMore: false } },
   "/api/groups": {
     data: [group],
     group,
@@ -367,12 +369,18 @@ function servedRoutes(): Set<string> {
 function servesRoute(routes: ReadonlySet<string>, base: string): boolean {
   if (routes.has(base)) return true;
   const wanted = base.split("/").filter(Boolean);
-  if (wanted.length === 0) return false;
   return [...routes].some((route) => {
     const have = route.split("/").filter(Boolean);
+    const last = have.at(-1);
+    const optionalCatchAll = last?.startsWith("[[...");
+    const catchAll = optionalCatchAll || last?.startsWith("[...");
+    const prefix = catchAll ? have.slice(0, -1) : have;
+    const lengthMatches = catchAll
+      ? wanted.length >= prefix.length + (optionalCatchAll ? 0 : 1)
+      : wanted.length === prefix.length;
     return (
-      have.length === wanted.length &&
-      have.every((segment, i) =>
+      lengthMatches &&
+      prefix.every((segment, i) =>
         (segment.startsWith("[") && segment.endsWith("]")) || segment === wanted[i],
       )
     );
@@ -674,6 +682,9 @@ describe("every link the chrome advertises", () => {
     // hash rides along, and a dynamic segment stands for whatever a link names.
     const routes = new Set(["/feed", "/pages/[username]"]);
     expectAllServed(routes, "a surface", ["/feed", "/pages/anything?tab=cover", "/feed#top"]);
+    expect(servesRoute(new Set(["/design/[[...screen]]"]), "/design")).toBe(true);
+    expect(servesRoute(new Set(["/docs/[...slug]"]), "/docs")).toBe(false);
+    expect(servesRoute(new Set(["/docs/[...slug]"]), "/docs/api/auth")).toBe(true);
   });
 });
 
@@ -736,6 +747,8 @@ describe("every link the data renders", () => {
         // the page sees them on first render; the search page renders its
         // results only for a query.
         if (route === "/groups/[id]") mocks.routeParams.id = group.id;
+        if (route === "/jobs/[id]") mocks.routeParams.id = job.id;
+        if (route === "/marketplace/[id]") mocks.routeParams.id = listing.id;
         if (route === "/pages/[username]") mocks.routeParams.username = page.username;
         if (route === "/search") mocks.params = new URLSearchParams("q=maya");
 
@@ -743,7 +756,14 @@ describe("every link the data renders", () => {
         if (!load) throw new Error(`no module was found for ${route}`);
         const { default: PageComponent } = await load();
 
-        const ui = mountSurface(<PageComponent />, { providers: "theme+tooltip" });
+        let surface = <PageComponent />;
+        if (route === "/design/[[...screen]]") {
+          mocks.pathname = "/design";
+          const { default: DesignPage } = await import("@/app/design/[[...screen]]/page");
+          const { default: DesignLayout } = await import("@/app/design/layout");
+          surface = <DesignLayout>{await DesignPage({ params: Promise.resolve({}) })}</DesignLayout>;
+        }
+        const ui = mountSurface(surface, { providers: "theme+tooltip" });
         try {
           // Waited for, not slept on: the links the data produces exist only
           // after the stub's answers have rendered, including the ones a page

@@ -1,3 +1,4 @@
+vi.mock("@/lib/account-restrictions", () => ({ isRestrictedAccount: async () => false }));
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 /**

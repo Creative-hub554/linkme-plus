@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface, type MountedSurface } from "@/test/render";
 import { stubFetch, type FetchRecorder, type StubEndpoint } from "@/test/stub-fetch";
@@ -231,6 +232,7 @@ describe("the profile page", () => {
     const textarea = ui.container.querySelector("textarea") as HTMLTextAreaElement;
     await ui.focus(textarea);
     await ui.type(textarea, "A profile thought");
+    await selectPostTopic();
     await ui.click(buttonWithText(ui, "Post") as HTMLElement);
     await ui.waitFor(() => requests.calls.some((call) => call.method === "POST" && call.pathname === "/api/posts"), {
       description: "the publish request",
@@ -246,6 +248,7 @@ describe("the profile page", () => {
     const textarea = ui.container.querySelector("textarea") as HTMLTextAreaElement;
     await ui.focus(textarea);
     await ui.type(textarea, "This one will not land");
+    await selectPostTopic();
     await ui.click(buttonWithText(ui, "Post") as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't publish your post") ?? false, {
       description: "the publish failure",
@@ -298,7 +301,8 @@ describe("the profile page", () => {
     await openTab(ui, "About");
     expect(ui.container.textContent).toContain("Visual designer");
     await openTab(ui, "Friends");
-    expect(ui.container.textContent).toContain("Friends are coming soon");
+    expect(ui.container.textContent).toContain("Friends are members who follow each other.");
+    expect(buttonWithText(ui, "View friends")).toBeTruthy();
     await openTab(ui, "More");
     expect(ui.container.textContent).toContain("More sections");
   });
@@ -435,6 +439,7 @@ describe("the profile page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited profile post");
+    await selectPostTopic();
     await ui.click(buttonInDocument("Save changes") as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("My edited profile post") ?? false, {
       description: "the edited card",
@@ -458,6 +463,7 @@ describe("the profile page", () => {
     const field = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement;
     await ui.waitFor(() => field !== null, { description: "the edit form" });
     await ui.type(field, "My edited profile post");
+    await selectPostTopic();
     await ui.click(buttonInDocument("Save changes") as HTMLElement);
     await ui.waitFor(() => ui.container.textContent?.includes("couldn't save your changes") ?? false, {
       description: "the update failure",
@@ -527,4 +533,12 @@ describe("the profile page", () => {
       description: "the removal failure in the editor",
     });
   });
+});
+test("the profile photo control opens the complete media gallery", async () => {
+  const { ui } = await mountProfile();
+  await ui.waitFor(() => ui.container.textContent?.includes("My first post") ?? false);
+  await openTab(ui, "Photos");
+  await ui.click(buttonWithText(ui, "See all photos") as HTMLElement);
+  await ui.waitFor(() => Boolean(document.querySelector('[role="dialog"]')));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("All photos");
 });

@@ -1,0 +1,60 @@
+__vite_ssr_exportName__("SearchBar", () => { try { return SearchBar } catch {} });
+const __vite_ssr_import_0__ = await __vite_ssr_import__("/node_modules/lucide-react/dist/cjs/lucide-react.js", {"importedNames":["Search"]});
+const __vite_ssr_import_1__ = await __vite_ssr_import__("/node_modules/next/navigation.js", {"importedNames":["useRouter"]});
+const __vite_ssr_import_2__ = await __vite_ssr_import__("/node_modules/react/index.js", {"importedNames":["useState"]});
+const __vite_ssr_import_3__ = await __vite_ssr_import__("/src/components/ui/input.tsx", {"importedNames":["Input"]});
+const __vite_ssr_import_4__ = await __vite_ssr_import__("/src/lib/search-query.ts", {"importedNames":["searchHref"]});
+const __vite_ssr_import_5__ = await __vite_ssr_import__("/node_modules/react/jsx-dev-runtime.js", {"importedNames":["jsxDEV"]});
+"use client";
+
+
+
+
+
+var _jsxFileName = "C:/Workspace/Websitebuildertoolsai/PostBase-project/src/components/shared/search-bar.tsx";
+
+function SearchBar({ placeholder = "Search LinkMe+", defaultValue = "", className }) {
+	const router = (0,__vite_ssr_import_1__.useRouter)();
+	const [query, setQuery] = (0,__vite_ssr_import_2__.useState)(defaultValue);
+	const handleSubmit = (e) => {
+		e.preventDefault();
+		// An empty box has no address, so pressing Enter in one leaves the reader
+		// where they are rather than replacing the page with an empty search.
+		const href = (0,__vite_ssr_import_4__.searchHref)(query);
+		if (href) router.push(href);
+	};
+	return /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("form", {
+		onSubmit: handleSubmit,
+		className,
+		children: /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)("div", {
+			className: "relative",
+			children: [/* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)((0,__vite_ssr_import_0__.Search), { className: "absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" }, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 34,
+				columnNumber: 9
+			}, this), /* @__PURE__ */ (0,__vite_ssr_import_5__.jsxDEV)((0,__vite_ssr_import_3__.Input), {
+				"aria-label": placeholder,
+				placeholder,
+				value: query,
+				onChange: (e) => setQuery(e.target.value),
+				className: "pl-9 bg-surface-light-blue border-surface-border"
+			}, void 0, false, {
+				fileName: _jsxFileName,
+				lineNumber: 35,
+				columnNumber: 9
+			}, this)]
+		}, void 0, true, {
+			fileName: _jsxFileName,
+			lineNumber: 33,
+			columnNumber: 7
+		}, this)
+	}, void 0, false, {
+		fileName: _jsxFileName,
+		lineNumber: 32,
+		columnNumber: 5
+	}, this);
+}
+//# sourceMappingSource=vite-generated
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6IkFBQUEsQ0FBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7O0FBTkE7Ozs7Ozs7O0FBY08sU0FBUyxVQUFVLEVBQ3hCLGNBQWMsa0JBQ2QsZUFBZSxJQUNmLGFBQ2lCO0NBQ2pCLE1BQU0sU0FBUyxxQ0FBVTtDQUN6QixNQUFNLENBQUMsT0FBTyxZQUFZLG1DQUFTLFlBQVk7Q0FFL0MsTUFBTSxnQkFBZ0IsTUFBdUI7RUFDM0MsRUFBRSxlQUFlOzs7RUFHakIsTUFBTSxPQUFPLHFDQUFXLEtBQUs7RUFDN0IsSUFBSSxNQUFNLE9BQU8sS0FBSyxJQUFJO0NBQzVCO0NBRUEsT0FDRSxpREFBQyxRQUFEO0VBQU0sVUFBVTtFQUF5QjtZQUN2QyxpREFBQyxPQUFEO0dBQUssV0FBVTthQUFmLENBQ0Usb0RBQUMsK0JBQUQsRUFBUSxXQUFVLHlFQUEwRTs7OzthQUM1RixvREFBQyw4QkFBRDtJQUNFLGNBQVk7SUFDQztJQUNiLE9BQU87SUFDUCxXQUFXLE1BQU0sU0FBUyxFQUFFLE9BQU8sS0FBSztJQUN4QyxXQUFVO0dBQ1g7Ozs7V0FDRTs7Ozs7O0NBQ0Q7Ozs7O0FBRVYiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInNlYXJjaC1iYXIudHN4Il0sInNvdXJjZXNDb250ZW50IjpbIlwidXNlIGNsaWVudFwiO1xuXG5pbXBvcnQgeyBTZWFyY2ggfSBmcm9tIFwibHVjaWRlLXJlYWN0XCI7XG5pbXBvcnQgeyB1c2VSb3V0ZXIgfSBmcm9tIFwibmV4dC9uYXZpZ2F0aW9uXCI7XG5pbXBvcnQgeyB1c2VTdGF0ZSB9IGZyb20gXCJyZWFjdFwiO1xuaW1wb3J0IHsgSW5wdXQgfSBmcm9tIFwiQC9jb21wb25lbnRzL3VpL2lucHV0XCI7XG5pbXBvcnQgeyBzZWFyY2hIcmVmIH0gZnJvbSBcIkAvbGliL3NlYXJjaC1xdWVyeVwiO1xuXG5pbnRlcmZhY2UgU2VhcmNoQmFyUHJvcHMge1xuICBwbGFjZWhvbGRlcj86IHN0cmluZztcbiAgZGVmYXVsdFZhbHVlPzogc3RyaW5nO1xuICBjbGFzc05hbWU/OiBzdHJpbmc7XG59XG5cbmV4cG9ydCBmdW5jdGlvbiBTZWFyY2hCYXIoe1xuICBwbGFjZWhvbGRlciA9IFwiU2VhcmNoIExpbmtNZStcIixcbiAgZGVmYXVsdFZhbHVlID0gXCJcIixcbiAgY2xhc3NOYW1lLFxufTogU2VhcmNoQmFyUHJvcHMpIHtcbiAgY29uc3Qgcm91dGVyID0gdXNlUm91dGVyKCk7XG4gIGNvbnN0IFtxdWVyeSwgc2V0UXVlcnldID0gdXNlU3RhdGUoZGVmYXVsdFZhbHVlKTtcblxuICBjb25zdCBoYW5kbGVTdWJtaXQgPSAoZTogUmVhY3QuRm9ybUV2ZW50KSA9PiB7XG4gICAgZS5wcmV2ZW50RGVmYXVsdCgpO1xuICAgIC8vIEFuIGVtcHR5IGJveCBoYXMgbm8gYWRkcmVzcywgc28gcHJlc3NpbmcgRW50ZXIgaW4gb25lIGxlYXZlcyB0aGUgcmVhZGVyXG4gICAgLy8gd2hlcmUgdGhleSBhcmUgcmF0aGVyIHRoYW4gcmVwbGFjaW5nIHRoZSBwYWdlIHdpdGggYW4gZW1wdHkgc2VhcmNoLlxuICAgIGNvbnN0IGhyZWYgPSBzZWFyY2hIcmVmKHF1ZXJ5KTtcbiAgICBpZiAoaHJlZikgcm91dGVyLnB1c2goaHJlZik7XG4gIH07XG5cbiAgcmV0dXJuIChcbiAgICA8Zm9ybSBvblN1Ym1pdD17aGFuZGxlU3VibWl0fSBjbGFzc05hbWU9e2NsYXNzTmFtZX0+XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cInJlbGF0aXZlXCI+XG4gICAgICAgIDxTZWFyY2ggY2xhc3NOYW1lPVwiYWJzb2x1dGUgbGVmdC0zIHRvcC0xLzIgaC00IHctNCAtdHJhbnNsYXRlLXktMS8yIHRleHQtbXV0ZWQtZm9yZWdyb3VuZFwiIC8+XG4gICAgICAgIDxJbnB1dFxuICAgICAgICAgIGFyaWEtbGFiZWw9e3BsYWNlaG9sZGVyfVxuICAgICAgICAgIHBsYWNlaG9sZGVyPXtwbGFjZWhvbGRlcn1cbiAgICAgICAgICB2YWx1ZT17cXVlcnl9XG4gICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRRdWVyeShlLnRhcmdldC52YWx1ZSl9XG4gICAgICAgICAgY2xhc3NOYW1lPVwicGwtOSBiZy1zdXJmYWNlLWxpZ2h0LWJsdWUgYm9yZGVyLXN1cmZhY2UtYm9yZGVyXCJcbiAgICAgICAgLz5cbiAgICAgIDwvZGl2PlxuICAgIDwvZm9ybT5cbiAgKTtcbn1cbiJdLCJmaWxlIjoiL3NyYy9jb21wb25lbnRzL3NoYXJlZC9zZWFyY2gtYmFyLnRzeCJ9
+
+//# vitestCache=W3siZmlsZSI6IjEiLCJpZCI6IjEiLCJ1cmwiOiIyIiwiaW1wb3J0ZWRVcmxzIjoiMyIsIm1hcHBpbmdzIjpmYWxzZX0sIkM6L1dvcmtzcGFjZS9XZWJzaXRlYnVpbGRlcnRvb2xzYWkvUG9zdEJhc2UtcHJvamVjdC9zcmMvY29tcG9uZW50cy9zaGFyZWQvc2VhcmNoLWJhci50c3giLCIvc3JjL2NvbXBvbmVudHMvc2hhcmVkL3NlYXJjaC1iYXIudHN4IixbXV0=

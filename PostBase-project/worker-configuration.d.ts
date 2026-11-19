@@ -15,12 +15,10 @@ interface __BaseEnv_Env {
 	R2_BUCKET_NAME: string;
 	R2_PUBLIC_URL: string;
 	TOKEN_VALUE: string;
-	WEBSOCKET_ROOM: DurableObjectNamespace<import("./worker/index").WebSocketRoom>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./worker/index");
-		durableNamespaces: "WebSocketRoom";
 	}
 	interface Env extends __BaseEnv_Env {}
 }

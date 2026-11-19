@@ -5,10 +5,11 @@ import { cleanupSurfaces, mountSurface } from "@/test/render";
 import { useFileUpload } from "./use-file-upload";
 
 /**
- * The hook owns a queue of uploads and drives each one through presign → PUT.
- * A test that reached into it directly would have to re-implement React's
- * batching, so the hook is mounted through a tiny harness and read back after
- * `act`, exactly as a component would see it.
+ * The hook owns a queue of uploads and drives each one through a single
+ * multipart POST, since the server now reads the bytes and enforces the type
+ * and size itself. A test that reached into it directly would have to
+ * re-implement React's batching, so the hook is mounted through a tiny harness
+ * and read back after `act`, exactly as a component would see it.
  */
 type Api = ReturnType<typeof useFileUpload>;
 
@@ -84,34 +85,26 @@ describe("useFileUpload queue", () => {
 });
 
 describe("useFileUpload uploadAll", () => {
-  it("presigns, PUTs, marks complete, and reports the results", async () => {
+  it("sends one multipart request, marks the upload complete, and reports the results", async () => {
     mountHook({ onComplete: (files) => completed.push(files) });
 
     const requests: { url: string; method: string; body: unknown }[] = [];
     stubFetch((url, init) => {
-      requests.push({
-        url,
-        method: init.method ?? "GET",
-        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
-      });
-      if (url === "/api/uploads") {
-        return json({ uploadUrl: "https://r2.example.com/put", key: "avatars/u/1.png", publicUrl: "https://cdn/u/1.png" });
-      }
-      return new Response(null, { status: 200 });
+      requests.push({ url, method: init.method ?? "GET", body: init.body });
+      return json({ url: "https://cdn/u/1.png", key: "avatars/u/1.png" });
     });
 
     await call((api) => api.addFiles([file()]));
     await call((api) => api.uploadAll());
 
-    // The presign carried the purpose and the file's metadata.
-    expect(requests[0]).toMatchObject({
-      url: "/api/uploads",
-      method: "POST",
-      body: { filename: "photo.png", contentType: "image/png", purpose: "avatar", size: 5 },
-    });
-    // The PUT went to the presigned URL with the file as its body.
-    expect(requests[1].url).toBe("https://r2.example.com/put");
-    expect(requests[1].method).toBe("PUT");
+    // One request: the server receives the bytes, so there is no second hop
+    // and nothing the browser declares about the file.
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ url: "/api/uploads", method: "POST" });
+    const body = requests[0].body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("purpose")).toBe("avatar");
+    expect((body.get("file") as File).name).toBe("photo.png");
 
     expect(latest?.uploads[0]).toMatchObject({
       status: "complete",
@@ -123,7 +116,7 @@ describe("useFileUpload uploadAll", () => {
     expect(completed).toEqual([[{ url: "https://cdn/u/1.png", key: "avatars/u/1.png" }]]);
   });
 
-  it("records a presign failure on the upload and reports errors", async () => {
+  it("records the server's refusal on the upload and reports errors", async () => {
     mountHook();
     stubFetch(() => json({ error: "File type not allowed" }, 400));
 
@@ -135,18 +128,25 @@ describe("useFileUpload uploadAll", () => {
     expect(latest?.hasErrors).toBe(true);
   });
 
-  it("records a failed PUT", async () => {
+  it("records a store failure with the generic message", async () => {
     mountHook();
-    stubFetch((url) =>
-      url === "/api/uploads"
-        ? json({ uploadUrl: "https://r2.example.com/put", key: "k", publicUrl: "https://cdn/k" })
-        : new Response(null, { status: 500 }),
-    );
+    stubFetch(() => new Response(null, { status: 500 }));
 
     await call((api) => api.addFiles([file()]));
     await call((api) => api.uploadAll());
 
     expect(latest?.uploads[0]).toMatchObject({ status: "error", error: "Failed to upload file" });
+  });
+
+  it("treats an answer with no stored URL as a failure rather than a completed upload", async () => {
+    mountHook();
+    stubFetch(() => json({ key: "avatars/u/1.png" }));
+
+    await call((api) => api.addFiles([file()]));
+    await call((api) => api.uploadAll());
+
+    expect(latest?.uploads[0]).toMatchObject({ status: "error", error: "Failed to upload file" });
+    expect(latest?.successfulUploads).toHaveLength(0);
   });
 
   it("does nothing when there is nothing pending", async () => {

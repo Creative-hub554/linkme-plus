@@ -40,8 +40,8 @@ export async function GET(request: Request) {
   if (!userId || !isUuid(userId)) {
     return errorResponse("A valid user ID is required");
   }
-  if (type !== "followers" && type !== "following") {
-    return errorResponse("`type` must be `followers` or `following`");
+  if (type !== "followers" && type !== "following" && type !== "friends") {
+    return errorResponse("`type` must be `followers`, `following`, or `friends`");
   }
 
   const rawCursor = url.searchParams.get("cursor");
@@ -67,6 +67,7 @@ export async function GET(request: Request) {
     // It is on every list, not just the viewer's own, because the relationship
     // is disclosed to whoever reads either side of it.
     const conditions = [eq(ownerColumn, userId), notBlockedEitherWay(session.user.id, users.id)];
+    if (type === "friends") conditions.push(sql`exists (select 1 from follows as reciprocal where reciprocal.follower_id = ${users.id} and reciprocal.following_id = ${userId})`);
     if (cursor) {
       // Same keyset rule as the feed: strictly older, or the same instant with
       // a smaller id, so rows sharing a timestamp cannot be skipped or repeated.

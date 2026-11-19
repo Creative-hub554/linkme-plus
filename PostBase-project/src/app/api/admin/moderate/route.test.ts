@@ -129,6 +129,7 @@ describe("POST /api/admin/moderate", () => {
     const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "warning" }));
 
     expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Report not found" });
     expectGatedSequence("reads", ["users", "reports"]);
     expectGatedNone("writes");
   });
@@ -164,6 +165,7 @@ describe("POST /api/admin/moderate", () => {
     // action and reason; the report is then resolved; the audit row records the
     // same action under `moderation.`.
     expectGatedSequence("writes", [
+      { table: "posts", values: { deletedAt: expect.any(Date) } },
       {
         table: "moderation_actions",
         values: {
@@ -204,4 +206,64 @@ describe("POST /api/admin/moderate", () => {
       "audit_logs",
     ]);
   });
+});
+it("dismisses a report without recording a content removal", async () => {
+  scriptAdminAndReport("pending");
+  const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "dismiss", reason: "No violation" }));
+  expect(response.status).toBe(201);
+  expect(fakeDb.writes.map(write => write.table)).toEqual(["reports", "audit_logs"]);
+  expect(fakeDb.writes[0].values).toEqual({ status: "dismissed" });
+});
+
+it("names both fields when the report id or the action is absent", async () => {
+  fakeDb.selectReturns(users, [{ id: "user-1", role: "admin" }]);
+  const noId = await POST(jsonRequest({ action: "warning" }));
+  expect(noId.status).toBe(400);
+  expect(await noId.json()).toEqual({ error: "Report ID and action are required" });
+
+  fakeDb.selectReturns(users, [{ id: "user-1", role: "admin" }]);
+  const noAction = await POST(jsonRequest({ reportId: REPORT_ID }));
+  expect(noAction.status).toBe(400);
+  expect(await noAction.json()).toEqual({ error: "Report ID and action are required" });
+
+  expectGatedSequence("reads", ["users", "users"]);
+  expectGatedNone("writes");
+});
+
+it("refuses a report id that is not a uuid, naming the id", async () => {
+  for (const reportId of ["not-a-uuid", 42]) {
+    fakeDb.selectReturns(users, [{ id: "user-1", role: "admin" }]);
+    const response = await POST(jsonRequest({ reportId, action: "warning" }));
+    expect(response.status, String(reportId)).toBe(400);
+    expect(await response.json(), String(reportId)).toEqual({
+      error: "Invalid report ID",
+    });
+  }
+  expectGatedSequence("reads", ["users", "users"]);
+  expectGatedNone("writes");
+});
+
+it("refuses the account-restriction actions this endpoint does not implement", async () => {
+  for (const action of ["suspension", "ban"]) {
+    fakeDb.selectReturns(users, [{ id: "user-1", role: "admin" }]);
+    const response = await POST(jsonRequest({ reportId: REPORT_ID, action }));
+    expect(response.status, action).toBe(400);
+    expect(await response.json(), action).toEqual({
+      error: "Account restrictions are not supported by this endpoint",
+    });
+  }
+  // Refused before the report is read, so no action could be recorded.
+  expectGatedSequence("reads", ["users", "users"]);
+  expectGatedNone("writes");
+});
+
+it("refuses a decision reason that is not text or is too long", async () => {
+  for (const reason of [42, "x".repeat(2001)]) {
+    fakeDb.selectReturns(users, [{ id: "user-1", role: "admin" }]);
+    const response = await POST(jsonRequest({ reportId: REPORT_ID, action: "warning", reason }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid decision reason" });
+  }
+  expectGatedSequence("reads", ["users", "users"]);
+  expectGatedNone("writes");
 });

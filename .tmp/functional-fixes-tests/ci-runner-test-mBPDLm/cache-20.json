@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "stages": {
+    "mutation-example": {
+      "hash": "e39abba5da49a610467004ac041699559a44ec1f32c02e6a2550f171c1be7197",
+      "startedHash": "e39abba5da49a610467004ac041699559a44ec1f32c02e6a2550f171c1be7197",
+      "pass": true,
+      "summary": "1 demonstration stamp(s) checked, no survivors",
+      "at": "2026-10-27T04:49:13.461Z"
+    }
+  }
+}

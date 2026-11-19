@@ -137,7 +137,10 @@ describe("the browser auth client", () => {
     expect(mocks.auth.signUp).toHaveBeenCalledWith({
       email: "theo@example.com",
       password: "hunter2",
-      options: { data: { username: "theo" } },
+      options: {
+        data: { username: "theo" },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
   });
 

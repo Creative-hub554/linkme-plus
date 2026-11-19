@@ -7,13 +7,19 @@ import {
   integer,
   jsonb,
   pgEnum,
+  uniqueIndex,
+  check,
+  index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { postAudiences } from "@/lib/post-audiences";
 // Type-only, and erased at build time: the accent's allowed values are the ones
 // the picker offers, and `profiles.appearance` is typed by that same union so
 // the two cannot drift. (`postAudiences` above is the same idea, imported as a
 // value because the enum is built from it at runtime.)
 import type { Accent } from "@/lib/theme";
+import { standardProfileThemeConfig } from "@/lib/profile-theme";
+import type { ProfileThemeConfig } from "@/lib/profile-theme";
 
 // The audience list lives in `@/lib/post-audiences`; the column is built from it
 // so the database cannot hold an audience the rule does not describe.
@@ -25,6 +31,15 @@ import type { Accent } from "@/lib/theme";
 export const visibilityEnum = pgEnum("visibility", postAudiences);
 export const userRoleEnum = pgEnum("user_role", ["member", "admin", "moderator"]);
 export const postTypeEnum = pgEnum("post_type", ["text", "image", "video", "short_video"]);
+
+/**
+ * Media kind on a media row. Shared by `post_media` (social) and
+ * `listing_media` (marketplace) so both surfaces validate the same way while
+ * keeping their storage separate — a social short lives attached to a post, a
+ * marketplace short lives attached to a listing, and neither can leak into the
+ * other's feed.
+ */
+export const mediaTypeEnum = pgEnum("media_type", ["image", "video", "short_video"]);
 export const listingStatusEnum = pgEnum("listing_status", ["draft", "active", "reserved", "sold", "expired", "removed"]);
 export const jobStatusEnum = pgEnum("job_status", ["draft", "active", "closed", "archived"]);
 export const applicationStatusEnum = pgEnum("application_status", ["pending", "reviewing", "shortlisted", "rejected", "hired"]);
@@ -106,11 +121,39 @@ export const profiles = pgTable("profiles", {
    * `contactPreferences` is one.
    */
   appearance: jsonb("appearance").$type<{ accent?: Accent }>(),
+  /**
+   * The member's Profile Theme Studio configuration, as the studio itself
+   * writes it. Typed by the one shared model so the stored shape and the
+   * editor's cannot drift; the API route still re-validates anything it reads
+   * from a request body, because JSONB that came through `request.json()` is
+   * not something the compiler can vouch for.
+   *
+   * The default is the Standard configuration, applied optimistically so the
+   * theme route can never read a null-valued row: every profile-provisioning
+   * path inserts without this column and every existing row picked the
+   * default up in migration 0014, freeing the studio from distinguishing
+   * "nothing stored yet" from a stored theme.
+   */
+  themeConfig: jsonb("theme_config").$type<ProfileThemeConfig>().notNull().default(standardProfileThemeConfig),
   visibility: visibilityEnum("visibility").default("public").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ─── Social ─────────────────────────────────────────────────────
+export const accountSubscriptions = pgTable("account_subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 20 }).notNull(),
+  tier: varchar("tier", { length: 20 }).notNull(),
+  startsAt: timestamp("starts_at").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("account_subscriptions_user_kind_unique").on(table.userId, table.kind),
+  check("account_subscriptions_period_valid", sql`${table.expiresAt} > ${table.startsAt}`),
+  check("account_subscriptions_plan_valid", sql`(${table.kind} = 'seller' and ${table.tier} in ('pro','plus','ultra')) or (${table.kind} = 'employer' and ${table.tier} = 'employer')`),
+]).enableRLS();
+
 export const follows = pgTable("follows", {
   id: uuid("id").defaultRandom().primaryKey(),
   followerId: uuid("follower_id")
@@ -141,6 +184,7 @@ export const posts = pgTable("posts", {
   pageId: uuid("page_id"),
   groupId: uuid("group_id"),
   type: postTypeEnum("type").default("text").notNull(),
+  topicId: varchar("topic_id", { length: 32 }),
   content: text("content"),
   visibility: visibilityEnum("visibility").default("public").notNull(),
   hashtags: text("hashtags").array(),
@@ -148,7 +192,10 @@ export const posts = pgTable("posts", {
   editedAt: timestamp("edited_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, table => [
+  check("posts_topic_id_valid", sql`${table.topicId} IS NULL OR ${table.topicId} IN ('comedy','news','education','food','lifestyle','technology','business','shopping','entertainment','community')`),
+  index("posts_topic_created_id_idx").on(table.topicId, table.createdAt.desc(), table.id.desc()).where(sql`${table.deletedAt} IS NULL`),
+]);
 
 export const postMedia = pgTable("post_media", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -157,7 +204,7 @@ export const postMedia = pgTable("post_media", {
     .references(() => posts.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   altText: varchar("alt_text", { length: 255 }),
-  type: varchar("type", { length: 20 }).notNull(),
+  type: mediaTypeEnum("type").default("image").notNull(),
   order: integer("order").default(0),
   processingStatus: varchar("processing_status", { length: 20 }).default("ready"),
 });
@@ -303,7 +350,7 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   status: listingStatusEnum("status").default("draft").notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const savedListings = pgTable("saved_listings", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -323,6 +370,7 @@ export const listingMedia = pgTable("listing_media", {
     .references(() => marketplaceListings.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   altText: varchar("alt_text", { length: 255 }),
+  type: mediaTypeEnum("type").default("image").notNull(),
   order: integer("order").default(0),
 });
 
@@ -347,7 +395,7 @@ export const inventoryItems = pgTable("inventory_items", {
   sku: varchar("sku", { length: 50 }),
   unitCost: integer("unit_cost"),
   lowStockThreshold: integer("low_stock_threshold").default(5),
-});
+}, table => [uniqueIndex("inventory_items_listing_unique").on(table.listingId)]).enableRLS();
 
 export const inventoryMovements = pgTable("inventory_movements", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -360,7 +408,7 @@ export const inventoryMovements = pgTable("inventory_movements", {
   reason: varchar("reason", { length: 100 }),
   actorId: uuid("actor_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const storefronts = pgTable("storefronts", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -382,7 +430,7 @@ export const companies = pgTable("companies", {
   description: text("description"),
   logoUrl: text("logo_url"),
   website: text("website"),
-});
+}, table => [uniqueIndex("companies_page_unique").on(table.pageId)]).enableRLS();
 
 export const jobs = pgTable("jobs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -390,6 +438,14 @@ export const jobs = pgTable("jobs", {
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 200 }).notNull(),
+  publisherId: uuid("publisher_id").references(() => users.id),
+  reviewStatus: varchar("review_status", { length: 30 }).default("pending_review").notNull(),
+  reviewNote: text("review_note"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  officeEvidenceIds: uuid("office_evidence_ids").array().default([]).notNull(),
+  pendingRevision: jsonb("pending_revision").$type<Record<string, unknown>>(),
+  firstPublishedAt: timestamp("first_published_at"),
   location: varchar("location", { length: 100 }),
   remoteStatus: varchar("remote_status", { length: 30 }),
   jobType: varchar("job_type", { length: 30 }),
@@ -401,7 +457,53 @@ export const jobs = pgTable("jobs", {
   status: jobStatusEnum("status").default("draft").notNull(),
   deadline: timestamp("deadline"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}).enableRLS();
+
+export const privateEvidence = pgTable("private_evidence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  purpose: varchar("purpose", { length: 20 }).notNull(),
+  objectKey: text("object_key").notNull(),
+  contentType: varchar("content_type", { length: 40 }).notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  deleteAfter: timestamp("delete_after"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [
+  check("private_evidence_purpose_valid", sql`${table.purpose} in ('national_id','office')`),
+  uniqueIndex("private_evidence_object_key_unique").on(table.objectKey),
+  index("private_evidence_owner_idx").on(table.ownerId),
+]).enableRLS();
+
+// Matches the existing production type and table; new private fields are additive.
+export const verificationRequestStatusEnum = pgEnum("verification_request_status", ["pending", "approved", "rejected"]);
+export const verificationRequests = pgTable("verification_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  evidenceUrls: text("evidence_urls").array().notNull().default([]),
+  status: verificationRequestStatusEnum("status").notNull().default("pending"),
+  reviewNote: text("review_note"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  verificationKind: varchar("verification_kind", { length: 30 }),
+  privateEvidenceIds: uuid("private_evidence_ids").array().notNull().default([]),
+  revokedAt: timestamp("revoked_at"),
+}, table => [index("verification_requests_user_kind_idx").on(table.userId, table.verificationKind, table.status)]).enableRLS();
+
+export const jobPublications = pgTable("job_publications", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+  publisherId: uuid("publisher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  allowance: varchar("allowance", { length: 10 }).notNull(),
+  approvedAt: timestamp("approved_at").notNull().defaultNow(),
+  periodStart: timestamp("period_start"),
+}, table => [
+  uniqueIndex("job_publications_job_unique").on(table.jobId),
+  index("job_publications_publisher_idx").on(table.publisherId, table.approvedAt),
+  check("job_publications_allowance_valid", sql`${table.allowance} in ('free','paid')`),
+]).enableRLS();
 
 export const jobApplications = pgTable("job_applications", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -415,7 +517,16 @@ export const jobApplications = pgTable("job_applications", {
   cvUrl: text("cv_url"),
   status: applicationStatusEnum("status").default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, table => [uniqueIndex("job_applications_job_user_unique").on(table.jobId, table.userId)]).enableRLS();
+
+export const accountRestrictions = pgTable("account_restrictions", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 20 }).notNull(),
+  until: timestamp("until"),
+  reason: text("reason").notNull(),
+  actorId: uuid("actor_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}).enableRLS();
 
 // ─── Advertising ────────────────────────────────────────────────
 export const adPlacements = pgTable("ad_placements", {
@@ -425,7 +536,9 @@ export const adPlacements = pgTable("ad_placements", {
   format: varchar("format", { length: 50 }).notNull(),
   maxActive: integer("max_active").default(1),
   priceCpm: integer("price_cpm"),
-});
+  dailyRate: integer("daily_rate").default(0).notNull(),
+  currency: varchar("currency", { length: 3 }).default("KHR").notNull(),
+}).enableRLS();
 
 export const adCampaigns = pgTable("ad_campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -436,13 +549,34 @@ export const adCampaigns = pgTable("ad_campaigns", {
   placementId: uuid("placement_id").references(() => adPlacements.id),
   status: campaignStatusEnum("status").default("draft").notNull(),
   budget: integer("budget").notNull(),
+  currency: varchar("currency", { length: 3 }).default("KHR").notNull(),
+  reviewedAt: timestamp("reviewed_at"),
   spent: integer("spent").default(0),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   targetLocation: varchar("target_location", { length: 100 }),
   targetCategories: text("target_categories").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}).enableRLS();
+
+export const adPaymentSettings = pgTable("ad_payment_settings", {
+  id: varchar("id", { length: 20 }).primaryKey(),
+  merchantName: varchar("merchant_name", { length: 100 }).notNull(),
+  qrImageUrl: text("qr_image_url").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+}).enableRLS();
+
+export const adPayments = pgTable("ad_payments", {
+  campaignId: uuid("campaign_id").primaryKey().references(() => adCampaigns.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 20 }).default("awaiting").notNull(),
+  merchantName: varchar("merchant_name", { length: 100 }).notNull(),
+  qrImageUrl: text("qr_image_url").notNull(),
+  reference: varchar("reference", { length: 100 }).unique(),
+  payerName: varchar("payer_name", { length: 100 }),
+  note: text("note"),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+}).enableRLS();
 
 export const adCreatives = pgTable("ad_creatives", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -455,7 +589,7 @@ export const adCreatives = pgTable("ad_creatives", {
   altText: varchar("alt_text", { length: 255 }),
   ctaText: varchar("cta_text", { length: 50 }),
   status: varchar("status", { length: 20 }).default("pending"),
-});
+}).enableRLS();
 
 export const adMetrics = pgTable("ad_metrics", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -466,7 +600,15 @@ export const adMetrics = pgTable("ad_metrics", {
   impressions: integer("impressions").default(0),
   clicks: integer("clicks").default(0),
   uniqueReach: integer("unique_reach").default(0),
-});
+}, table => [uniqueIndex("ad_metrics_campaign_date_unique").on(table.campaignId, table.date)]).enableRLS();
+
+export const adEvents = pgTable("ad_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => adCampaigns.id, { onDelete: "cascade" }),
+  viewerId: uuid("viewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  day: varchar("day", { length: 10 }).notNull(),
+  event: varchar("event", { length: 20 }).notNull(),
+}, table => [uniqueIndex("ad_events_viewer_day_unique").on(table.campaignId, table.viewerId, table.day, table.event)]).enableRLS();
 
 export const promotedListingCampaigns = pgTable("promoted_listing_campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -476,7 +618,7 @@ export const promotedListingCampaigns = pgTable("promoted_listing_campaigns", {
   listingId: uuid("listing_id")
     .notNull()
     .references(() => marketplaceListings.id, { onDelete: "cascade" }),
-});
+}).enableRLS();
 
 export const boostedPostCampaigns = pgTable("boosted_post_campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -487,7 +629,7 @@ export const boostedPostCampaigns = pgTable("boosted_post_campaigns", {
     .notNull()
     .references(() => posts.id, { onDelete: "cascade" }),
   goal: varchar("goal", { length: 30 }),
-});
+}).enableRLS();
 
 // ─── Trust & Safety ─────────────────────────────────────────────
 export const reports = pgTable("reports", {

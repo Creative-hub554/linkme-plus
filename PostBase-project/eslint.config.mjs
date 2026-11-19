@@ -21,6 +21,10 @@ const eslintConfig = [
       ".vinext/**",
       ".wrangler/**",
       "dist/**",
+      // Sites deployment artifacts: the bundled single-file worker and the
+      // pruned asset tree uploaded to the preview/production sites, produced
+      // by the same build pipeline as `dist/` and never source.
+      "sites-deploy/**",
       "node_modules/**",
       "next-env.d.ts",
       "worker-configuration.d.ts",

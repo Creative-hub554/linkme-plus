@@ -27,7 +27,7 @@ export function SocialNav() {
   return (
     <nav
       aria-label="Social"
-      className="sticky top-14 z-40 mb-4 border-b border-surface-border bg-card/95 backdrop-blur"
+      className={pathname === "/feed" ? "community-social" : "sticky top-14 z-40 mb-4 border-b border-surface-border bg-card/95 backdrop-blur"}
     >
       {/* Scrolls rather than wraps on a narrow screen: a strip that became two
           rows would push the content down every time it grew. Tabs keep a 44px

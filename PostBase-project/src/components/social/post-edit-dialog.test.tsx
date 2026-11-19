@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { selectPostTopic } from "@/test/select-topic";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanupSurfaces, mountSurface } from "@/test/render";
 import { PostEditDialog, type PostEdit } from "@/components/social/post-edit-dialog";
@@ -81,11 +82,13 @@ describe("editing a post written in a group", () => {
     });
     const textarea = document.querySelector<HTMLTextAreaElement>("textarea");
     await ui.type(textarea as HTMLTextAreaElement, "Written in a group, edited");
+    await selectPostTopic();
     await ui.click(buttonReading(document, "Save changes"));
     await ui.waitFor(() => saved.length > 0, { description: "the edit to be saved" });
 
     expect(saved[0]).toEqual({
       content: "Written in a group, edited",
+      topicId: "community",
       visibility: "group",
     });
   });
@@ -102,6 +105,7 @@ describe("editing a post written in a group", () => {
       },
     });
     expect(document.querySelector('[aria-label="Post audience: Public"]')).not.toBeNull();
+    await selectPostTopic();
     await ui.click(buttonReading(document, "Save changes"));
     await ui.waitFor(() => saved.length > 0, { description: "the edit to be saved" });
     // `public` because an unknown or missing audience reads as the one a

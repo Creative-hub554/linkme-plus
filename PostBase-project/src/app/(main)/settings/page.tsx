@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { IdentityVerificationSettings } from "@/components/settings/identity-verification";
+import { FeedPreferencesSettings } from "@/components/settings/feed-preferences";
 import { AuthenticatorSecurity } from "@/components/auth/authenticator-security";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { ProfileAvatarUpload } from "@/components/profile/profile-avatar-upload";
@@ -447,6 +449,8 @@ export default function SettingsPage() {
 
       <Separator />
 
+      <IdentityVerificationSettings />
+      <FeedPreferencesSettings />
       <AuthenticatorSecurity />
 
       <Card>
