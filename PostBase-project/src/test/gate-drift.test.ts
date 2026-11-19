@@ -308,6 +308,7 @@ describe("the gate drift alarm", () => {
     // made every concurrent check report drift that the suite's own cleanup erased.
     writeFileSync(path.join(dir, "coverage-alpha.copy-for-test.mjs"), "export const alpha = 1;\n");
     writeFileSync(path.join(dir, "coverage-alpha.preflight-copy.mjs"), "export const alpha = 1;\n");
+    writeFileSync(path.join(dir, "coverage-alpha.coverage-copy.mjs"), "export const alpha = 1;\n");
 
     const { status, report } = check(manifest);
 

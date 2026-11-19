@@ -171,7 +171,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // The lock this sweep holds while a file is mutated, and the recovery that puts one
@@ -217,8 +217,37 @@ const failOpen = !args.includes("--no-fail-open");
 /** `--json` emits one machine-readable object (progress moves to stderr). */
 const JSON_OUTPUT = args.includes("--json");
 
+/**
+ * Writes `text` to a file descriptor and blocks until the kernel has accepted it.
+ *
+ * `console.log` and `stream.write` buffer through a stream. On Linux a pipe holds
+ * 64 KiB; once it is full, further writes queue in user space and return. `--list`
+ * prints about 75 KB and then `process.exit`s, and that exit drops whatever is
+ * still queued — the self-mutation block, the last ~5 KB of the listing. The header
+ * (printed earlier, already in the kernel buffer) still says `self-mutations: 58`,
+ * so a consumer reads a tally with an empty body. Windows pipes accept the write
+ * synchronously, which is why the same listing is whole on a developer machine.
+ *
+ * `fs.writeSync` blocks until the bytes are in the pipe, so the exit that follows
+ * cannot discard them. A short write is retried from where it stopped.
+ */
+function writeFd(fd, text) {
+  const bytes = Buffer.from(text);
+  let offset = 0;
+  while (offset < bytes.length) {
+    offset += writeSync(fd, bytes, offset);
+  }
+}
+
 /** Progress output: stdout by default, stderr under `--json` so stdout stays clean. */
-const log = JSON_OUTPUT ? (...parts) => console.error(...parts) : (...parts) => console.log(...parts);
+const log = JSON_OUTPUT
+  ? (...parts) => console.error(...parts)
+  : (...parts) => writeFd(1, `${parts.join(" ")}\n`);
+
+/** The same flush, for a payload already formatted (the `--json` objects). */
+function writeOut(text) {
+  writeFd(1, text);
+}
 
 function option(name) {
   const hit = args.find((arg) => arg.startsWith(`${name}=`));
@@ -1359,7 +1388,7 @@ if (auditOnly) {
   const header =
     `${label(conventionsFile)} — ${unstruck.length} of ${audit.sites} decision(s) reach no limb strike`;
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeOut(
       `${JSON.stringify(
         {
           root,
@@ -1393,7 +1422,7 @@ if (anchorsOnly) {
   const exitCode = drifted.length === 0 ? 0 : 1;
 
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeOut(
       `${JSON.stringify(
         {
           root,
@@ -1462,7 +1491,7 @@ if (vocabularyOnly) {
   const exitCode = holes === 0 ? 0 : 1;
 
   if (JSON_OUTPUT) {
-    process.stdout.write(
+    writeOut(
       `${JSON.stringify(
         {
           root,
@@ -1806,7 +1835,7 @@ function refuseStartUp({ unnamed = [], unspoken = [], unfitted = [] }) {
     ...unfitted.map(brokenSelf),
   ];
   if (JSON_OUTPUT && !writeBaseline && !baselineMode) {
-    process.stdout.write(`${JSON.stringify(jsonPayload(reasons, 1), null, 2)}\n`);
+    writeOut(`${JSON.stringify(jsonPayload(reasons, 1), null, 2)}\n`);
   }
   log("");
   log(
@@ -2211,7 +2240,7 @@ function standardSurvivors() {
 if (JSON_OUTPUT && !writeBaseline && !baselineMode) {
   const survivorEntries = standardSurvivors();
   const jsonExitCode = survivorEntries.length === 0 ? 0 : 1;
-  process.stdout.write(`${JSON.stringify(jsonPayload(survivorEntries, jsonExitCode), null, 2)}\n`);
+  writeOut(`${JSON.stringify(jsonPayload(survivorEntries, jsonExitCode), null, 2)}\n`);
   process.exit(jsonExitCode);
 }
 

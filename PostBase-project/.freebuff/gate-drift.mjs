@@ -337,7 +337,7 @@ export const DEFAULT_WATCHES = [
  * scanned at all — it is a copy of an already-pinned script wearing a test's name, and a
  * genuinely new gate file never carries one.
  */
-const TRANSIENT_SUITE_COPIES = /(\.copy-for-test|\.preflight-copy)\.mjs$/;
+const TRANSIENT_SUITE_COPIES = /(\.copy-for-test|\.preflight-copy|\.coverage-copy)\.mjs$/;
 
 // --- The stage list, and the family each stage owns --------------------------
 
